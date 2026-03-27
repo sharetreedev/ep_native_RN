@@ -1,0 +1,17 @@
+export const COUNTRIES = [
+  { label: 'Australia', value: 'AU' },
+  { label: 'United States', value: 'US' },
+  { label: 'United Kingdom', value: 'GB' },
+  { label: 'New Zealand', value: 'NZ' },
+  { label: 'India', value: 'IN' },
+  { label: 'Germany', value: 'DE' },
+  { label: 'France', value: 'FR' },
+  { label: 'Japan', value: 'JP' },
+  { label: 'China', value: 'CN' },
+  { label: 'South Korea', value: 'KR' },
+  { label: 'Brazil', value: 'BR' },
+  { label: 'South Africa', value: 'ZA' },
+  { label: 'UAE', value: 'AE' },
+  { label: 'Singapore', value: 'SG' },
+  { label: 'Ireland', value: 'IE' },
+];
