@@ -14,7 +14,23 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ArrowLeft, Mic, Send, MessageSquare } from 'lucide-react-native';
-import { useConversation } from '@elevenlabs/react-native';
+// Safe import — SDK may fail to load if LiveKit native modules aren't linked
+let _useConversation: any = null;
+let _sdkAvailable = false;
+try {
+  _useConversation = require('@elevenlabs/react-native').useConversation;
+  _sdkAvailable = typeof _useConversation === 'function';
+} catch {
+  // Will fall back to mock
+}
+
+// Stable hook wrapper — always calls the hook if SDK loaded, never if it didn't
+function useConversationSafe(opts: any) {
+  if (_sdkAvailable) {
+    return _useConversation(opts);
+  }
+  return null;
+}
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -198,18 +214,27 @@ export default function AIMHFRScreen() {
   const [hasConsented, setHasConsented] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
-  const conversation = useConversation({
-    onMessage: (message) => {
+  const realConversation = useConversationSafe({
+    onMessage: (message: any) => {
       if (message.source === 'user') {
         setMessages((prev) => [...prev, { role: 'user', text: message.message }]);
       } else if (message.source === 'ai') {
         setMessages((prev) => [...prev, { role: 'ai', text: message.message }]);
       }
     },
-    onError: (err) => {
+    onError: (err: any) => {
       setError(typeof err === 'string' ? err : err?.message ?? 'Something went wrong');
     },
   });
+
+  const conversation = realConversation ?? {
+    status: 'disconnected' as const,
+    isSpeaking: false,
+    startSession: async (_cfg: any) => { setError('ElevenLabs SDK not available — rebuild required'); },
+    endSession: async () => {},
+    sendUserMessage: (_text: string) => {},
+    setMicMuted: (_muted: boolean) => {},
+  };
 
   const isConnected = conversation.status === 'connected';
 

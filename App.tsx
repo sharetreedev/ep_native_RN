@@ -8,7 +8,14 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { CheckInProvider } from './src/contexts/CheckInContext';
 import { MHFRProvider } from './src/contexts/MHFRContext';
-import { ElevenLabsProvider } from '@elevenlabs/react-native';
+// Wrapped in try/catch — registerGlobals() in the ElevenLabs SDK can crash
+// at import time if LiveKit native modules aren't linked correctly.
+let ElevenLabsProvider: React.ComponentType<{ children: React.ReactNode }> | null = null;
+try {
+  ElevenLabsProvider = require('@elevenlabs/react-native').ElevenLabsProvider;
+} catch (e) {
+  console.warn('ElevenLabs SDK failed to load:', e);
+}
 import { fontAssets } from './src/theme/fonts';
 import { colors } from './src/theme';
 
@@ -37,9 +44,13 @@ export default function App() {
       <AuthProvider>
         <CheckInProvider>
           <MHFRProvider>
-            <ElevenLabsProvider>
+            {ElevenLabsProvider ? (
+              <ElevenLabsProvider>
+                <AppNavigator />
+              </ElevenLabsProvider>
+            ) : (
               <AppNavigator />
-            </ElevenLabsProvider>
+            )}
           </MHFRProvider>
         </CheckInProvider>
       </AuthProvider>
