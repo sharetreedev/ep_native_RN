@@ -23,3 +23,4 @@ emotional-pulse-f5d8b-add4482e5bf6.json
 # Claude MCP config (contains API keys)
 .mcp.json
 .claude/worktrees/
+.claude/settings.local.json
