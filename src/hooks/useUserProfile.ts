@@ -18,9 +18,14 @@ export function useUserProfile() {
     phone_number?: string;
     country?: string;
     full_name?: string;
-    profile_pic_uri?: string;
   }) => {
     const data = await wrap(() => xanoUser.updateProfile(fields));
+    if (data) setProfile(data);
+    return data;
+  }, [wrap]);
+
+  const updateProfilePic = useCallback(async (profilePicUri: string) => {
+    const data = await wrap(() => xanoUser.updateProfilePic(profilePicUri));
     if (data) setProfile(data);
     return data;
   }, [wrap]);
@@ -30,5 +35,5 @@ export function useUserProfile() {
     if (data) setProfile(data);
   }, [wrap]);
 
-  return { profile, isLoading, error, viewUser, updateProfile, updateLastSeen };
+  return { profile, isLoading, error, viewUser, updateProfile, updateProfilePic, updateLastSeen };
 }

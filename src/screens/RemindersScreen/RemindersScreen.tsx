@@ -7,7 +7,6 @@ import {
   Alert,
   StyleSheet,
   Switch,
-  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -19,28 +18,49 @@ import { useUser } from '../../hooks/useUser';
 import { useGroups } from '../../hooks/useGroups';
 import { colors, fonts, fontSizes, spacing, borderRadius } from '../../theme';
 import ModalPicker from '../../components/ModalPicker';
+import { useSafeEdges } from '../../contexts/MHFRContext';
 
 const FREQUENCIES = [
-  { label: 'None', value: 'NONE' },
   { label: 'Daily', value: 'DAILY' },
   { label: 'Weekdays', value: 'WEEKDAYS' },
   { label: 'Weekly', value: 'WEEKLY' },
 ];
 
+const DAYS_OF_WEEK = [
+  { label: 'Monday', value: 1 },
+  { label: 'Tuesday', value: 2 },
+  { label: 'Wednesday', value: 3 },
+  { label: 'Thursday', value: 4 },
+  { label: 'Friday', value: 5 },
+  { label: 'Saturday', value: 6 },
+  { label: 'Sunday', value: 0 },
+];
+
+// Build hour options: 1–12 with AM/PM
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => {
+  const ampm = i >= 12 ? 'PM' : 'AM';
+  const display = i % 12 || 12;
+  return { label: `${display}:00 ${ampm}`, value: i };
+});
+
 export default function RemindersScreen() {
+  const safeEdges = useSafeEdges(['top']);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user, refreshUser } = useAuth();
   const { updateReminderSettings, isLoading } = useUser();
-  const { activeGroups, fetchAll: fetchGroups } = useGroups();
+  const { fetchAll: fetchGroups } = useGroups();
 
-  const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
-  const [frequency, setFrequency] = useState('NONE');
-  const [hour, setHour] = useState('0');
-  const [minute, setMinute] = useState('00');
-  const [isCustom, setIsCustom] = useState(false);
+  // Determine if user already has custom settings
+  const hasExistingCustom = !!user?.reminderFrequency && user.reminderFrequency !== 'NONE';
 
-  const [groupPickerVisible, setGroupPickerVisible] = useState(false);
+  const [isCustom, setIsCustom] = useState(hasExistingCustom);
+  const [frequency, setFrequency] = useState(hasExistingCustom ? (user?.reminderFrequency ?? 'DAILY') : 'DAILY');
+  const [selectedDay, setSelectedDay] = useState<number>(1);
+  const [selectedHour, setSelectedHour] = useState(user?.reminderHour ?? 11);
+
   const [frequencyPickerVisible, setFrequencyPickerVisible] = useState(false);
+  const [dayPickerVisible, setDayPickerVisible] = useState(false);
+  const [hourPickerVisible, setHourPickerVisible] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -48,25 +68,25 @@ export default function RemindersScreen() {
     }, [fetchGroups])
   );
 
-  // Build a display-friendly group list from user's groups in auth context
-  const groupOptions = (user?.groups || []).map((g, index) => ({
-    id: g.id,
-    label: g.groupName || `Group ${g.id}`,
-  }));
-
-  const selectedGroupLabel =
-    groupOptions.find((g) => g.id === selectedGroupId)?.label || '';
-
   const selectedFrequencyLabel =
-    FREQUENCIES.find((f) => f.value === frequency)?.label || 'None';
+    FREQUENCIES.find((f) => f.value === frequency)?.label || 'Daily';
+
+  const selectedDayLabel =
+    DAYS_OF_WEEK.find((d) => d.value === selectedDay)?.label || 'Monday';
+
+  const selectedHourLabel =
+    HOUR_OPTIONS.find((h) => h.value === selectedHour)?.label || '11:00 AM';
 
   const handleSave = async () => {
     try {
+      const finalFrequency = isCustom ? frequency : 'NONE';
+      const days = frequency === 'WEEKLY' && isCustom ? [selectedDay] : [];
+
       await updateReminderSettings({
-        frequency,
-        days: [],
-        hour: parseInt(hour, 10) || 0,
-        min: parseInt(minute, 10) || 0,
+        frequency: finalFrequency,
+        days,
+        hour: isCustom ? selectedHour : 0,
+        min: 0,
         is_custom: isCustom,
       });
       await refreshUser();
@@ -78,7 +98,7 @@ export default function RemindersScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={safeEdges}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <ArrowLeft color={colors.textSecondary} size={24} />
@@ -88,69 +108,62 @@ export default function RemindersScreen() {
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        {groupOptions.length > 0 && (
-          <>
-            <Text style={styles.sectionLabel}>Use Existing Group Reminder Settings</Text>
-            <TouchableOpacity
-              style={styles.dropdown}
-              onPress={() => setGroupPickerVisible(true)}
-            >
-              <Text
-                style={[
-                  styles.dropdownText,
-                  !selectedGroupId && styles.dropdownPlaceholder,
-                ]}
-              >
-                {selectedGroupLabel || 'Select group'}
-              </Text>
-              <ChevronDown color={colors.textMuted} size={18} />
-            </TouchableOpacity>
-          </>
-        )}
+        <Text style={styles.description}>
+          Your default reminder notifications are set by the group you belong to. Turn on custom reminders below to set your own schedule.
+        </Text>
 
-        <Text style={styles.sectionLabel}>Frequency & Time</Text>
-        <View style={styles.frequencyRow}>
-          <TouchableOpacity
-            style={styles.frequencyPicker}
-            onPress={() => setFrequencyPickerVisible(true)}
-          >
-            <Text style={[
-              styles.frequencyText,
-              frequency !== 'NONE' && styles.frequencyTextActive,
-            ]}>
-              {selectedFrequencyLabel}
-            </Text>
-            <ChevronDown color={colors.textMuted} size={16} />
-          </TouchableOpacity>
-          <Text style={styles.atLabel}>at</Text>
-          <View style={styles.timeInputWrap}>
-            <TextInput
-              style={styles.timeInput}
-              value={hour}
-              onChangeText={setHour}
-              keyboardType="number-pad"
-              maxLength={2}
-            />
-            <Text style={styles.timeSeparator}>:</Text>
-            <TextInput
-              style={styles.timeInput}
-              value={minute}
-              onChangeText={setMinute}
-              keyboardType="number-pad"
-              maxLength={2}
-            />
-          </View>
-        </View>
-
+        {/* Custom toggle */}
         <View style={styles.toggleRow}>
+          <View style={styles.toggleTextWrap}>
+            <Text style={styles.toggleLabel}>Custom Reminder</Text>
+            <Text style={styles.toggleHint}>Set your own frequency and time</Text>
+          </View>
           <Switch
             value={isCustom}
             onValueChange={setIsCustom}
             trackColor={{ false: colors.border, true: colors.primary }}
             thumbColor={colors.surface}
           />
-          <Text style={styles.toggleLabel}>Turn on Custom Reminder Notifications</Text>
         </View>
+
+        {/* Custom settings — only shown when toggle is on */}
+        {isCustom && (
+          <View style={styles.customSection}>
+            {/* Frequency */}
+            <Text style={styles.sectionLabel}>Frequency</Text>
+            <TouchableOpacity
+              style={styles.dropdown}
+              onPress={() => setFrequencyPickerVisible(true)}
+            >
+              <Text style={styles.dropdownText}>{selectedFrequencyLabel}</Text>
+              <ChevronDown color={colors.textMuted} size={18} />
+            </TouchableOpacity>
+
+            {/* Day picker — only for Weekly */}
+            {frequency === 'WEEKLY' && (
+              <>
+                <Text style={styles.sectionLabel}>Day</Text>
+                <TouchableOpacity
+                  style={styles.dropdown}
+                  onPress={() => setDayPickerVisible(true)}
+                >
+                  <Text style={styles.dropdownText}>{selectedDayLabel}</Text>
+                  <ChevronDown color={colors.textMuted} size={18} />
+                </TouchableOpacity>
+              </>
+            )}
+
+            {/* Time picker */}
+            <Text style={styles.sectionLabel}>Time</Text>
+            <TouchableOpacity
+              style={styles.dropdown}
+              onPress={() => setHourPickerVisible(true)}
+            >
+              <Text style={styles.dropdownText}>{selectedHourLabel}</Text>
+              <ChevronDown color={colors.textMuted} size={18} />
+            </TouchableOpacity>
+          </View>
+        )}
 
         <TouchableOpacity
           style={[styles.saveButton, isLoading && styles.saveButtonDisabled]}
@@ -162,19 +175,6 @@ export default function RemindersScreen() {
       </ScrollView>
 
       <ModalPicker
-        visible={groupPickerVisible}
-        onDismiss={() => setGroupPickerVisible(false)}
-        data={groupOptions.map((g) => ({ label: g.label, value: g.id }))}
-        selectedValue={selectedGroupId}
-        onSelect={(item) => {
-          setSelectedGroupId(item.value as number);
-          setGroupPickerVisible(false);
-        }}
-        animationType="fadeSlide"
-        emptyText="No groups available"
-      />
-
-      <ModalPicker
         visible={frequencyPickerVisible}
         onDismiss={() => setFrequencyPickerVisible(false)}
         data={FREQUENCIES}
@@ -182,6 +182,28 @@ export default function RemindersScreen() {
         onSelect={(item) => {
           setFrequency(item.value as string);
           setFrequencyPickerVisible(false);
+        }}
+      />
+
+      <ModalPicker
+        visible={dayPickerVisible}
+        onDismiss={() => setDayPickerVisible(false)}
+        data={DAYS_OF_WEEK}
+        selectedValue={selectedDay}
+        onSelect={(item) => {
+          setSelectedDay(item.value as number);
+          setDayPickerVisible(false);
+        }}
+      />
+
+      <ModalPicker
+        visible={hourPickerVisible}
+        onDismiss={() => setHourPickerVisible(false)}
+        data={HOUR_OPTIONS}
+        selectedValue={selectedHour}
+        onSelect={(item) => {
+          setSelectedHour(item.value as number);
+          setHourPickerVisible(false);
         }}
       />
     </SafeAreaView>
@@ -197,19 +219,55 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.base,
   },
-  backButton: { width: 24, alignItems: 'flex-start' },
+  backButton: { width: 24, alignItems: 'flex-start' as const },
   title: {
     fontSize: fontSizes.xl,
     fontFamily: fonts.heading,
     color: colors.textPrimary,
   },
   scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl, paddingBottom: 100 },
-  sectionLabel: {
+  scrollContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.base, paddingBottom: 100 },
+  description: {
+    fontFamily: fonts.body,
+    fontSize: fontSizes.base,
+    color: colors.textSecondary,
+    lineHeight: 22,
+    marginBottom: spacing.xl,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: spacing.base,
+    marginBottom: spacing.xl,
+  },
+  toggleTextWrap: {
+    flex: 1,
+    marginRight: spacing.base,
+  },
+  toggleLabel: {
     fontSize: fontSizes.base,
     fontFamily: fonts.bodySemiBold,
     color: colors.textPrimary,
+  },
+  toggleHint: {
+    fontSize: fontSizes.sm,
+    fontFamily: fonts.body,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  customSection: {
+    marginBottom: spacing.base,
+  },
+  sectionLabel: {
+    fontSize: fontSizes.sm,
+    fontFamily: fonts.bodySemiBold,
+    color: colors.textSecondary,
     marginBottom: spacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   dropdown: {
     flexDirection: 'row',
@@ -221,83 +279,19 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     paddingHorizontal: spacing.base,
     paddingVertical: spacing.md,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.base,
   },
   dropdownText: {
     fontSize: fontSizes.base,
     fontFamily: fonts.body,
     color: colors.textPrimary,
   },
-  dropdownPlaceholder: { color: colors.textPlaceholder },
-  frequencyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.xl,
-  },
-  frequencyPicker: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: borderRadius.md,
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.md,
-  },
-  frequencyText: {
-    fontSize: fontSizes.base,
-    fontFamily: fonts.body,
-    color: colors.textPlaceholder,
-  },
-  frequencyTextActive: {
-    color: colors.textPrimary,
-  },
-  atLabel: {
-    fontSize: fontSizes.base,
-    fontFamily: fonts.body,
-    color: colors.textMuted,
-  },
-  timeInputWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: borderRadius.md,
-    paddingHorizontal: spacing.sm,
-  },
-  timeInput: {
-    width: 28,
-    textAlign: 'center',
-    fontSize: fontSizes.base,
-    fontFamily: fonts.body,
-    color: colors.textPrimary,
-    paddingVertical: spacing.md,
-  },
-  timeSeparator: {
-    fontSize: fontSizes.base,
-    fontFamily: fonts.body,
-    color: colors.textMuted,
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginBottom: spacing['2xl'],
-  },
-  toggleLabel: {
-    fontSize: fontSizes.base,
-    fontFamily: fonts.body,
-    color: colors.textPrimary,
-    flex: 1,
-  },
   saveButton: {
     backgroundColor: colors.primary,
     borderRadius: borderRadius.button,
     paddingVertical: spacing.base,
     alignItems: 'center',
+    marginTop: spacing.base,
   },
   saveButtonDisabled: { opacity: 0.5 },
   saveButtonText: {

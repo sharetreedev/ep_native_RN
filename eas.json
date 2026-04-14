@@ -1,0 +1,36 @@
+{
+  "cli": {
+    "version": ">= 18.3.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "APP_VARIANT": "development"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview"
+    },
+    "production": {
+      "autoIncrement": true,
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_XANO_DATA_SOURCE": "live",
+        "EXPO_PUBLIC_ONESIGNAL_APP_ID": "fb2857a5-9090-4834-8259-2daf3e05ff18",
+        "EXPO_PUBLIC_MICROSOFT_CLIENT_ID": "533cb409-efe0-4981-97b9-4d6065bef188"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "android": {
+        "serviceAccountKeyPath": "./emotional-pulse-f5d8b-add4482e5bf6.json",
+        "track": "internal"
+      }
+    }
+  }
+}

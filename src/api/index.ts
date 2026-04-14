@@ -6,6 +6,7 @@ export { courses } from './courses';
 export { emotions, staticData } from './emotions';
 export { group, groups } from './groups';
 export { notification } from './notifications';
+export { onesignal } from './onesignal';
 export { onboarding } from './onboarding';
 export { pair, pairInvite, pairs } from './pairs';
 export { runningStats } from './runningStats';

@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, ScrollView, Image, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import Avatar from './Avatar';
 import { colors, fonts, fontSizes } from '../theme';
 
 export interface RecentCheckInPair {
@@ -39,14 +40,13 @@ export default function RecentCheckIns({
             onPress={() => onPairPress?.(pair)}
             activeOpacity={0.8}
           >
-            <View
-              style={[
-                styles.avatar,
-                pair.status ? styles.avatarActive : styles.avatarInactive,
-              ]}
-            >
-              <Image source={{ uri: pair.avatar }} style={styles.avatarImage} />
-            </View>
+            <Avatar
+              source={pair.avatar}
+              name={pair.name}
+              size="xl"
+              borderRadius={28}
+              border={{ width: 2, color: pair.status ? colors.primary : colors.border }}
+            />
             <Text style={styles.name}>{pair.name}</Text>
             <Text style={styles.time}>{pair.time}</Text>
           </TouchableOpacity>
@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   time: {
-    fontSize: 10,
+    fontSize: fontSizes.sm,
     fontFamily: fonts.body,
     color: colors.textPlaceholder,
   },

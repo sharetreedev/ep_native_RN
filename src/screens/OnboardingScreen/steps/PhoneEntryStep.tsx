@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, ScrollView, Alert, Image } from 'react-native';
+import { View, Text, ScrollView, Alert, Image, Keyboard, TouchableWithoutFeedback } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../../../components/Button';
 import PhoneInput from '../../../components/PhoneInput';
@@ -31,30 +31,32 @@ export default function PhoneEntryStep({ onSubmit, isSubmitting }: PhoneEntrySte
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {renderHeader()}
-        <Text style={styles.heading}>Enter your phone number</Text>
-        <Text style={styles.body}>
-          We&apos;ll send a verification code to confirm your number.
-        </Text>
-        <View style={styles.phoneWrapper}>
-          <PhoneInput
-            value={phone}
-            onChangePhone={setPhone}
-            countryCode={countryCode}
-            onChangeCountryCode={setCountryCode}
-            countryIso={countryIso}
-            onChangeCountryIso={setCountryIso}
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <SafeAreaView style={styles.container}>
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+          {renderHeader()}
+          <Text style={styles.heading}>Enter your phone number</Text>
+          <Text style={styles.body}>
+            We&apos;ll send a verification code to confirm your number.
+          </Text>
+          <View style={styles.phoneWrapper}>
+            <PhoneInput
+              value={phone}
+              onChangePhone={setPhone}
+              countryCode={countryCode}
+              onChangeCountryCode={setCountryCode}
+              countryIso={countryIso}
+              onChangeCountryIso={setCountryIso}
+            />
+          </View>
+          <Button
+            title="Send Code"
+            onPress={handleSubmit}
+            loading={isSubmitting}
+            style={styles.primaryButton}
           />
-        </View>
-        <Button
-          title="Send Code"
-          onPress={handleSubmit}
-          loading={isSubmitting}
-          style={styles.primaryButton}
-        />
-      </ScrollView>
-    </SafeAreaView>
+        </ScrollView>
+      </SafeAreaView>
+    </TouchableWithoutFeedback>
   );
 }

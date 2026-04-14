@@ -2,7 +2,7 @@ import { StyleSheet } from 'react-native';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
 
 const AVATAR_SIZE = 88;
-const HEADER_HEIGHT = 192;
+const HEADER_HEIGHT = 156;
 
 export { AVATAR_SIZE, HEADER_HEIGHT };
 
@@ -39,7 +39,7 @@ export const styles = StyleSheet.create({
   profileHeader: {
     marginHorizontal: spacing.xl,
     alignItems: 'flex-start',
-    marginTop: 44,
+    marginTop: 8,
   },
   avatarRow: {
     flexDirection: 'row',
@@ -93,7 +93,7 @@ export const styles = StyleSheet.create({
     borderRadius: borderRadius.full,
   },
   tagText: {
-    fontSize: fontSizes.xs + 4,
+    fontSize: fontSizes.sm,
     fontFamily: fonts.bodyBold,
     color: colors.textSecondary,
   },

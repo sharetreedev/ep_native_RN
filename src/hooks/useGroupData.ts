@@ -17,7 +17,7 @@ interface GroupsState {
 
 export function useGroupData() {
   const [state, setState] = useState<GroupsState>({ activeGroups: [], invites: [] });
-  const { isLoading, error, wrap } = useAsyncHandler();
+  const { isLoading, error, wrap } = useAsyncHandler({ initialLoading: true });
 
   const fetchAll = useCallback(async () => {
     const data = await wrap(() => xanoGroups.getAll());
@@ -63,6 +63,9 @@ export function useGroupData() {
   const getForestMap = useCallback((groupId?: number) =>
     wrap(() => xanoGroup.getForestMap(groupId)), [wrap]);
 
+  const getGroupById = useCallback((groupId: number) =>
+    wrap(() => xanoGroups.getById(groupId)), [wrap]);
+
   const getGroupRunningStats = useCallback((groupRunningStatsId: number) =>
     wrap(() => xanoGroup.getRunningStats(groupRunningStatsId)), [wrap]);
 
@@ -76,6 +79,7 @@ export function useGroupData() {
     acceptInvite,
     declineInvite,
     getForestMap,
+    getGroupById,
     getGroupRunningStats,
   };
 }

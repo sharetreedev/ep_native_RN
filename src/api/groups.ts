@@ -81,6 +81,17 @@ export const groups = {
   getAll: () =>
     request<XanoGroupsResponse>('GET', '/groups/get_all'),
 
+  /** Fetch a single group by ID (filters from getAll). */
+  getById: async (groupId: number) => {
+    const data = await request<XanoGroupsResponse>('GET', '/groups/get_all');
+    const activeGroups = Array.isArray(data.active_groups) ? data.active_groups : [];
+    const match = activeGroups.find((g: any) => {
+      const gId = g.group?.id ?? g.groups?.id ?? g.id;
+      return gId === groupId;
+    });
+    return match ?? null;
+  },
+
   acceptInvite: (forestMapId: number) =>
     request<XanoUserGroup>('POST', '/groups/accept_invite', { forest_map_id: forestMapId }),
 

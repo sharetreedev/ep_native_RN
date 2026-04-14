@@ -7,6 +7,7 @@
 //   EXPO_PUBLIC_XANO_DATA_SOURCE=test     → test data (default)
 //   EXPO_PUBLIC_XANO_DATA_SOURCE=live     → production data
 import * as SecureStore from 'expo-secure-store';
+import { logger } from '../lib/logger';
 
 const INSTANCE = 'xdny-scc5-yag9';
 const CANONICAL = 'LmTnxskw';
@@ -74,22 +75,22 @@ export async function request<T>(
     body = JSON.stringify(params);
   }
 
-  console.log(`[Xano] ${method} ${url}`);
-  if (body) console.log(`[Xano] Body:`, body);
+  logger.log(`[Xano] ${method} ${url}`);
+  if (body) logger.log(`[Xano] Body:`, body);
 
   let res: Response;
   try {
     res = await fetch(url, { method, headers, body });
   } catch (err) {
-    console.error(`[Xano] Fetch Error for ${url}:`, err);
+    logger.error(`[Xano] Fetch Error for ${url}:`, err);
     throw err;
   }
 
-  console.log(`[Xano] Response: ${res.status} ${res.statusText}`);
+  logger.log(`[Xano] Response: ${res.status} ${res.statusText}`);
 
   if (!res.ok) {
     const errorBody = await res.json().catch(() => ({ message: res.statusText }));
-    console.error(`[Xano] Error Body:`, errorBody);
+    logger.error(`[Xano] Error Body:`, errorBody);
     throw new XanoError(errorBody?.message ?? `HTTP ${res.status}`, res.status, errorBody);
   }
 
@@ -110,21 +111,21 @@ export async function requestMultipart<T>(
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const url = `${BASE_URL}${path}`;
-  console.log(`[Xano] ${method} ${url} (multipart)`);
+  logger.log(`[Xano] ${method} ${url} (multipart)`);
 
   let res: Response;
   try {
     res = await fetch(url, { method, headers, body: formData });
   } catch (err) {
-    console.error(`[Xano] Fetch Error for ${url}:`, err);
+    logger.error(`[Xano] Fetch Error for ${url}:`, err);
     throw err;
   }
 
-  console.log(`[Xano] Response: ${res.status} ${res.statusText}`);
+  logger.log(`[Xano] Response: ${res.status} ${res.statusText}`);
 
   if (!res.ok) {
     const errorBody = await res.json().catch(() => ({ message: res.statusText }));
-    console.error(`[Xano] Error Body:`, errorBody);
+    logger.error(`[Xano] Error Body:`, errorBody);
     throw new XanoError(errorBody?.message ?? `HTTP ${res.status}`, res.status, errorBody);
   }
 

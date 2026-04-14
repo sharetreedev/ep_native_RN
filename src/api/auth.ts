@@ -42,4 +42,14 @@ export const auth = {
     request<{ message: string; verified: boolean; authToken: string }>(
       'POST', '/auth/2fa/verifyMobileCode', { verificationCode, user_id },
     ),
+
+  microsoftCallback: (params: {
+    token: string;
+    code_verifier: string;
+    tenant_id?: string;
+    domain?: string;
+  }) =>
+    request<{ authToken: string }>(
+      'POST', '/auth/microsoft/callback', params as Record<string, unknown>,
+    ),
 };

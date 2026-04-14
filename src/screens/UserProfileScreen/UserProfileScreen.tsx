@@ -13,7 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePairs } from '../../hooks/usePairs';
 import { user as xanoUser, XanoUser, runningStats as xanoRunningStats } from '../../api';
-import { ArrowLeft, MoreHorizontal } from 'lucide-react-native';
+import { ArrowLeft } from 'lucide-react-native';
 import { RootStackParamList } from '../../types/navigation';
 import CheckInWithUser from '../../components/CheckInWithUser';
 import ProfileTabs from '../../components/ProfileTabs';
@@ -26,14 +26,17 @@ import { useCheckIns } from '../../hooks/useCheckIns';
 import { useStateCoordinates } from '../../hooks/useStateCoordinates';
 import { useCoordinateMapping } from '../../hooks/useCoordinateMapping';
 import { useEmotionStates } from '../../hooks/useEmotionStates';
+import { CheckInConfirmModal } from '../../components/checkin/CheckInOverlay';
+import { useQuickCheckIn } from '../../hooks/useQuickCheckIn';
 import { colors, pillTabStyles } from '../../theme';
 import PulseLoader from '../../components/PulseLoader';
-import AvatarDisplay from '../../components/AvatarDisplay';
+import Avatar from '../../components/Avatar';
 import UserOutlookTab from './components/UserOutlookTab';
 import { styles, AVATAR_SIZE, HEADER_HEIGHT } from './styles';
+import { logger } from '../../lib/logger';
 
 // Local banner image
-const bannerImage = require('../../../assets/Ep - App - Imageryt.webp');
+const bannerImage = require('../../../assets/ep-app-imagery.webp');
 
 type UserProfileScreenRouteProp = RouteProp<RootStackParamList, 'UserProfile'>;
 
@@ -152,10 +155,9 @@ export default function UserProfileScreen() {
         });
       }
     } else if (currentUser) {
-      // Self: use most recent entry from last7CheckIns → stateCoordinates_related
-      const selfCheckIns = currentUser.last7CheckIns ?? [];
-      const latestCheckIn = selfCheckIns.length > 0 ? selfCheckIns[selfCheckIns.length - 1] : null;
-      const coordId = latestCheckIn?.stateCoordinates_related;
+      // Self: use recentStateCoordinates (same as pairs use for other_user)
+      const rawCoord = currentUser.recentStateCoordinates;
+      const coordId = Number(typeof rawCoord === 'object' && rawCoord !== null ? rawCoord.id : rawCoord) || undefined;
       if (coordId && coordMap.has(coordId)) {
         const pos = coordMap.get(coordId)!;
         points.push({
@@ -177,7 +179,7 @@ export default function UserProfileScreen() {
 
   // Debug
   if (__DEV__) {
-    console.log('[UserProfile Pulse]', {
+    logger.log('[UserProfile Pulse]', {
       isPair: !!isPair,
       coordMapSize: coordMap.size,
       rawCheckinDataLen: rawCheckinData.length,
@@ -193,6 +195,10 @@ export default function UserProfileScreen() {
   const handleOverlayUserPress = useCallback(() => {
     // Already on this profile, no-op
   }, []);
+
+  const { pendingCheckIn, handleCellPress, confirmCheckIn, cancelCheckIn } = useQuickCheckIn(
+    () => (navigation as any).navigate('DailyInsight')
+  );
 
   // Outlook tab directions array
   const outlookDirections = useMemo(() => [
@@ -228,6 +234,7 @@ export default function UserProfileScreen() {
           <PairsAvatarOverlay
             points={avatarPoints}
             onUserPress={handleOverlayUserPress}
+            onCellPress={handleCellPress}
           />
         </PulseGrid>
       </View>
@@ -260,24 +267,19 @@ export default function UserProfileScreen() {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.navButton}>
             <ArrowLeft color={colors.textOnPrimary} size={24} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.navButton}>
-            <MoreHorizontal color={colors.textOnPrimary} size={24} />
-          </TouchableOpacity>
+          <View style={{ width: 24 }} />
         </View>
 
         <View style={styles.profileHeader}>
           {/* Avatar row – avatar left, emotion badge aligned horizontally */}
           <View style={styles.avatarRow}>
-            <AvatarDisplay
-              imageUrl={isPair ? pairAvatarUrl : currentUser?.avatarUrl}
-              fallbackText={(isPair ? (otherUser?.fullName || '?') : (currentUser?.name || '?')).charAt(0).toUpperCase()}
-              fallbackTextColor={colors.textOnPrimary}
+            <Avatar
+              source={isPair ? pairAvatarUrl : currentUser?.avatarUrl}
+              name={isPair ? (otherUser?.fullName || '?') : (currentUser?.name || '?')}
               size={AVATAR_SIZE}
               borderRadius={24}
-              backgroundColor={colors.primary}
-              borderWidth={4}
-              borderColor={colors.background}
-              style={styles.avatarShadow}
+              border={{ width: 4, color: colors.background }}
+              shadow="md"
             />
             {currentCheckin?.emotion_name && (
               <View style={{ marginTop: 8 }}>
@@ -290,7 +292,7 @@ export default function UserProfileScreen() {
           </View>
 
           <View style={styles.nameRow}>
-            <Text style={isPair ? styles.displayNamePair : styles.displayName}>
+            <Text style={isPair ? styles.displayNamePair : styles.displayName} numberOfLines={1}>
               {isPair ? (!otherUser && !pairData ? '...' : pairDisplayName) : (currentUser?.name || 'Current User')}
             </Text>
             {isPair && (
@@ -305,7 +307,7 @@ export default function UserProfileScreen() {
                   firstName={pairFirstName}
                   fullName={pairDisplayName}
                   currentUserFirstName={currentUser?.firstName || currentUser?.name?.split(' ')[0]}
-                  pairsUserId={userId}
+                  pairsUserId={Number(userId)}
                   onSendReminder={sendCheckinReminder}
                 />
               </View>
@@ -363,6 +365,14 @@ export default function UserProfileScreen() {
           )}
         </ScrollView>
       </SafeAreaView>
+
+      {pendingCheckIn && (
+        <CheckInConfirmModal
+          emotion={pendingCheckIn.emotion}
+          onConfirm={confirmCheckIn}
+          onCancel={cancelCheckIn}
+        />
+      )}
     </View>
   );
 }

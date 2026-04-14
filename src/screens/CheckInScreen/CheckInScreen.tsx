@@ -8,6 +8,7 @@ import { MeshGradientSlider } from '../../components/checkin';
 import { CheckInTouchGrid, CheckInConfirmModal } from '../../components/checkin/CheckInOverlay';
 import PulseGrid from '../../components/visualization/PulseGrid';
 import { RootStackParamList } from '../../types/navigation';
+import { useSafeEdges } from '../../contexts/MHFRContext';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
 import { useCheckIns } from '../../hooks/useCheckIns';
 import { useEmotionStates, MappedEmotion } from '../../hooks/useEmotionStates';
@@ -22,13 +23,14 @@ type Props = NativeStackScreenProps<RootStackParamList, 'CheckIn'>;
 export default function CheckInScreen({ route, navigation }: Props) {
     const isSupportRequest = route.params?.isSupportRequest ?? false;
     const supportRequestId = route.params?.supportRequestId;
-    const { refreshUser } = useAuth();
+    const { user, refreshUser, _setUser } = useAuth();
     const { markCheckedInToday, hasCheckedInToday } = useCheckIn();
     const { emotionStates } = useEmotionStates();
     const { coordinates } = useStateCoordinates();
-    const [viewMode, setViewMode] = useState<'slider' | 'grid'>('slider');
+    const [viewMode, setViewMode] = useState<'slider' | 'grid'>(user?.preferredCheckinView === 'grid' ? 'grid' : 'slider');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [selectedCoord, setSelectedCoord] = useState<{ emotion: MappedEmotion; coordinateId: number; needsAttention: boolean } | null>(null);
+    const safeEdges = useSafeEdges(['top']);
     const { createCheckIn } = useCheckIns(undefined, emotionStates);
 
     const handleComplete = useCallback(
@@ -39,8 +41,11 @@ export default function CheckInScreen({ route, navigation }: Props) {
                     emotion,
                     coordinateId,
                     isSupportRequest ? supportRequestId : undefined,
+                    viewMode,
                 );
                 markCheckedInToday();
+                // Immediately update the user's coordinate so overlays reflect the new check-in
+                _setUser((prev) => prev ? { ...prev, recentStateCoordinates: coordinateId } : prev);
                 await refreshUser();
 
                 if (isSupportRequest) {
@@ -66,11 +71,11 @@ export default function CheckInScreen({ route, navigation }: Props) {
                 navigation.replace('DailyInsight');
             }
         },
-        [navigation, createCheckIn, refreshUser, markCheckedInToday, isSupportRequest, supportRequestId]
+        [navigation, createCheckIn, refreshUser, _setUser, markCheckedInToday, isSupportRequest, supportRequestId, viewMode]
     );
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={safeEdges}>
             {/* Tabs */}
             <View style={styles.tabContainer}>
                 {hasCheckedInToday && (

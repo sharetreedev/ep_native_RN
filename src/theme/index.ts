@@ -70,6 +70,17 @@ export const colors = {
     profileFrom: '#C2410C',
     profileTo: '#16A34A',
 
+    /** Charts — Outlook & Pulse line charts */
+    chartOutlookFrom: '#91A27D',
+    chartPulseFrom: '#30442B',
+
+    /** Warning (replaces ad-hoc #E5B800) */
+    warning: '#E5B800',
+
+    /** Emergency / AI MHFR dark-forest gradient */
+    mhfrGradientFrom: '#5A6B4A',
+    mhfrGradientTo: '#3D4F32',
+
     /** Emotional Colours */
     emotional: {
         enraged: "#D94F16",
@@ -112,8 +123,8 @@ export const fonts = {
 } as const;
 
 export const fontSizes = {
-    xs: 10,
-    sm: 12,
+    xs: 14,
+    sm: 14,
     md: 14,
     base: 16,
     lg: 18,
@@ -157,6 +168,7 @@ export const buttonStyles = {
             borderRadius: borderRadius.button,
             paddingVertical: spacing.md,
             paddingHorizontal: spacing.lg,
+            minHeight: 56,
             alignItems: 'center' as const,
             justifyContent: 'center' as const,
         },
@@ -221,24 +233,4 @@ export const pillTabStyles = {
     },
 } as const;
 
-// ─── Avatar Styles ────────────────────────────────────────────────────────────
-
-export const avatarStyles = {
-    /** Standard avatar (40×40, 16px radius) */
-    container: {
-        width: 40,
-        height: 40,
-        borderRadius: borderRadius.button,
-    },
-    fallback: {
-        backgroundColor: colors.surfaceMuted,
-        alignItems: 'center' as const,
-        justifyContent: 'center' as const,
-    },
-    initial: {
-        fontFamily: fonts.heading,
-        fontSize: fontSizes.base,
-        color: colors.textMuted,
-    },
-} as const;
 

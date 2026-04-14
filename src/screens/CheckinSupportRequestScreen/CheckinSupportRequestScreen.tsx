@@ -16,6 +16,7 @@ import { colors, fonts, fontSizes, spacing, borderRadius } from '../../theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { users, XanoUser, supportRequests as xanoSupportRequests } from '../../api';
 import Button from '../../components/Button';
+import { logger } from '../../lib/logger';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CheckinSupportRequest'>;
 
@@ -42,7 +43,7 @@ function makeCall(phoneNumber: string) {
     const phoneUrl = `tel:${phoneNumber}`;
     Linking.canOpenURL(phoneUrl)
         .then((supported) => supported && Linking.openURL(phoneUrl))
-        .catch((err) => console.error(err));
+        .catch((err) => logger.error(err));
 }
 
 /* ─── Contact Card ────────────────────────────────────────────────────────── */
@@ -90,7 +91,7 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
                 is_support_requested: true,
             });
         } catch (e) {
-            console.error('Failed to notify MHFR:', e);
+            logger.error('Failed to notify MHFR:', e);
         }
         setStep('mhfr_confirmed');
     }, [supportRequestId]);
@@ -103,7 +104,7 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
                 checkback_time: checkbackTime,
             });
         } catch (e) {
-            console.error('Failed to schedule circle-back:', e);
+            logger.error('Failed to schedule circle-back:', e);
         }
         navigation.replace('DailyInsight');
     }, [supportRequestId, navigation]);

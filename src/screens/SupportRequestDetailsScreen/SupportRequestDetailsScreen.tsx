@@ -4,7 +4,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Image,
   Linking,
   StyleSheet,
 } from 'react-native';
@@ -12,27 +11,25 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { ArrowLeft, Phone, Users, ArrowRight } from 'lucide-react-native';
+import { ArrowLeft, Phone, Users } from 'lucide-react-native';
 import { formatDistanceToNow } from 'date-fns';
 import { RootStackParamList } from '../../types/navigation';
 import { useAuth } from '../../contexts/AuthContext';
-import { useMHFR } from '../../contexts/MHFRContext';
+import { useMHFR, useSafeEdges } from '../../contexts/MHFRContext';
 import { useGroups } from '../../hooks/useGroups';
 import { supportRequests as xanoSupportRequests } from '../../api';
-import EmotionBadge from '../../components/EmotionBadge';
-import { colors, fonts, fontSizes, borderRadius, spacing, avatarStyles } from '../../theme';
+import Avatar from '../../components/Avatar';
+import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
+import { logger } from '../../lib/logger';
+import EmotionTimeline from './components/EmotionTimeline';
+import MHFRActionSection from './components/MHFRActionSection';
+import ContactAttemptLog from './components/ContactAttemptLog';
 
 type DetailsRouteProp = RouteProp<RootStackParamList, 'SupportRequestDetails'>;
 type DetailsNavProp = NativeStackNavigationProp<RootStackParamList, 'SupportRequestDetails'>;
 
-const LIFT_ITEMS = [
-  { letter: 'L', text: 'Listen with attention and intention' },
-  { letter: 'I', text: 'Inquire to discover a person\u2019s needs' },
-  { letter: 'F', text: 'Find a way to support needs' },
-  { letter: 'T', text: 'Thank & acknowledge their character strength' },
-];
-
 export default function SupportRequestDetailsScreen() {
+  const safeEdges = useSafeEdges(['top', 'bottom']);
   const navigation = useNavigation<DetailsNavProp>();
   const route = useRoute<DetailsRouteProp>();
   const { supportRequest: sr } = route.params;
@@ -67,48 +64,10 @@ export default function SupportRequestDetailsScreen() {
       await refreshMHFRRequests();
       navigation.goBack();
     } catch (e) {
-      console.error('Failed to log contact attempt:', e);
+      logger.error('Failed to log contact attempt:', e);
       setLoggingContact(false);
     }
   }, [sr.id, contactCount, loggingContact, refreshMHFRRequests, navigation]);
-
-  // Trigger emotion
-  const triggerName =
-    sr.trigger_Emotion?.emotion_item?.Display ?? sr.trigger_Emotion?.emotion_name ?? '';
-  const triggerColour =
-    sr.trigger_Emotion?.emotion_item?.emotionColour ?? colors.textPlaceholder;
-
-  // Full emotion timeline: trigger + updates + resolved
-  const emotionTimeline: { name: string; colour: string; timestamp: number | null }[] = [];
-
-  if (triggerName) {
-    emotionTimeline.push({
-      name: triggerName,
-      colour: triggerColour,
-      timestamp: sr.logged_Date,
-    });
-  }
-
-  (sr.updated_Emotions_List ?? []).forEach((e) => {
-    if (e.Display) {
-      emotionTimeline.push({
-        name: e.Display,
-        colour: e.emotionColour ?? colors.textPlaceholder,
-        timestamp: e.timestamp,
-      });
-    }
-  });
-
-  if (sr.resolved_Emotion?.Display) {
-    emotionTimeline.push({
-      name: sr.resolved_Emotion.Display,
-      colour: sr.resolved_Emotion.emotionColour ?? colors.textPlaceholder,
-      timestamp: sr.resolved_Date,
-    });
-  }
-
-  // Most recent first
-  emotionTimeline.sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
 
   const formatTimeAgo = (ts: number | null) => {
     if (!ts) return '';
@@ -129,6 +88,8 @@ export default function SupportRequestDetailsScreen() {
     .filter(Boolean) as { id: number; name: string }[];
 
   // Action text for MHFR support guide
+  const triggerName =
+    sr.trigger_Emotion?.emotion_item?.Display ?? sr.trigger_Emotion?.emotion_name ?? '';
   const displayName = requestUser?.fullName ?? 'This person';
   const emotionLabel = triggerName ? triggerName.toUpperCase() : 'distressed';
   const actionText =
@@ -136,7 +97,7 @@ export default function SupportRequestDetailsScreen() {
     `${displayName} is feeling ${emotionLabel} and would like someone to get in touch with them.`;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safe} edges={safeEdges}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -157,15 +118,7 @@ export default function SupportRequestDetailsScreen() {
         {/* ── User card ── */}
         <View style={styles.userCard}>
           <View style={styles.userRow}>
-            {requestUser?.profilePic_url ? (
-              <Image source={{ uri: requestUser.profilePic_url }} style={[avatarStyles.container, { width: 48, height: 48 }]} />
-            ) : (
-              <View style={[avatarStyles.container, avatarStyles.fallback, { width: 48, height: 48 }]}>
-                <Text style={avatarStyles.initial}>
-                  {(requestUser?.fullName ?? '?').charAt(0).toUpperCase()}
-                </Text>
-              </View>
-            )}
+            <Avatar source={requestUser?.profilePic_url} name={requestUser?.fullName} size="lg" />
 
             <View style={styles.userInfo}>
               <Text style={styles.userName}>{requestUser?.fullName ?? 'Unknown'}</Text>
@@ -218,91 +171,14 @@ export default function SupportRequestDetailsScreen() {
             )}
           </View>
 
-          <View style={[styles.section, styles.statCard]}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Contact Attempts</Text>
-            </View>
-            <Text style={styles.bigNumber}>{contactCount}</Text>
-          </View>
+          <ContactAttemptLog count={contactCount} />
         </View>
 
         {/* ── Checkin History ── */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Checkin History</Text>
-          </View>
-
-          {emotionTimeline.length > 0 ? (
-            <View style={styles.timeline}>
-              {emotionTimeline.map((entry, idx) => {
-                const isLast = idx === emotionTimeline.length - 1;
-                return (
-                  <View key={`${entry.name}-${idx}`} style={styles.timelineEntry}>
-                    <View style={styles.timelineTrack}>
-                      <View style={[styles.timelineDot, { backgroundColor: entry.colour }]} />
-                      {!isLast && <View style={styles.timelineLine} />}
-                    </View>
-
-                    <View style={styles.timelineContent}>
-                      <EmotionBadge
-                        emotionName={entry.name}
-                        emotionColour={entry.colour}
-                      />
-                      {entry.timestamp ? (
-                        <Text style={styles.timelineTs}>{formatTimeAgo(entry.timestamp)}</Text>
-                      ) : null}
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          ) : (
-            <Text style={styles.emptyLabel}>No emotions recorded</Text>
-          )}
-        </View>
+        <EmotionTimeline supportRequest={sr} />
 
         {/* ── Support Guide (MHFR view only) ── */}
-        {isMHFR && (
-          <>
-            {/* Action + LIFT card */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Support Guide</Text>
-              <Text style={[styles.actionTitle, { marginTop: spacing.sm }]}>Action</Text>
-              <Text style={styles.actionBody}>{actionText}</Text>
-              <View style={{ borderTopWidth: 1, borderTopColor: colors.border, marginTop: spacing.md }}>
-                {LIFT_ITEMS.map((item, idx) => (
-                  <View
-                    key={item.letter}
-                    style={[styles.liftRow, idx < LIFT_ITEMS.length - 1 && styles.liftRowBorder]}
-                  >
-                    <Text style={styles.liftLetter}>{item.letter}</Text>
-                    <Text style={styles.liftText}>{item.text}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-
-            {/* Open MHFR Resources */}
-            <TouchableOpacity
-              style={styles.mhfrBtn}
-              activeOpacity={0.8}
-              onPress={() => Linking.openURL('https://weweb-production.s3.amazonaws.com/designs/d40d63f2-ae0c-4e43-afd2-4047cb3a7a9c/files/6.00_MHFR_CheatSheets_compressed.pdf')}
-            >
-              <Text style={styles.mhfrBtnLabel}>Open MHFR Resources</Text>
-              <ArrowRight size={18} color={colors.textOnPrimary} />
-            </TouchableOpacity>
-
-            {/* Emergency Services */}
-            <TouchableOpacity
-              style={styles.emergencyBtn}
-              activeOpacity={0.8}
-              onPress={() => Linking.openURL('tel:000')}
-            >
-              <Text style={styles.emergencyBtnLabel}>Emergency Services - Call 000</Text>
-              <Phone size={18} color={colors.textOnPrimary} />
-            </TouchableOpacity>
-          </>
-        )}
+        {isMHFR && <MHFRActionSection actionText={actionText} />}
       </ScrollView>
 
       {/* ── Bottom CTA (owner only) ── */}
@@ -490,127 +366,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
 
-  // ── Contact count ──
-  bigNumber: {
-    fontFamily: fonts.heading,
-    fontSize: fontSizes['2xl'],
-    color: colors.textPrimary,
-    textAlign: 'center',
-    marginTop: spacing.xs,
-  },
-
-  // ── Timeline ──
-  timeline: { gap: 0 },
-  timelineEntry: {
-    flexDirection: 'row',
-  },
-  timelineTrack: {
-    width: 24,
-    alignItems: 'center',
-  },
-  timelineDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginTop: 8,
-  },
-  timelineLine: {
-    flex: 1,
-    width: 2,
-    backgroundColor: colors.border,
-    marginVertical: 4,
-  },
-  timelineContent: {
-    flex: 1,
-    paddingBottom: spacing.base,
-    gap: 4,
-  },
-  timelineTs: {
-    fontFamily: fonts.body,
-    fontSize: fontSizes.xs,
-    color: colors.textPlaceholder,
-    marginLeft: 2,
-  },
-
-  // ── Support Guide (MHFR) ──
-  actionTitle: {
-    fontFamily: fonts.bodyBold,
-    fontSize: fontSizes.base,
-    color: colors.textPrimary,
-    marginBottom: spacing.sm,
-  },
-  actionBody: {
-    fontFamily: fonts.body,
-    fontSize: fontSizes.md,
-    color: colors.textSecondary,
-    lineHeight: 22,
-  },
-
-  // LIFT
-  liftRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingVertical: spacing.md,
-    gap: spacing.base,
-  },
-  liftRowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  liftLetter: {
-    fontFamily: fonts.bodyBold,
-    fontSize: fontSizes.base,
-    color: colors.textPrimary,
-    width: 20,
-  },
-  liftText: {
-    fontFamily: fonts.body,
-    fontSize: fontSizes.md,
-    color: colors.textSecondary,
-    flex: 1,
-    lineHeight: 20,
-  },
-
-  // MHFR Resources button
-  mhfrBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.primary,
-    borderRadius: borderRadius.button,
-    minHeight: 48,
-    paddingHorizontal: spacing.lg,
-    marginBottom: spacing.sm,
-  },
-  mhfrBtnLabel: {
-    fontFamily: fonts.bodyBold,
-    fontSize: fontSizes.base,
-    color: colors.textOnPrimary,
-  },
-
-  // Emergency button
-  emergencyBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.destructive,
-    borderRadius: borderRadius.button,
-    minHeight: 48,
-    paddingHorizontal: spacing.lg,
-    marginBottom: spacing.base,
-  },
-  emergencyBtnLabel: {
-    fontFamily: fonts.bodyBold,
-    fontSize: fontSizes.base,
-    color: colors.textOnPrimary,
-  },
-
   // ── Empty ──
-  emptyLabel: {
-    fontFamily: fonts.body,
-    fontSize: fontSizes.sm,
-    color: colors.textPlaceholder,
-  },
   emptyLabelCentered: {
     fontFamily: fonts.body,
     fontSize: fontSizes.sm,

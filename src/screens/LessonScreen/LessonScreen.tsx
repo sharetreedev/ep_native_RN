@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, Image, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet, PanResponder, GestureResponderEvent, LayoutChangeEvent } from 'react-native';
+import { View, Text, Image, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet, PanResponder, GestureResponderEvent, LayoutChangeEvent, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Play, Pause, SkipBack, SkipForward, Volume2, ArrowLeft } from 'lucide-react-native';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect, RouteProp } from '@react-navigation/native';
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import { colors, fonts, fontSizes, borderRadius, spacing, buttonStyles } from '../../theme';
 import { RootStackParamList } from '../../types/navigation';
 import { useCourses } from '../../hooks/useCourses';
+import { useSafeEdges } from '../../contexts/MHFRContext';
 
 const SKIP_SECONDS = 15;
 
 export default function LessonScreen() {
+  const safeEdges = useSafeEdges(['top']);
   const navigation = useNavigation();
   const route = useRoute<RouteProp<RootStackParamList, 'Lessons'>>();
   const lesson = route.params?.lesson;
@@ -70,6 +72,15 @@ export default function LessonScreen() {
   const audioUrl = lesson?.audio_url?.url;
   const duration = durationMs / 1000;
   const position = isScrubbing ? scrubPosition * duration : positionMs / 1000;
+
+  // Pause audio when user navigates away from this screen
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        soundRef.current?.pauseAsync();
+      };
+    }, [])
+  );
 
   // Load audio when screen mounts with an audio URL
   useEffect(() => {
@@ -145,6 +156,11 @@ export default function LessonScreen() {
     setIsCompleting(true);
     try {
       const result = await markLessonComplete(lesson.id);
+      if (!result) {
+        Alert.alert('Error', 'Failed to mark lesson as complete. Please try again.');
+        setIsCompleting(false);
+        return;
+      }
       setIsCompleted(true);
       // Navigate back to MyPulse, signaling course completion if this was the last lesson
       (navigation as any).navigate('Main', {
@@ -154,6 +170,7 @@ export default function LessonScreen() {
           : undefined,
       });
     } catch {
+      Alert.alert('Error', 'Failed to mark lesson as complete. Please try again.');
       setIsCompleting(false);
     }
   }, [lesson?.id, isCompleting, isCompleted, markLessonComplete, navigation]);
@@ -166,13 +183,24 @@ export default function LessonScreen() {
     'Understanding your emotional state is the first step towards emotional intelligence. In this lesson, we explore the science behind the circumplex grid and how high energy differ from high pleasantness.';
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={safeEdges}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => {
+          if (navigation.canGoBack()) {
+            navigation.goBack();
+          } else {
+            (navigation as any).navigate('Main', { screen: 'MyPulse' });
+          }
+        }} style={styles.backButton}>
           <ArrowLeft color={colors.textSecondary} size={24} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Lesson #{lessonIndex}</Text>
-        <View style={styles.backButton} />
+        <TouchableOpacity
+          onPress={() => (navigation as any).navigate('Main', { screen: 'MyPulse' })}
+          style={styles.skipButton}
+        >
+          <Text style={styles.skipText}>Skip</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
@@ -274,7 +302,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 16,
   },
-  backButton: { width: 24 },
+  backButton: { width: 40 },
+  skipButton: { width: 40, alignItems: 'flex-end' as const },
+  skipText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.sm,
+    color: colors.textMuted,
+  },
   headerTitle: {
     fontSize: fontSizes.lg,
     fontFamily: fonts.heading,

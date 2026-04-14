@@ -34,7 +34,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
     paddingHorizontal: spacing.xl,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: 'rgba(48, 68, 43, 0.10)',
   },
   tab: {
     marginRight: spacing.xl,

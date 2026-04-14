@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -6,6 +6,7 @@ import { RootStackParamList } from '../types/navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { useCheckIn } from '../contexts/CheckInContext';
 import { colors } from '../theme';
+import { consumePendingLesson } from './pendingLesson';
 import TabNavigator from './TabNavigator';
 import AuthScreen from '../screens/AuthScreen/AuthScreen';
 import MobileSignInScreen from '../screens/MobileSignInScreen/MobileSignInScreen';
@@ -28,18 +29,63 @@ import RemindersScreen from '../screens/RemindersScreen/RemindersScreen';
 import GroupProfileScreen from '../screens/GroupProfileScreen/GroupProfileScreen';
 import CreateGroupScreen from '../screens/CreateGroupScreen/CreateGroupScreen';
 import GroupInviteScreen from '../screens/GroupInviteScreen/GroupInviteScreen';
-import AIMHFRScreen from '../screens/AIMHFRScreen/AIMHFRScreen';
+// AIMHFRScreen is lazy-loaded to keep LiveKit / ElevenLabs dependencies out of
+// the startup bundle — those native modules are large and only needed once a
+// user actually opens the AI MHFR flow. See EP-799.
+const LazyAIMHFRScreen = React.lazy(() => import('../screens/AIMHFRScreen/AIMHFRScreen'));
+
+function AIMHFRScreen(props: any) {
+    return (
+        <React.Suspense
+            fallback={
+                <View
+                    style={{
+                        flex: 1,
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        backgroundColor: colors.background,
+                    }}
+                >
+                    <ActivityIndicator size="large" color={colors.primary} />
+                </View>
+            }
+        >
+            <LazyAIMHFRScreen {...props} />
+        </React.Suspense>
+    );
+}
 import CourseDetailsScreen from '../screens/CourseDetailsScreen/CourseDetailsScreen';
+import CourseEnrollScreen from '../screens/CourseEnrollScreen/CourseEnrollScreen';
 import EnrollmentsScreen from '../screens/EnrollmentsScreen/EnrollmentsScreen';
 import CheckinSupportRequestScreen from '../screens/CheckinSupportRequestScreen/CheckinSupportRequestScreen';
 import SupportRequestDetailsScreen from '../screens/SupportRequestDetailsScreen/SupportRequestDetailsScreen';
 import RiskAssessmentScreen from '../screens/RiskAssessmentScreen/RiskAssessmentScreen';
+import MHFRBanner from '../components/MHFRBanner';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function AppNavigator() {
     const { isAuthenticated, isLoading, user } = useAuth();
     const { hasCheckedInToday } = useCheckIn();
+    const navRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
+    const checkinPushed = useRef(false);
+
+    // Determine the initial route for authenticated users
+    const needsOnboarding = isAuthenticated && !user?.onboardingComplete;
+    const needsCheckIn = isAuthenticated && user?.onboardingComplete && !hasCheckedInToday;
+
+    // Navigate to lesson if user enrolled during onboarding
+    useEffect(() => {
+        if (!needsOnboarding && !isLoading) {
+            const lesson = consumePendingLesson();
+            if (lesson) {
+                // Small delay to let the Main stack mount
+                setTimeout(() => {
+                    navRef.current?.navigate('Lessons', { lesson });
+                }, 100);
+            }
+        }
+    }, [needsOnboarding, isLoading]);
 
     if (isLoading) {
         return (
@@ -48,12 +94,6 @@ export default function AppNavigator() {
             </View>
         );
     }
-
-    // Determine the initial route for authenticated users
-    const needsOnboarding = isAuthenticated && !user?.onboardingComplete;
-    const needsCheckIn = isAuthenticated && user?.onboardingComplete && !hasCheckedInToday;
-    const navRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
-    const checkinPushed = useRef(false);
 
     return (
         <NavigationContainer
@@ -66,6 +106,8 @@ export default function AppNavigator() {
                 }
             }}
         >
+            <View style={styles.appContainer}>
+            {isAuthenticated && !needsOnboarding && <MHFRBanner />}
             <Stack.Navigator id="RootStack" screenOptions={{ headerShown: false }}>
                 {isAuthenticated ? (
                     needsOnboarding ? (
@@ -84,6 +126,7 @@ export default function AppNavigator() {
                             <Stack.Screen name="UserProfile" component={UserProfileScreen} />
                             <Stack.Screen name="Lessons" component={LessonScreen} />
                             <Stack.Screen name="CourseDetails" component={CourseDetailsScreen} />
+                            <Stack.Screen name="CourseEnroll" component={CourseEnrollScreen} />
                             <Stack.Screen name="Enrollments" component={EnrollmentsScreen} />
                             <Stack.Screen name="InvitePairIntro" component={InvitePairIntroScreen} />
                             <Stack.Screen name="InvitePairType" component={InvitePairTypeScreen} />
@@ -106,11 +149,15 @@ export default function AppNavigator() {
                     </>
                 )}
             </Stack.Navigator>
+            </View>
         </NavigationContainer>
     );
 }
 
 const styles = StyleSheet.create({
+    appContainer: {
+        flex: 1,
+    },
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',

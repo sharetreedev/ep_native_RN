@@ -18,6 +18,7 @@ const PADDING = 20;
 const TILE_SIZE = SCREEN_WIDTH - PADDING * 2;
 const TILE_RADIUS = borderRadius.xl + 20;
 const AXIS_FONT_SIZE = fontSizes.md;
+const DESC_TRUNCATE = 28;
 const LIGHT_TEXT_EMOTIONS = ['depressed', 'ecstatic', 'enraged', 'blissful'];
 
 function getEmotionFontColor(name: string): string {
@@ -180,10 +181,13 @@ export default function CoordinatePicker({
         {/* Description with See more */}
         {emotion.description ? (
           <TouchableOpacity onPress={() => setShowDetail(true)} activeOpacity={0.7}>
-            <Text style={styles.emotionDescription} numberOfLines={1}>
-              {emotion.description}
+            <Text style={styles.descriptionLine}>
+              {emotion.description.length > DESC_TRUNCATE
+                ? emotion.description.slice(0, DESC_TRUNCATE).trimEnd() + '…'
+                : emotion.description}
+              {'  '}
+              <Text style={styles.seeMoreInline}>See more</Text>
             </Text>
-            <Text style={styles.seeMore}>See more</Text>
           </TouchableOpacity>
         ) : null}
 
@@ -315,22 +319,20 @@ const styles = StyleSheet.create({
     top: '50%',
     marginTop: -8,
   },
-  emotionDescription: {
+  descriptionLine: {
     fontSize: fontSizes.base,
     fontFamily: fonts.body,
     color: colors.textMuted,
     textAlign: 'center',
     marginTop: 16,
     paddingHorizontal: 20,
+    marginBottom: 64,
   },
-  seeMore: {
+  seeMoreInline: {
     fontFamily: fonts.bodyBold,
     fontWeight: '700',
     color: colors.textMuted,
     fontSize: fontSizes.md,
-    textAlign: 'center',
-    marginTop: 4,
-    marginBottom: 64,
   },
   footer: {
     position: 'absolute',

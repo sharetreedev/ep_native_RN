@@ -12,7 +12,7 @@ import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { X, Heart } from 'lucide-react-native';
 import { RootStackParamList } from '../../types/navigation';
-import { useMHFR } from '../../contexts/MHFRContext';
+import { useMHFR, useSafeEdges } from '../../contexts/MHFRContext';
 import { supportRequests as xanoSupportRequests } from '../../api';
 import { colors, spacing } from '../../theme';
 import {
@@ -24,11 +24,13 @@ import {
 import { styles } from './styles';
 import OptionsList from './components/OptionsList';
 import SuggestedActionCard from './components/SuggestedActionCard';
+import { logger } from '../../lib/logger';
 
 type ScreenRouteProp = RouteProp<RootStackParamList, 'RiskAssessment'>;
 type ScreenNavProp = NativeStackNavigationProp<RootStackParamList, 'RiskAssessment'>;
 
 export default function RiskAssessmentScreen() {
+  const safeEdges = useSafeEdges(['top', 'bottom']);
   const navigation = useNavigation<ScreenNavProp>();
   const route = useRoute<ScreenRouteProp>();
   const { supportRequest: sr } = route.params;
@@ -77,7 +79,7 @@ export default function RiskAssessmentScreen() {
         await refreshMHFRRequests();
         setStep(5);
       } catch (e) {
-        console.error('Failed to save risk assessment:', e);
+        logger.error('Failed to save risk assessment:', e);
       } finally {
         setSaving(false);
       }
@@ -152,7 +154,7 @@ export default function RiskAssessmentScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safe} edges={safeEdges}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Risk Assessment</Text>

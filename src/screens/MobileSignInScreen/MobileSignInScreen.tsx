@@ -26,7 +26,8 @@ export default function MobileSignInScreen() {
 
     setLoading(true);
     try {
-      const result = await xanoAuth.signInWithMobile(phone, countryIso);
+      const fullPhone = `${countryCode}${phone.replace(/^0+/, '')}`;
+      const result = await xanoAuth.signInWithMobile(fullPhone, countryIso);
       navigation.navigate('MobileVerify', { userId: String(result.user_id), phone, countryIso });
     } catch (e: any) {
       Alert.alert('Error', e?.message ?? 'Failed to send verification code. Please try again.');

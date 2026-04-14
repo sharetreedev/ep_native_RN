@@ -28,4 +28,10 @@ export const courses = {
 
   markLessonComplete: (moduleId: number) =>
     request<XanoLessonCompletion>('POST', '/courses/mark_lesson_complete', { module_id: moduleId }),
+
+  enroll: (usersId: number, coursesId: number) =>
+    request<XanoEnrollment>('POST', '/course/enroll', {
+      users_id: usersId,
+      courses_id: coursesId,
+    }),
 };

@@ -53,7 +53,10 @@ export function CheckInProvider({ children }: { children: React.ReactNode }) {
     _setUser((prev) => prev ? { ...prev, lastCheckInDate: today } : prev);
   }, [_setUser]);
 
-  const value: CheckInContextValue = { hasCheckedInToday, markCheckedInToday };
+  const value = useMemo<CheckInContextValue>(
+    () => ({ hasCheckedInToday, markCheckedInToday }),
+    [hasCheckedInToday, markCheckedInToday],
+  );
 
   return <CheckInContext.Provider value={value}>{children}</CheckInContext.Provider>;
 }

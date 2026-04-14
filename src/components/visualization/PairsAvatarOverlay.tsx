@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, Image, TouchableOpacity, Modal, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, Pressable, ScrollView, StyleSheet } from 'react-native';
 import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
-import { User } from 'lucide-react-native';
 import EmotionBadge from '../EmotionBadge';
-import AvatarDisplay from '../AvatarDisplay';
+import Avatar from '../Avatar';
 import { colors, fonts, fontSizes } from '../../theme';
 
 export type StalenessLevel = 'fresh' | 'stale24' | 'stale48';
@@ -35,6 +34,8 @@ interface PairsAvatarOverlayProps {
   onUserPress: (user: OverlayUser) => void;
   /** Resolves a grid position to its emotion info (for modal badge) */
   getEmotionInfo?: (row: number, col: number) => { name: string; colour: string } | undefined;
+  /** Called when an empty cell is pressed (no avatars/orbs) */
+  onCellPress?: (row: number, col: number) => void;
 }
 
 /**
@@ -49,6 +50,7 @@ export default function PairsAvatarOverlay({
   points,
   onUserPress,
   getEmotionInfo,
+  onCellPress,
 }: PairsAvatarOverlayProps) {
   const [modalUsers, setModalUsers] = useState<OverlayUser[] | null>(null);
   const [modalEmotion, setModalEmotion] = useState<{ name: string; colour: string } | undefined>();
@@ -65,6 +67,70 @@ export default function PairsAvatarOverlay({
     });
   });
 
+  const renderSingleAvatar = (user: OverlayUser, size: 'full' | 'compact') => {
+    const avatarOpacity = user.staleness === 'stale48' ? 0.5 : user.staleness === 'stale24' ? 0.75 : 1;
+    const isStale = user.staleness === 'stale24' || user.staleness === 'stale48';
+    const wrapStyle = size === 'compact' ? styles.avatarWrapCompact : styles.avatarWrap;
+    const borderRadius = size === 'compact' ? 10 : 16;
+    return (
+      <TouchableOpacity
+        key={user.id}
+        style={wrapStyle}
+        onPress={() => onUserPress(user)}
+        activeOpacity={0.7}
+      >
+        <Avatar
+          source={user.avatarUrl}
+          name={user.name}
+          fill
+          borderRadius={borderRadius}
+          opacity={avatarOpacity}
+          border={isStale ? { width: 2, color: '#FDA33A' } : undefined}
+          shadow={size === 'compact' ? 'sm' : 'md'}
+        />
+      </TouchableOpacity>
+    );
+  };
+
+  const renderOrb = (row: number, col: number, users: OverlayUser[], size: 'full' | 'compact') => {
+    const wrapStyle = size === 'compact' ? styles.avatarWrapCompact : styles.avatarWrap;
+    return (
+      <TouchableOpacity
+        key={`orb-${row}-${col}`}
+        style={wrapStyle}
+        onPress={() => {
+          setModalUsers(users);
+          setModalEmotion(getEmotionInfo?.(row, col));
+        }}
+        activeOpacity={0.7}
+      >
+        <View style={styles.orbContainer}>
+          <Svg width="140%" height="140%" viewBox="0 0 40 40" style={styles.orbSvg}>
+            <Defs>
+              <RadialGradient id={`glow-${row}-${col}`} cx="50%" cy="50%" rx="50%" ry="50%">
+                <Stop offset="0%" stopColor="#A855F7" stopOpacity="0.6" />
+                <Stop offset="50%" stopColor="#7C3AED" stopOpacity="0.25" />
+                <Stop offset="100%" stopColor="#7C3AED" stopOpacity="0" />
+              </RadialGradient>
+            </Defs>
+            <Circle cx="20" cy="20" r={19} fill={`url(#glow-${row}-${col})`} />
+          </Svg>
+          <Svg width="140%" height="140%" viewBox="0 0 40 40" style={styles.orbSvg}>
+            <Defs>
+              <RadialGradient id={`core-${row}-${col}`} cx="50%" cy="50%" rx="50%" ry="50%">
+                <Stop offset="0%" stopColor="#C084FC" stopOpacity="0.85" />
+                <Stop offset="70%" stopColor="#A855F7" stopOpacity="0.7" />
+                <Stop offset="100%" stopColor="#7C3AED" stopOpacity="0.4" />
+              </RadialGradient>
+            </Defs>
+            <Circle cx="20" cy="20" r={14} fill={`url(#core-${row}-${col})`} />
+          </Svg>
+          <Text style={size === 'compact' ? styles.orbTextCompact : styles.orbText}>{users.length}</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   const renderCell = (row: number, col: number) => {
     const key = `${row}-${col}`;
     const users = gridMap[key];
@@ -80,72 +146,53 @@ export default function PairsAvatarOverlay({
     ];
 
     if (!users || users.length === 0) {
+      if (onCellPress) {
+        return (
+          <TouchableOpacity key={key} style={cellStyle} onPress={() => onCellPress(row, col)} activeOpacity={0.7} />
+        );
+      }
       return <View key={key} style={cellStyle} />;
     }
 
-    if (users.length === 1) {
-      const user = users[0];
-      const opacity = user.staleness === 'stale48' ? 0.5 : user.staleness === 'stale24' ? 0.75 : 1;
-      const isStale = user.staleness === 'stale24' || user.staleness === 'stale48';
+    // Separate current user from pairs
+    const me = users.find((u) => u.isCurrentUser);
+    const others = users.filter((u) => !u.isCurrentUser);
+
+    // Only current user at this coordinate
+    if (me && others.length === 0) {
       return (
         <View key={key} style={cellStyle}>
-          <TouchableOpacity
-            style={[styles.avatarWrap, { opacity }]}
-            onPress={() => onUserPress(user)}
-            activeOpacity={0.7}
-          >
-            {user.avatarUrl ? (
-              <Image
-                source={{ uri: user.avatarUrl }}
-                style={[styles.avatarImage, isStale && styles.staleBorder]}
-              />
-            ) : (
-              <View style={[styles.avatarPlaceholder, user.isCurrentUser && styles.avatarCurrentUser, isStale && styles.staleBorder]}>
-                <User color="#fff" size={10} />
-              </View>
-            )}
-          </TouchableOpacity>
+          {renderSingleAvatar(me, 'full')}
         </View>
       );
     }
 
-    // Multiple users — show density orb with count (matches GlobalPulse style)
+    // Only pairs (no current user) — single or orb
+    if (!me) {
+      if (others.length === 1) {
+        return (
+          <View key={key} style={cellStyle}>
+            {renderSingleAvatar(others[0], 'full')}
+          </View>
+        );
+      }
+      return (
+        <View key={key} style={cellStyle}>
+          {renderOrb(row, col, others, 'full')}
+        </View>
+      );
+    }
+
+    // Current user + pairs share this coordinate — show both compact side-by-side
     return (
       <View key={key} style={cellStyle}>
-        <TouchableOpacity
-          style={styles.avatarWrap}
-          onPress={() => {
-            setModalUsers(users);
-            setModalEmotion(getEmotionInfo?.(row, col));
-          }}
-          activeOpacity={0.7}
-        >
-          <View style={styles.orbContainer}>
-            {/* Outer glow */}
-            <Svg width="140%" height="140%" viewBox="0 0 40 40" style={styles.orbSvg}>
-              <Defs>
-                <RadialGradient id={`glow-${row}-${col}`} cx="50%" cy="50%" rx="50%" ry="50%">
-                  <Stop offset="0%" stopColor="#A855F7" stopOpacity="0.6" />
-                  <Stop offset="50%" stopColor="#7C3AED" stopOpacity="0.25" />
-                  <Stop offset="100%" stopColor="#7C3AED" stopOpacity="0" />
-                </RadialGradient>
-              </Defs>
-              <Circle cx="20" cy="20" r={19} fill={`url(#glow-${row}-${col})`} />
-            </Svg>
-            {/* Core */}
-            <Svg width="140%" height="140%" viewBox="0 0 40 40" style={styles.orbSvg}>
-              <Defs>
-                <RadialGradient id={`core-${row}-${col}`} cx="50%" cy="50%" rx="50%" ry="50%">
-                  <Stop offset="0%" stopColor="#C084FC" stopOpacity="0.85" />
-                  <Stop offset="70%" stopColor="#A855F7" stopOpacity="0.7" />
-                  <Stop offset="100%" stopColor="#7C3AED" stopOpacity="0.4" />
-                </RadialGradient>
-              </Defs>
-              <Circle cx="20" cy="20" r={14} fill={`url(#core-${row}-${col})`} />
-            </Svg>
-            <Text style={styles.orbText}>{users.length}</Text>
-          </View>
-        </TouchableOpacity>
+        <View style={styles.sharedCell}>
+          {renderSingleAvatar(me, 'compact')}
+          {others.length === 1
+            ? renderSingleAvatar(others[0], 'compact')
+            : renderOrb(row, col, others, 'compact')
+          }
+        </View>
       </View>
     );
   };
@@ -192,13 +239,11 @@ export default function PairsAvatarOverlay({
                       onUserPress(user);
                     }}
                   >
-                    <AvatarDisplay
-                      imageUrl={user.avatarUrl}
-                      fallbackText={initial}
-                      size={36}
-                      borderRadius={12}
-                      borderWidth={isStale ? 2 : undefined}
-                      borderColor={isStale ? colors.alert : undefined}
+                    <Avatar
+                      source={user.avatarUrl}
+                      name={user.name}
+                      size="sm"
+                      border={isStale ? { width: 2, color: colors.alert } : undefined}
                       style={{ marginRight: 12 }}
                     />
                     <Text style={styles.modalName}>
@@ -240,32 +285,24 @@ const styles = StyleSheet.create({
   avatarWrap: {
     width: '92%',
     aspectRatio: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 4,
   },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 16,
+
+  // Compact variants for shared-coordinate cells
+  avatarWrapCompact: {
+    width: '58%',
+    aspectRatio: 1,
   },
-  avatarPlaceholder: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 16,
-    backgroundColor: colors.primary,
+
+  // Side-by-side layout when current user shares coordinate with pairs
+  sharedCell: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    width: '100%',
+    height: '100%',
+    gap: 2,
   },
-  avatarCurrentUser: {
-    backgroundColor: '#6366f1',
-  },
-  staleBorder: {
-    borderWidth: 2,
-    borderColor: '#FDA33A',
-  },
+
 
   // Density orb for multiple users (matches GlobalPulse style)
   orbContainer: {
@@ -280,7 +317,13 @@ const styles = StyleSheet.create({
   },
   orbText: {
     color: '#fff',
-    fontSize: 13,
+    fontSize: fontSizes.sm,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  orbTextCompact: {
+    color: '#fff',
+    fontSize: 10,
     fontWeight: '700',
     textAlign: 'center',
   },
@@ -322,25 +365,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 12,
-  },
-  modalAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    marginRight: 12,
-  },
-  modalAvatarPlaceholder: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  modalAvatarStale: {
-    borderWidth: 2,
-    borderColor: '#FDA33A',
   },
   modalName: {
     fontFamily: fonts.bodyMedium,

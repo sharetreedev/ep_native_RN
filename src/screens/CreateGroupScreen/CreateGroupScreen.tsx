@@ -18,10 +18,12 @@ import * as ImagePicker from 'expo-image-picker';
 import { ArrowLeft, Camera, Plus, X } from 'lucide-react-native';
 import { useGroups } from '../../hooks/useGroups';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
+import { useSafeEdges } from '../../contexts/MHFRContext';
 
 const TOTAL_STEPS = 3;
 
 export default function CreateGroupScreen() {
+  const safeEdges = useSafeEdges(['top', 'bottom']);
   const navigation = useNavigation();
   const { createGroup, inviteViaEmail } = useGroups();
 
@@ -205,7 +207,7 @@ export default function CreateGroupScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={safeEdges}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

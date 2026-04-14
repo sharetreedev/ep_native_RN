@@ -19,15 +19,27 @@ export default function EmailVerificationStep({
   isSubmitting,
 }: EmailVerificationStepProps) {
   const [emailCodeSent, setEmailCodeSent] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
 
   const sendEmailCode = useCallback(async () => {
+    if (cooldown > 0) return;
     try {
       await xanoAuth.generateCode('email');
       setEmailCodeSent(true);
+      setCooldown(30);
+      Alert.alert('Code Sent', `A verification code has been sent to ${email}.`);
     } catch {
       Alert.alert('Error', 'Failed to send verification code. Please try again.');
     }
-  }, []);
+  }, [cooldown, email]);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => {
+      setCooldown((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
 
   useEffect(() => {
     if (!emailCodeSent) {
@@ -68,9 +80,10 @@ export default function EmailVerificationStep({
         </View>
         {isSubmitting && <ActivityIndicator color={colors.primary} style={styles.spinner} />}
         <Button
-          title="Resend Code"
+          title={cooldown > 0 ? `Resend Code (${cooldown}s)` : 'Resend Code'}
           variant="secondary"
           onPress={sendEmailCode}
+          disabled={cooldown > 0}
           style={styles.resendButton}
         />
       </ScrollView>

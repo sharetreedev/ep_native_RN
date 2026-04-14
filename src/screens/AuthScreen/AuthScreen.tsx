@@ -1,14 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, Alert, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import * as AuthSession from 'expo-auth-session';
+import * as WebBrowser from 'expo-web-browser';
 import { RootStackParamList } from '../../types/navigation';
 import { useAuth } from '../../contexts/AuthContext';
+import { ChevronDown } from 'lucide-react-native';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
 import Button from '../../components/Button';
+import ModalPicker from '../../components/ModalPicker';
+import { COUNTRIES } from '../../constants/countries';
+
+WebBrowser.maybeCompleteAuthSession();
+
+const MICROSOFT_CLIENT_ID = process.env.EXPO_PUBLIC_MICROSOFT_CLIENT_ID ?? '';
+const MICROSOFT_TENANT = 'common';
+
+const microsoftDiscovery: AuthSession.DiscoveryDocument = {
+  authorizationEndpoint: `https://login.microsoftonline.com/${MICROSOFT_TENANT}/oauth2/v2.0/authorize`,
+  tokenEndpoint: `https://login.microsoftonline.com/${MICROSOFT_TENANT}/oauth2/v2.0/token`,
+};
 
 type AuthMode = 'login' | 'signup';
+
+/** Basic RFC 5322-friendly email pattern — good enough for client-side UX validation. */
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function AuthScreen() {
     const [mode, setMode] = useState<AuthMode>('login');
@@ -17,13 +35,62 @@ export default function AuthScreen() {
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [country, setCountry] = useState('');
+    const [countryPickerVisible, setCountryPickerVisible] = useState(false);
+    const selectedCountryLabel = COUNTRIES.find((c) => c.value === country)?.label || '';
 
     const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'Auth'>>();
     const { login, signup, loginWithMicrosoft, isLoading, error } = useAuth();
 
+    // Microsoft OAuth PKCE flow
+    const redirectUri = AuthSession.makeRedirectUri({ scheme: 'emotionalpulse', path: 'auth' });
+
+    const [msRequest, msResponse, promptMsAsync] = AuthSession.useAuthRequest(
+        {
+            clientId: MICROSOFT_CLIENT_ID,
+            scopes: [
+                'openid',
+                'profile',
+                'email',
+                'offline_access',
+                'https://graph.microsoft.com/User.Read',
+            ],
+            redirectUri,
+            responseType: AuthSession.ResponseType.Code,
+            usePKCE: true,
+        },
+        microsoftDiscovery,
+    );
+
+    useEffect(() => {
+        if (msResponse?.type === 'success' && msRequest?.codeVerifier) {
+            const { code } = msResponse.params;
+            // Pass redirect URI as domain so the backend can use the correct
+            // redirect_uri when exchanging the code with Microsoft.
+            loginWithMicrosoft(code, msRequest.codeVerifier, redirectUri).catch((e) => {
+                if (__DEV__) {
+                    const body = e?.body ? JSON.stringify(e.body) : '';
+                    const msg = [e?.message, body].filter(Boolean).join('\n\n');
+                    Alert.alert('DEBUG: MS Login', msg || JSON.stringify(e));
+                } else {
+                    Alert.alert('Microsoft Login Failed', 'Something went wrong. Please try again.');
+                }
+            });
+        } else if (msResponse?.type === 'error') {
+            Alert.alert('Microsoft Login Failed', msResponse.error?.message ?? 'Authentication was cancelled.');
+        }
+    }, [msResponse]);
+
     async function handleAuth() {
         if (!email || !password) {
             Alert.alert('Missing Fields', 'Please enter your email and password.');
+            return;
+        }
+        if (!EMAIL_REGEX.test(email.trim())) {
+            Alert.alert('Invalid Email', 'Please enter a valid email address.');
+            return;
+        }
+        if (mode === 'signup' && password.length < 8) {
+            Alert.alert('Weak Password', 'Password must be at least 8 characters.');
             return;
         }
 
@@ -52,10 +119,11 @@ export default function AuthScreen() {
     }
 
     async function handleMicrosoftLogin() {
-        // This is a placeholder for actual Microsoft SSO integration logic
-        // which typically requires expo-auth-session or similar.
-        Alert.alert('Microsoft SSO', 'Microsoft SSO requires additional configuration.');
-        // Example call: await loginWithMicrosoft('azure-token', 'tenant-id');
+        if (!MICROSOFT_CLIENT_ID) {
+            Alert.alert('Configuration Error', 'EXPO_PUBLIC_MICROSOFT_CLIENT_ID is not set in your .env file.');
+            return;
+        }
+        await promptMsAsync();
     }
 
     const toggleMode = () => {
@@ -99,13 +167,20 @@ export default function AuthScreen() {
                                     placeholder="Last Name"
                                     placeholderTextColor={colors.textPlaceholder}
                                 />
-                                <TextInput
-                                    style={styles.input}
-                                    onChangeText={setCountry}
-                                    value={country}
-                                    placeholder="Country"
-                                    placeholderTextColor={colors.textPlaceholder}
-                                />
+                                <TouchableOpacity
+                                    style={styles.countryPicker}
+                                    onPress={() => setCountryPickerVisible(true)}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.countryPickerText,
+                                            !selectedCountryLabel && styles.countryPickerPlaceholder,
+                                        ]}
+                                    >
+                                        {selectedCountryLabel || 'Country'}
+                                    </Text>
+                                    <ChevronDown color={colors.textMuted} size={18} />
+                                </TouchableOpacity>
                             </>
                         )}
 
@@ -168,6 +243,16 @@ export default function AuthScreen() {
                     </View>
                 </ScrollView>
             </KeyboardAvoidingView>
+            <ModalPicker
+                visible={countryPickerVisible}
+                onDismiss={() => setCountryPickerVisible(false)}
+                data={COUNTRIES}
+                selectedValue={country}
+                onSelect={(item) => {
+                    setCountry(item.value as string);
+                    setCountryPickerVisible(false);
+                }}
+            />
         </SafeAreaView>
     );
 }
@@ -252,7 +337,25 @@ const styles = StyleSheet.create({
         marginBottom: spacing.base,
     },
     mobileButton: {
-    }
+    },
+    countryPicker: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderWidth: 1,
+        borderColor: colors.borderLight,
+        borderRadius: borderRadius.button,
+        padding: spacing.base,
+        marginBottom: spacing.base,
+    },
+    countryPickerText: {
+        fontSize: fontSizes.base,
+        fontFamily: fonts.body,
+        color: colors.textPrimary,
+    },
+    countryPickerPlaceholder: {
+        color: colors.textPlaceholder,
+    },
 });
 
 

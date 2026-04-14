@@ -5,6 +5,7 @@ import Animated, {
   ZoomIn,
 } from 'react-native-reanimated';
 import AnimatedMarker from './AnimatedMarker';
+import { fontSizes } from '../../theme';
 
 interface DensityPoint {
   row: number;
@@ -100,7 +101,7 @@ export default React.memo(function CoordinatesGrid({
         {showCount && (
           <Text style={{
             color: '#fff',
-            fontSize: 13,
+            fontSize: fontSizes.sm,
             fontWeight: '700',
             textAlign: 'center',
           }}>

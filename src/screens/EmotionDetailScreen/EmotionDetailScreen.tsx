@@ -6,16 +6,18 @@ import { RootStackParamList } from '../../types/navigation';
 import { X } from 'lucide-react-native';
 import EmotionDetailView from '../../components/EmotionDetailView';
 import { colors, spacing, borderRadius } from '../../theme';
+import { useSafeEdges } from '../../contexts/MHFRContext';
 
 type EmotionDetailScreenRouteProp = RouteProp<RootStackParamList, 'EmotionDetail'>;
 
 export default function EmotionDetailScreen() {
+    const safeEdges = useSafeEdges(['top', 'bottom']);
     const navigation = useNavigation();
     const route = useRoute<EmotionDetailScreenRouteProp>();
     const { emotion } = route.params;
 
     return (
-        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <SafeAreaView style={styles.container} edges={safeEdges}>
             <ScrollView style={styles.scroll}>
                 {/* Header */}
                 <View style={styles.header}>

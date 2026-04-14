@@ -7,11 +7,12 @@ import type {
 } from './types';
 
 export const checkIns = {
-  create: (emotionId: number, coordinateId: number, relatedSupportRequestId?: number) =>
+  create: (emotionId: number, coordinateId: number, relatedSupportRequestId?: number, checkinView?: 'slider' | 'grid') =>
     request<XanoCheckInCreateResponse>('POST', '/checkins/create', {
       emotion_id: emotionId,
       coordinate_id: coordinateId,
       ...(relatedSupportRequestId !== undefined ? { related_support_request_id: relatedSupportRequestId } : {}),
+      checkin_view: checkinView ?? 'slider',
     }),
 
   getAll: (page: number = 1) =>

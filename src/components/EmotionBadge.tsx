@@ -17,10 +17,10 @@ function capitalize(str: string): string {
 }
 
 function getEmotionFontColor(name: string): string {
-  return LIGHT_TEXT_EMOTIONS.includes(name.toLowerCase()) ? '#FFFFFF' : '#1F2937';
+  return LIGHT_TEXT_EMOTIONS.includes(name.toLowerCase()) ? colors.textOnPrimary : colors.textPrimary;
 }
 
-export default function EmotionBadge({ emotionName, emotionColour, compact, size }: EmotionBadgeProps) {
+function EmotionBadge({ emotionName, emotionColour, compact, size }: EmotionBadgeProps) {
   const resolvedSize = size ?? (compact ? 'compact' : 'default');
   return (
     <View style={[styles.badge, { backgroundColor: emotionColour }, resolvedSize === 'small' && styles.badgeSmall, resolvedSize === 'compact' && styles.badgeCompact]}>
@@ -64,3 +64,5 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.xs,
   },
 });
+
+export default React.memo(EmotionBadge);

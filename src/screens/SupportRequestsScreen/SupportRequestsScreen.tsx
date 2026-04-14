@@ -10,28 +10,41 @@ import {
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ArrowLeft, ChevronRight } from 'lucide-react-native';
 import { formatDistanceToNow } from 'date-fns';
 import { supportRequests, XanoSupportRequest } from '../../api';
 import { useAuth } from '../../contexts/AuthContext';
-import { useMHFR } from '../../contexts/MHFRContext';
+import { useMHFR, useSafeEdges } from '../../contexts/MHFRContext';
+import { useEmotionStates } from '../../hooks/useEmotionStates';
 import { RootStackParamList } from '../../types/navigation';
 import EmotionBadge from '../../components/EmotionBadge';
-import { colors, fonts, fontSizes, borderRadius, spacing, pillTabStyles, avatarStyles } from '../../theme';
+import Avatar from '../../components/Avatar';
+import { colors, fonts, fontSizes, borderRadius, spacing, pillTabStyles } from '../../theme';
+import { logger } from '../../lib/logger';
 
 type MainTab = 'myRequests' | 'mhfr';
 type StatusFilter = 'OPEN' | 'RESOLVED';
 
 export default function SupportRequestsScreen() {
+  const safeEdges = useSafeEdges(['top']);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute<RouteProp<RootStackParamList, 'SupportRequests'>>();
   const { user } = useAuth();
+  const { emotionStates } = useEmotionStates();
   const { mhfrRequests, refreshMHFRRequests } = useMHFR();
+
+  // Lookup emotion colour by emotion_states_id
+  const emotionColourMap = React.useMemo(() => {
+    const map: Record<number, string> = {};
+    emotionStates.forEach((e) => { if (e.xanoId) map[e.xanoId] = e.emotionColour; });
+    return map;
+  }, [emotionStates]);
   const [requests, setRequests] = useState<XanoSupportRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<MainTab>('myRequests');
+  const [activeTab, setActiveTab] = useState<MainTab>(route.params?.initialTab ?? 'myRequests');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('OPEN');
   const [mhfrStatusFilter, setMhfrStatusFilter] = useState<StatusFilter>('OPEN');
 
@@ -40,7 +53,7 @@ export default function SupportRequestsScreen() {
       const data = await supportRequests.getAll();
       setRequests(data);
     } catch (err) {
-      console.error('Failed to fetch support requests:', err);
+      logger.error('Failed to fetch support requests:', err);
     } finally {
       setLoading(false);
     }
@@ -82,7 +95,10 @@ export default function SupportRequestsScreen() {
   const renderCard = (item: XanoSupportRequest) => {
     const triggerEmotion = item.trigger_Emotion;
     const triggerDisplay = triggerEmotion?.emotion_item?.Display ?? triggerEmotion?.emotion_name ?? '';
-    const triggerColour = triggerEmotion?.emotion_item?.emotionColour ?? colors.textPlaceholder;
+    const triggerColour = emotionColourMap[triggerEmotion?.emotion_states_id]
+      ?? triggerEmotion?.emotion_item?.emotionColour
+      ?? triggerEmotion?.emotionColour
+      ?? colors.primary;
 
     const isOpen = item.status === 'OPEN';
     const isMine = isOwnRequest(item);
@@ -96,15 +112,7 @@ export default function SupportRequestsScreen() {
       >
         <View style={styles.cardBody}>
           <View style={styles.mhfrCardLeft}>
-            {user?.avatarUrl ? (
-              <Image source={{ uri: user.avatarUrl }} style={avatarStyles.container} />
-            ) : (
-              <View style={[avatarStyles.container, avatarStyles.fallback]}>
-                <Text style={avatarStyles.initial}>
-                  {(user?.firstName ?? '?').charAt(0).toUpperCase()}
-                </Text>
-              </View>
-            )}
+            <Avatar source={user?.avatarUrl} name={user?.name} />
             <View style={styles.mhfrCardInfo}>
               <Text style={styles.cardTitle}>{formatTimeAgo(item.logged_Date)}</Text>
               <Text style={styles.cardSubtext}>
@@ -145,7 +153,7 @@ export default function SupportRequestsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={safeEdges}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -251,7 +259,10 @@ export default function SupportRequestsScreen() {
                 const reqUser = item.requesting_user_details;
                 const triggerEmotion = item.trigger_Emotion;
                 const triggerDisplay = triggerEmotion?.emotion_item?.Display ?? triggerEmotion?.emotion_name ?? '';
-                const triggerColour = triggerEmotion?.emotion_item?.emotionColour ?? colors.textPlaceholder;
+                const triggerColour = emotionColourMap[triggerEmotion?.emotion_states_id]
+                  ?? triggerEmotion?.emotion_item?.emotionColour
+                  ?? triggerEmotion?.emotionColour
+                  ?? colors.primary;
 
                 return (
                   <TouchableOpacity
@@ -262,15 +273,7 @@ export default function SupportRequestsScreen() {
                   >
                     <View style={styles.cardBody}>
                       <View style={styles.mhfrCardLeft}>
-                        {reqUser?.profilePic_url ? (
-                          <Image source={{ uri: reqUser.profilePic_url }} style={avatarStyles.container} />
-                        ) : (
-                          <View style={[avatarStyles.container, avatarStyles.fallback]}>
-                            <Text style={avatarStyles.initial}>
-                              {(reqUser?.fullName ?? '?').charAt(0).toUpperCase()}
-                            </Text>
-                          </View>
-                        )}
+                        <Avatar source={reqUser?.profilePic_url} name={reqUser?.fullName} />
                         <View style={styles.mhfrCardInfo}>
                           <Text style={styles.cardTitle}>{reqUser?.fullName ?? 'Unknown'}</Text>
                           <Text style={styles.cardSubtext}>

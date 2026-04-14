@@ -19,7 +19,16 @@ export function useCoordinateMapping(
     const map = new Map<number, { row: number; col: number }>();
     coordinates
       .filter(c => c.xAxis != null && c.yAxis != null)
-      .forEach(c => map.set(c.id, { col: c.xAxis! + 4, row: c.yAxis! + 4 }));
+      .forEach(c => {
+        const x = c.xAxis!;
+        const y = c.yAxis!;
+        // Map axis values (-4,-3,-2,-1,1,2,3,4) to grid positions (0-7)
+        // X: left-to-right (unpleasant → pleasant)
+        // Y: top-to-bottom (high energy → low energy), so Y is inverted
+        const col = x > 0 ? x + 3 : x + 4;
+        const row = y > 0 ? 4 - y : 3 - y;
+        map.set(c.id, { col, row });
+      });
     return map;
   }, [coordinates]);
 

@@ -30,12 +30,12 @@ interface UseUserResult {
     phone_number?: string;
     country?: string;
     full_name?: string;
-    profile_pic_uri?: string;
   }) => Promise<XanoUser | null>;
+  updateProfilePic: (profilePicUri: string) => Promise<XanoUser | null>;
 }
 
 export function useUser(): UseUserResult {
-  const { profile, isLoading: profileLoading, error: profileError, viewUser, updateProfile, updateLastSeen } = useUserProfile();
+  const { profile, isLoading: profileLoading, error: profileError, viewUser, updateProfile, updateProfilePic, updateLastSeen } = useUserProfile();
   const { searchInGroups, getTop4Mhfr } = useUserSearch();
   const { engagementScore, updatePhoneNumber, updateReminderSettings } = useUserSettings();
 
@@ -51,5 +51,6 @@ export function useUser(): UseUserResult {
     updatePhoneNumber,
     updateReminderSettings,
     updateProfile,
+    updateProfilePic,
   };
 }

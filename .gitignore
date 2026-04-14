@@ -16,4 +16,10 @@ npm-debug.*
 *.hprof
 *.tsbuildinfo
 
+play-store-key.json
+emotional-pulse-f5d8b-add4482e5bf6.json
 .DS_Store
+
+# Claude MCP config (contains API keys)
+.mcp.json
+.claude/worktrees/

@@ -32,10 +32,21 @@ interface UsePairsResult {
   getPairByToken: (token: string, currentUserId?: number) => Promise<XanoPair | null>;
 }
 
+/**
+ * Central hook for managing the current user's pairs (accepted connections + pending invites).
+ *
+ * Wraps the Xano pairs/pair/pair-invite endpoints and manages loading/error state
+ * via `useAsyncHandler`. Cache keys are invalidated on mutating calls so other
+ * consumers re-fetch automatically.
+ *
+ * @example
+ *   const { active, invites, fetchAll, invitePair, removePair } = usePairs();
+ *   useEffect(() => { fetchAll(); }, [fetchAll]);
+ */
 export function usePairs(): UsePairsResult {
   const [state, setState] = useState<PairsState>({ active: [], invites: [] });
   const [sentRequestIds, setSentRequestIds] = useState<number[]>([]);
-  const { isLoading, error, wrap } = useAsyncHandler();
+  const { isLoading, error, wrap } = useAsyncHandler({ initialLoading: true });
 
   const fetchAll = useCallback(async () => {
     const data = await wrap(() => xanoPairs.getAll());

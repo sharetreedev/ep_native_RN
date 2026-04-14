@@ -10,7 +10,7 @@ export type RootStackParamList = {
     CheckIn: { isSupportRequest?: boolean; supportRequestId?: number } | undefined;
     Notifications: undefined;
     EmergencyServices: undefined;
-    SupportRequests: undefined;
+    SupportRequests: { initialTab?: 'myRequests' | 'mhfr' } | undefined;
     SupportRequestDetails: { supportRequest: XanoSupportRequest };
     RiskAssessment: { supportRequest: XanoSupportRequest };
     UserProfile: { userId: string; pairsId?: number; isNotPair?: boolean };
@@ -30,12 +30,11 @@ export type RootStackParamList = {
     EditProfile: undefined;
     Reminders: undefined;
     AIMHFR: undefined;
+    CourseEnroll: undefined;
 };
 
 export type MainTabParamList = {
     MyPulse: { courseCompleted?: boolean; courseName?: string } | undefined;
-    MyPairs: undefined;
-    GlobalPulse: undefined;
-    Groups: undefined;
-    Lessons: undefined;
+    Pulse: undefined;
+    GetSupport: undefined;
 };

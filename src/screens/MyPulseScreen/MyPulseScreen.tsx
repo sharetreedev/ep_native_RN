@@ -1,30 +1,52 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, Modal, TouchableWithoutFeedback, RefreshControl, StyleSheet } from 'react-native';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Modal, Pressable, RefreshControl, StyleSheet, Animated as RNAnimated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList, MainTabParamList } from '../../types/navigation';
-import { Bell, TriangleAlert, Info, User, Hand, Heart } from 'lucide-react-native';
+import { Bell, TriangleAlert, Info, Heart, Blend } from 'lucide-react-native';
+import Avatar from '../../components/Avatar';
+import { useMHFR, useSafeEdges } from '../../contexts/MHFRContext';
+import { useNotifications } from '../../hooks/useNotifications';
 import { useAuth } from '../../contexts/AuthContext';
 import LastCheckInWidget from '../../components/LastCheckInWidget';
 import { useCourses } from '../../hooks/useCourses';
 import QuickLinkCard from '../../components/QuickLinkCard';
 import NextLessonCard from '../../components/NextLessonCard';
-import AIMHFRCard from '../../components/AIMHFRCard';
 import ConfettiCelebration from '../../components/ConfettiCelebration';
-import { colors, fonts, fontSizes, borderRadius, buttonStyles } from '../../theme';
+import { colors, fonts, fontSizes, borderRadius } from '../../theme';
 import PulseLoader from '../../components/PulseLoader';
+import OnboardingProgress from '../../components/OnboardingProgress';
 import { useCachedFetch } from '../../hooks/useCachedFetch';
 import { CACHE_KEYS } from '../../lib/fetchCache';
 
 export default function MyPulseScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<MainTabParamList, 'MyPulse'>>();
-  const [modalVisible, setModalVisible] = useState(false);
   const { user, refreshUser } = useAuth();
   const { enrollment, allEnrollments, fetchEnrollment } = useCourses();
   const [refreshing, setRefreshing] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
+  const [showSuggestedTip, setShowSuggestedTip] = useState(false);
+  const sheetBackdropAnim = useRef(new RNAnimated.Value(0)).current;
+  const sheetSlideAnim = useRef(new RNAnimated.Value(300)).current;
+
+  const openSheet = useCallback(() => {
+    setShowSuggestedTip(true);
+    sheetBackdropAnim.setValue(0);
+    sheetSlideAnim.setValue(300);
+    RNAnimated.parallel([
+      RNAnimated.timing(sheetBackdropAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+      RNAnimated.spring(sheetSlideAnim, { toValue: 0, tension: 65, friction: 10, useNativeDriver: true }),
+    ]).start();
+  }, [sheetBackdropAnim, sheetSlideAnim]);
+
+  const closeSheet = useCallback(() => {
+    RNAnimated.parallel([
+      RNAnimated.timing(sheetBackdropAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+      RNAnimated.timing(sheetSlideAnim, { toValue: 300, duration: 200, useNativeDriver: true }),
+    ]).start(() => setShowSuggestedTip(false));
+  }, [sheetBackdropAnim, sheetSlideAnim]);
   const [completedCourseName, setCompletedCourseName] = useState('');
 
   const { fetch: cachedRefreshUser, forceFetch: forceRefreshUser } = useCachedFetch(CACHE_KEYS.USER, refreshUser);
@@ -54,8 +76,12 @@ export default function MyPulseScreen() {
   // Derive next lesson title from enrollment data
   // last_completed_module is the ID of the last completed module
   // The next lesson is the first module whose ID > last_completed_module
+  const lastCompletedModuleId =
+    typeof enrollment?.last_completed_module === 'number'
+      ? enrollment.last_completed_module
+      : enrollment?.last_completed_module?.id ?? 0;
   const nextLessonFromModules = enrollment?.modules?.find(
-    (m) => m.id > (enrollment?.last_completed_module ?? 0),
+    (m) => m.id > lastCompletedModuleId,
   );
   const lessonTitle = enrollment?.next_lesson_title ?? nextLessonFromModules?.title ?? null;
   const courseTitle = enrollment?.course?.name || enrollment?.course?.title || enrollment?.course_name || null;
@@ -72,21 +98,103 @@ export default function MyPulseScreen() {
     }
   }, [allEnrollments, enrollment, navigation]);
 
+  const isEnrolled = !!enrollment;
+
+  const handleEnrollCourse = useCallback(() => {
+    navigation.navigate('CourseEnroll');
+  }, [navigation]);
+
+  const safeEdges = useSafeEdges(['top']);
+  const { hasOpenMHFRRequest } = useMHFR();
+  const { unreadCount } = useNotifications();
+
+  // Pulsing animation for notification dots
+  const pulseAnim = useRef(new RNAnimated.Value(1)).current;
+  useEffect(() => {
+    const loop = RNAnimated.loop(
+      RNAnimated.sequence([
+        RNAnimated.timing(pulseAnim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+        RNAnimated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulseAnim]);
+
   if (!user) return <PulseLoader />;
 
+  // Course progress for avatar ring (0–1)
+  const courseProgress = enrollment ? (enrollment.progress_percent ?? 0) / 100 : 0;
+
+  // Onboarding checklist completion (for Get Started cards visibility)
+  const onboardingAllComplete =
+    !!user.avatarUrl &&
+    (!!user.reminderFrequency && user.reminderFrequency !== 'NONE') &&
+    (user.pairs?.length ?? 0) > 0 &&
+    !!enrollment &&
+    (user.last7CheckIns?.length ?? 0) >= 7 &&
+    (user.groups?.length ?? 0) > 0;
+
+  // Filter pairs that need a check-in, tagged with reason
+  const suggestedPairs = useMemo(() => {
+    if (!user?.pairs?.length) return [];
+    const now = new Date();
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    return user.pairs.reduce<{ pair: any; reason: 'needs_attention' | 'inactive'; emotionColour?: string }[]>((acc, pair: any) => {
+      const pairUser = pair._pair_user || pair._user || pair.other_user;
+      if (!pairUser) return acc;
+
+      // Check if their recent coordinate has needs_attention
+      const needsAttention = pairUser._recent_coordinate?.needs_attention
+        || pairUser.recentCoordinate?.needs_attention;
+      if (needsAttention) {
+        const colour = pairUser._recent_emotion?.emotionColour
+          || pairUser.recentEmotion?.emotionColour
+          || pairUser._emotion_states?.emotionColour;
+        acc.push({ pair, reason: 'needs_attention', emotionColour: colour });
+        return acc;
+      }
+
+      // Check if they haven't checked in within 7 days
+      const lastCheckin = pairUser.lastCheckInDate;
+      if (!lastCheckin) {
+        acc.push({ pair, reason: 'inactive' });
+        return acc;
+      }
+      const lastDate = new Date(typeof lastCheckin === 'number' ? lastCheckin : lastCheckin);
+      if (lastDate < sevenDaysAgo) {
+        acc.push({ pair, reason: 'inactive' });
+      }
+      return acc;
+    }, []);
+  }, [user?.pairs]);
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={safeEdges}>
       <View style={styles.header}>
         <Text style={styles.screenTitle}>My Pulse</Text>
         <View style={styles.headerIcons}>
-          <TouchableOpacity onPress={() => navigation.navigate('SupportRequests')}>
-            <TriangleAlert color={colors.textSecondary} size={24} strokeWidth={2} />
+          <TouchableOpacity onPress={() => navigation.navigate('SupportRequests')} style={styles.iconWrap}>
+            <TriangleAlert color={colors.textSecondary} size={26} strokeWidth={2} />
+            {hasOpenMHFRRequest && (
+              <RNAnimated.View style={[styles.pulsingDot, { opacity: pulseAnim }]} />
+            )}
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('Notifications')}>
-            <Bell color={colors.textSecondary} size={24} strokeWidth={2} />
+          <TouchableOpacity onPress={() => navigation.navigate('Notifications')} style={styles.iconWrap}>
+            <Bell color={colors.textSecondary} size={26} strokeWidth={2} />
+            {unreadCount > 0 && (
+              <RNAnimated.View style={[styles.pulsingDot, { opacity: pulseAnim }]} />
+            )}
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('Account')}>
-            <User color={colors.textSecondary} size={24} strokeWidth={2} />
+            <Avatar
+              source={user?.avatarUrl}
+              name={user?.name}
+              size={32}
+              progress={courseProgress}
+            />
           </TouchableOpacity>
         </View>
       </View>
@@ -96,49 +204,61 @@ export default function MyPulseScreen() {
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {/* Last Check In */}
+        {/* Last Check In — always show if user has recent emotion data */}
         <LastCheckInWidget
           recentEmotion={user?.recentCheckInEmotion}
           last7CheckIns={user?.last7CheckIns}
           onTrendsPress={() => navigation.navigate('UserProfile', { userId: 'current-user', isNotPair: true })}
-        />
+        >
+          {/* When onboarding is incomplete, show progress cards instead of the chart */}
+          {!onboardingAllComplete ? (
+            <OnboardingProgress
+              user={user}
+              enrollment={enrollment}
+              onNavigate={(screen, params) => navigation.navigate(screen as any, params)}
+              onEnrollCourse={handleEnrollCourse}
+            />
+          ) : undefined}
+        </LastCheckInWidget>
 
-        {/* AI Mental Health First Responder */}
-        <AIMHFRCard onPress={() => navigation.navigate('AIMHFR')} />
-
-        {/* Suggested Check Ins — only show if pairs exist */}
-        {user?.pairs && user.pairs.length > 0 && (
+        {/* Suggested Check Ins — filtered pairs needing attention */}
+        {suggestedPairs.length > 0 && (
           <>
-            <View style={styles.suggestedRow}>
+            <View style={styles.suggestedTitleRow}>
               <Text style={styles.sectionTitle}>Suggested Check Ins</Text>
-              <TouchableOpacity onPress={() => setModalVisible(true)}>
+              <TouchableOpacity onPress={openSheet}>
                 <Info color={colors.textPlaceholder} size={16} />
               </TouchableOpacity>
             </View>
-            {user.pairs.slice(0, 3).map((pair: any) => {
-              const pairUser = pair._pair_user || pair._user;
-              const name = pairUser?.fullName || pairUser?.firstName || 'Pair';
-              const pairAvatarUrl = pairUser?.profilePic_url || pairUser?.avatar?.url;
-              return (
-                <TouchableOpacity
-                  key={pair.id}
-                  style={styles.pairRow}
-                  onPress={() => navigation.navigate('UserProfile', { userId: String(pair.pair_user_id), isNotPair: false })}
-                >
-                  {pairAvatarUrl ? (
-                    <Image source={{ uri: pairAvatarUrl }} style={styles.pairAvatar} />
-                  ) : (
-                    <View style={styles.pairAvatarPlaceholder}>
-                      <User color={colors.textOnPrimary} size={14} />
-                    </View>
-                  )}
-                  <Text style={styles.pairName}>{name}</Text>
-                </TouchableOpacity>
-              );
-            })}
-            <TouchableOpacity style={styles.viewPairsButton} onPress={() => navigation.navigate('Main' as any, { screen: 'MyPairs' })}>
-              <Text style={styles.viewPairsText}>View My Pairs</Text>
-            </TouchableOpacity>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.suggestedAvatarRow}
+              style={styles.suggestedScrollBleed}
+            >
+              {suggestedPairs.map(({ pair, reason, emotionColour }) => {
+                const pairUser = pair._pair_user || pair._user || pair.other_user;
+                const name = pairUser?.fullName || pairUser?.firstName || 'Pair';
+                const isInactive = reason === 'inactive';
+                const borderColor = isInactive ? colors.warning : (emotionColour || colors.primary);
+
+                return (
+                  <TouchableOpacity
+                    key={pair.id}
+                    onPress={() => navigation.navigate('UserProfile', { userId: String(pair.pair_user_id), pairsId: pair.id })}
+                    activeOpacity={0.7}
+                  >
+                    <Avatar
+                      source={pairUser?.profilePic_url}
+                      name={name}
+                      size={46}
+                      border={borderColor}
+                      opacity={isInactive ? 0.5 : 1}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </>
         )}
 
@@ -151,48 +271,46 @@ export default function MyPulseScreen() {
             icon={<Heart color="rgba(255,255,255,0.9)" size={18} />}
           />
           <QuickLinkCard
-            variant="support"
-            title="Get Support"
-            onPress={() => navigation.navigate('EmergencyServices')}
-            icon={<Hand color="rgba(255,255,255,0.9)" size={18} />}
+            variant="pairs"
+            title="My Pairs"
+            onPress={() => navigation.navigate('Main' as any, { screen: 'Pulse', params: { screen: 'MyPairs' } })}
+            icon={<Blend color="rgba(255,255,255,0.9)" size={18} />}
           />
         </View>
 
-        {/* Next Lesson / Next Course */}
-        <NextLessonCard
-          title={lessonTitle || courseTitle}
-          subtitle={lessonTitle ? 'Next Lesson' : courseTitle ? 'Next Course' : undefined}
-          onPress={handleLessonCardPress}
-          onShowCourse={handleLessonCardPress}
-        />
+        {/* Next Lesson / Next Course — only show if enrolled */}
+        {isEnrolled && (
+          <NextLessonCard
+            title={lessonTitle || courseTitle}
+            subtitle={lessonTitle ? 'Next Lesson' : courseTitle ? 'Next Course' : undefined}
+            onPress={handleLessonCardPress}
+            onShowCourse={handleLessonCardPress}
+          />
+        )}
       </ScrollView>
 
+      {/* Suggested Check Ins info sheet */}
       <Modal
-        animationType="fade"
+        visible={showSuggestedTip}
         transparent
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
+        animationType="none"
+        onRequestClose={closeSheet}
       >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setModalVisible(false)}
-        >
-          <TouchableWithoutFeedback>
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>About Check Ins</Text>
-              <Text style={styles.modalBody}>
-                Here are your Pairs who have checked in within the last 7 days.
-              </Text>
-              <TouchableOpacity
-                style={[buttonStyles.secondary.container, { marginTop: 24 }]}
-                onPress={() => setModalVisible(false)}
-              >
-                <Text style={buttonStyles.secondary.text}>Got it</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableWithoutFeedback>
-        </TouchableOpacity>
+        <View style={styles.sheetContainer}>
+          <RNAnimated.View style={[styles.sheetBackdrop, { opacity: sheetBackdropAnim }]}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={closeSheet} />
+          </RNAnimated.View>
+          <RNAnimated.View style={[styles.sheetCard, { transform: [{ translateY: sheetSlideAnim }] }]}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Suggested Check Ins</Text>
+            <Text style={styles.sheetBody}>
+              These are pairs who haven't checked in within 7 days, or have checked in a state that might need attention.
+            </Text>
+            <TouchableOpacity style={styles.sheetButton} onPress={closeSheet}>
+              <Text style={styles.sheetButtonText}>Got it</Text>
+            </TouchableOpacity>
+          </RNAnimated.View>
+        </View>
       </Modal>
 
       <ConfettiCelebration
@@ -227,6 +345,20 @@ const styles = StyleSheet.create({
     gap: 16,
     alignItems: 'center',
   },
+  iconWrap: {
+    position: 'relative',
+  },
+  pulsingDot: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: colors.primary,
+    borderWidth: 1.5,
+    borderColor: colors.background,
+  },
   scroll: {
     flex: 1,
     paddingHorizontal: 16,
@@ -256,85 +388,68 @@ const styles = StyleSheet.create({
     marginBottom: 0,
     marginRight: 6,
   },
-  suggestedRow: {
+  suggestedTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    gap: 6,
+    marginBottom: 4,
   },
-  viewPairsButton: {
-    backgroundColor: colors.surfaceMuted,
-    paddingHorizontal: 24,
-    paddingVertical: 8,
-    borderRadius: borderRadius.full,
-    marginBottom: 28,
-    alignSelf: 'center',
-  },
-  viewPairsText: {
-    fontFamily: fonts.bodySemiBold,
-    fontSize: fontSizes.sm,
-    color: colors.textSecondary,
-  },
-  pairRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    gap: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-    marginBottom: 2,
-  },
-  pairAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  pairAvatarPlaceholder: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  pairName: {
-    fontFamily: fonts.bodyMedium,
-    fontSize: fontSizes.base,
-    color: colors.textPrimary,
+  sheetContainer: {
     flex: 1,
+    justifyContent: 'flex-end',
   },
-
-  // ── Modal ──
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.overlay,
+  sheetBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.3)',
   },
-  modalCard: {
+  sheetCard: {
     backgroundColor: colors.surface,
-    margin: 24,
-    padding: 24,
-    borderRadius: 16,
-    width: '80%',
-    maxWidth: 400,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 36,
+    alignItems: 'center',
   },
-  modalTitle: {
-    fontSize: fontSizes.lg,
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    marginBottom: 16,
+  },
+  sheetTitle: {
     fontFamily: fonts.heading,
+    fontSize: fontSizes.lg,
     color: colors.textPrimary,
     marginBottom: 8,
   },
-  modalBody: {
+  sheetBody: {
     fontFamily: fonts.body,
     fontSize: fontSizes.base,
     color: colors.textSecondary,
+    textAlign: 'center',
     lineHeight: 22,
+    marginBottom: 20,
   },
+  sheetButton: {
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.button,
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+  },
+  sheetButtonText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.base,
+    color: colors.textOnPrimary,
+  },
+  suggestedScrollBleed: {
+    marginHorizontal: -16,
+  },
+  suggestedAvatarRow: {
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+
 });

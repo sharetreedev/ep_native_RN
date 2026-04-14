@@ -9,25 +9,25 @@ const INTRO_SLIDES = [
     title: 'A daily checkin is like a seatbelt for mental health',
     description:
       'A daily emotional check-in is like wearing a seatbelt. It allows you to cruise through life safely and with confidence.',
-    image: require('../../../../assets/Logo.png'),
+    image: require('../../../../assets/onboarding-checkin.webp'),
   },
   {
     title: 'Make it a road trip with Pairs',
     description:
       'Check-in with how your friends, family and trusted colleagues are doing by forming a pair to support each other through the highs and the lows.',
-    image: require('../../../../assets/Logo.png'),
+    image: require('../../../../assets/onboarding-pairs.webp'),
   },
   {
     title: 'Go further with Groups',
     description:
       'Create groups to anonymously share your state, gage the overall mood and make sure no one is at risk.',
-    image: require('../../../../assets/Logo.png'),
+    image: require('../../../../assets/onboarding-groups.webp'),
   },
   {
     title: 'Call for help when you get stuck',
     description:
       'Reach out to our Mental Health First Responder network whenever you need help.',
-    image: require('../../../../assets/Logo.png'),
+    image: require('../../../../assets/onboarding-help.webp'),
   },
 ];
 
@@ -68,15 +68,13 @@ export default function IntroSlidesStep({ onComplete }: IntroSlidesStepProps) {
         </View>
         <Text style={styles.slideTitle}>{slide.title}</Text>
         <Text style={styles.slideDescription}>{slide.description}</Text>
-        <View style={styles.slideButtons}>
-          {slideIndex > 0 ? (
-            <Button title="Back" variant="secondary" onPress={handleBack} style={styles.slideButton} />
-          ) : (
-            <View style={styles.slideButton} />
-          )}
-          <Button title="Next  ›" onPress={handleNext} style={styles.slideButton} />
-        </View>
       </ScrollView>
+      <View style={styles.bottomButtons}>
+        {slideIndex > 0 && (
+          <Button title="Back" variant="secondary" onPress={handleBack} style={styles.slideButton} />
+        )}
+        <Button title="Next  ›" onPress={handleNext} style={styles.slideButton} />
+      </View>
     </SafeAreaView>
   );
 }

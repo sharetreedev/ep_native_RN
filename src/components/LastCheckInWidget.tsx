@@ -6,18 +6,21 @@ interface LastCheckInWidgetProps {
   recentEmotion?: XanoRecentCheckInEmotion | null;
   last7CheckIns?: XanoLast7CheckIn[] | null;
   onTrendsPress?: () => void;
+  children?: React.ReactNode;
 }
 
 /**
  * Widget wrapper for the last check-in block on My Pulse.
  * Composes LastCheckInCard as a single screen-level widget.
  */
-export default function LastCheckInWidget({ recentEmotion, last7CheckIns, onTrendsPress }: LastCheckInWidgetProps) {
+export default function LastCheckInWidget({ recentEmotion, last7CheckIns, onTrendsPress, children }: LastCheckInWidgetProps) {
   return (
     <LastCheckInCard
       recentEmotion={recentEmotion}
       last7CheckIns={last7CheckIns}
       onTrendsPress={onTrendsPress}
-    />
+    >
+      {children}
+    </LastCheckInCard>
   );
 }

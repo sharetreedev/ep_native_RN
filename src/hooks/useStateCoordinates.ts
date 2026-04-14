@@ -7,6 +7,10 @@ interface UseStateCoordinatesResult {
   error: string | null;
 }
 
+/**
+ * Fetches the Xano `state_coordinates` catalogue once per session. Pair with
+ * `useCoordinateMapping` to translate coordinate IDs → grid positions.
+ */
 export function useStateCoordinates(): UseStateCoordinatesResult {
   const [coordinates, setCoordinates] = useState<XanoStateCoordinate[]>([]);
   const [isLoading, setIsLoading] = useState(true);

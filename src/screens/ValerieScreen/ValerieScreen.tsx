@@ -3,8 +3,10 @@ import { View, Text, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingVi
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Phone, Send, Sparkles } from 'lucide-react-native';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
+import { useSafeEdges } from '../../contexts/MHFRContext';
 
 export default function ValerieScreen() {
+  const safeEdges = useSafeEdges(['top']);
   const [message, setMessage] = useState('');
   const [conversation, setConversation] = useState<{ role: 'user' | 'ai'; text: string }[]>([
     { role: 'ai', text: "Hi, I'm Valerie. How are you feeling today?" },
@@ -21,7 +23,7 @@ export default function ValerieScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={safeEdges}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={styles.avatar}>
@@ -78,8 +80,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.base,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
     backgroundColor: colors.background,
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.base },

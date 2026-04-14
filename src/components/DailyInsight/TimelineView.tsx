@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { View, Text, Animated, StyleSheet } from 'react-native';
 import EmotionBadge from '../EmotionBadge';
 import { XanoTimelineCheckIn } from '../../api';
+import { useEmotionStates } from '../../hooks/useEmotionStates';
 import { colors, fonts, fontSizes, spacing } from '../../theme';
 
 interface TimelineViewProps {
@@ -10,7 +11,7 @@ interface TimelineViewProps {
 
 interface TimelineRow {
   dateLabel: string;
-  items: { name: string; colour: string; xQuad: number }[];
+  items: { name: string; colour: string; isPleasant: boolean }[];
 }
 
 /** Convert any date/datetime string to YYYY-MM-DD in the device's local timezone. */
@@ -20,21 +21,34 @@ function toLocalDateString(value: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function buildLast7Days(checkIns: XanoTimelineCheckIn[]): TimelineRow[] {
+/** Format a date relative to today in the user's local timezone. */
+function formatDayLabel(d: Date, daysAgo: number): string {
+  if (daysAgo === 0) return 'Today';
+  if (daysAgo === 1) return 'Yesterday';
+  const weekday = d.toLocaleString('default', { weekday: 'short' });
+  const day = d.getDate();
+  const month = d.toLocaleString('default', { month: 'short' });
+  return `${weekday}, ${day} ${month}`;
+}
+
+function buildLast7Days(
+  checkIns: XanoTimelineCheckIn[],
+  pleasantSet: Set<string>,
+): TimelineRow[] {
   const rows: TimelineRow[] = [];
   const now = new Date();
   for (let i = 0; i < 7; i++) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
     const dayStr = toLocalDateString(d.toISOString());
-    const dayLabel = `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}`;
+    const dayLabel = formatDayLabel(d, i);
 
     const dayCheckIns = checkIns.filter((c) => toLocalDateString(c.loggedDate) === dayStr);
 
     const items = dayCheckIns.map((c) => ({
       name: c.state.Display,
       colour: c.state.emotionColour,
-      xQuad: c.state.xQuad,
+      isPleasant: pleasantSet.has(c.state.Display.toLowerCase()),
     }));
 
     rows.push({ dateLabel: dayLabel, items });
@@ -43,7 +57,18 @@ function buildLast7Days(checkIns: XanoTimelineCheckIn[]): TimelineRow[] {
 }
 
 export default function TimelineView({ checkIns }: TimelineViewProps) {
-  const rows = buildLast7Days(checkIns);
+  const { emotionStates } = useEmotionStates();
+
+  // Build set of pleasant emotion names from grid position (col 2-3 = right side = pleasant)
+  const pleasantSet = React.useMemo(() => {
+    const set = new Set<string>();
+    emotionStates.forEach((e) => {
+      if (e.col >= 2) set.add(e.name.toLowerCase());
+    });
+    return set;
+  }, [emotionStates]);
+
+  const rows = buildLast7Days(checkIns, pleasantSet);
 
   // Stagger animation
   const animValues = useRef(rows.map(() => new Animated.Value(0))).current;
@@ -60,27 +85,30 @@ export default function TimelineView({ checkIns }: TimelineViewProps) {
     setAnimKey((k) => k + 1);
   }, []);
 
-  // xQuad: 1-2 = unpleasant (left), 3-4 = pleasant (right)
-  const isLeft = (xQuad: number) => xQuad <= 2;
-
   return (
     <View style={styles.container}>
+      <View style={styles.columnHeaders}>
+        <Text style={styles.columnLabel}>Unpleasant</Text>
+        <View style={styles.columnLabelSpacer} />
+        <Text style={styles.columnLabel}>Pleasant</Text>
+      </View>
       <View style={styles.timeline}>
         {rows.map((row, index) => {
           const opacity = animValues[index] ?? new Animated.Value(1);
           return (
             <Animated.View key={`${index}-${animKey}`} style={[styles.row, { opacity }]}>
-              {/* Left side badges (unpleasant) */}
+              {/* Left side badges (unpleasant) — right-aligned toward center */}
               <View style={styles.side}>
                 {row.items
-                  .filter((item) => isLeft(item.xQuad))
+                  .filter((item) => !item.isPleasant)
                   .map((item, i) => (
-                    <EmotionBadge
-                      key={i}
-                      emotionName={item.name}
-                      emotionColour={item.colour}
-                      compact
-                    />
+                    <View key={i} style={styles.badgeRight}>
+                      <EmotionBadge
+                        emotionName={item.name}
+                        emotionColour={item.colour}
+                        compact
+                      />
+                    </View>
                   ))}
               </View>
 
@@ -96,7 +124,7 @@ export default function TimelineView({ checkIns }: TimelineViewProps) {
                   <Text style={styles.noCheckIn}>No check in</Text>
                 ) : (
                   row.items
-                    .filter((item) => !isLeft(item.xQuad))
+                    .filter((item) => item.isPleasant)
                     .map((item, i) => (
                       <EmotionBadge
                         key={i}
@@ -143,21 +171,19 @@ const styles = StyleSheet.create({
   },
   side: {
     flex: 1,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
+    flexDirection: 'column',
+    alignItems: 'flex-end',
     gap: 4,
     paddingRight: spacing.sm,
   },
   rightSide: {
-    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
     paddingRight: 0,
     paddingLeft: spacing.sm,
   },
   dateColumn: {
     alignItems: 'center',
-    width: 60,
+    width: 80,
   },
   dateDot: {
     width: 8,
@@ -172,10 +198,28 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
   },
+  badgeRight: {
+    alignSelf: 'flex-end',
+  },
   noCheckIn: {
     fontFamily: fonts.body,
     fontSize: fontSizes.xs,
     color: colors.textPlaceholder,
     fontStyle: 'italic',
+  },
+  columnHeaders: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  columnLabel: {
+    flex: 1,
+    fontFamily: fonts.bodyMedium,
+    fontSize: fontSizes.xs,
+    color: colors.textMuted,
+    textAlign: 'center',
+  },
+  columnLabelSpacer: {
+    width: 80,
   },
 });

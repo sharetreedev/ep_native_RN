@@ -1,8 +1,9 @@
 {
   "expo": {
-    "name": "mobile",
+    "name": "Emotional Pulse",
     "slug": "mobile",
-    "version": "1.0.0",
+    "scheme": "emotionalpulse",
+    "version": "3.0.0",
     "orientation": "portrait",
     "icon": "./assets/Logo.png",
     "userInterfaceStyle": "light",
@@ -14,7 +15,8 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "This app needs microphone access to enable voice conversations with Pulse AI."
+        "NSMicrophoneUsageDescription": "This app needs microphone access to enable voice conversations with Pulse AI.",
+        "NSLocationWhenInUseUsageDescription": "This app does not use your location."
       },
       "bundleIdentifier": "com.vative.stemotionalpulse",
       "appleTeamId": "PL8F7LAM2G"
@@ -30,9 +32,27 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/442160e5-834b-4247-af44-9f98fcd593ff"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "442160e5-834b-4247-af44-9f98fcd593ff"
+      }
+    },
     "plugins": [
       "expo-font",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-web-browser",
+      [
+        "onesignal-expo-plugin",
+        {
+          "mode": "production"
+        }
+      ]
     ]
   }
 }

@@ -10,7 +10,7 @@ interface NextLessonCardProps {
   onShowCourse?: () => void;
 }
 
-const lessonImage = require('../../assets/Ep - App - Imageryt.webp');
+const lessonImage = require('../../assets/ep-app-imagery.webp');
 
 export default function NextLessonCard({ title, subtitle = 'Next Lesson', onPress, onShowCourse }: NextLessonCardProps) {
   return (

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Dimensions, Animated, PanResponder, TouchableOp
 import { Emotion } from '../constants/emotions';
 import { getEmotionFromPleasantnessAndEnergy, getEmotionLabelContrast } from '../lib/emotionUtils';
 import { colors, fonts, fontSizes, borderRadius } from '../theme';
+import { logger } from '../lib/logger';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SLIDER_WIDTH = SCREEN_WIDTH - 80;
@@ -41,12 +42,12 @@ export default function CheckInSliderFlow({ onComplete, onCancel }: CheckInSlide
 
     const goToStep = (nextStep: Step) => {
         try {
-            console.log('goToStep called:', nextStep);
+            logger.log('goToStep called:', nextStep);
             let toValue = 0;
             if (nextStep === 'energy') toValue = 1;
             if (nextStep === 'result') toValue = 2;
 
-            console.log('Animating to:', toValue);
+            logger.log('Animating to:', toValue);
 
             // Fix: Ensure we are using the native driver safely or fallback
             Animated.timing(slideAnim, {
@@ -54,13 +55,13 @@ export default function CheckInSliderFlow({ onComplete, onCancel }: CheckInSlide
                 duration: 300,
                 useNativeDriver: true,
             }).start(({ finished }) => {
-                console.log('Animation finished:', finished);
+                logger.log('Animation finished:', finished);
                 if (finished) {
                     setStep(nextStep);
                 }
             });
         } catch (error) {
-            console.error('Crash in goToStep:', error);
+            logger.error('Crash in goToStep:', error);
         }
     };
 

@@ -6,7 +6,8 @@ import { useOnboarding } from '../../hooks/useOnboarding';
 import { useCourses } from '../../hooks/useCourses';
 import { useCheckIns } from '../../hooks/useCheckIns';
 import { useEmotionStates } from '../../hooks/useEmotionStates';
-import { auth as xanoAuth, user as xanoUser } from '../../api';
+import { auth as xanoAuth, user as xanoUser, courses as xanoCourses } from '../../api';
+import { setPendingLesson } from '../../navigation/pendingLesson';
 import { MappedEmotion } from '../../hooks/useEmotionStates';
 import EmailVerificationStep from './steps/EmailVerificationStep';
 import PhoneEntryStep from './steps/PhoneEntryStep';
@@ -35,6 +36,7 @@ export default function OnboardingScreen() {
   const getInitialStep = (): OnboardingStep => {
     if (!user?.emailVerified) return 'email_verification';
     if (!user?.phoneVerified) return 'phone_entry';
+    if (user?.introSlidesSeen) return 'first_checkin';
     return 'intro_slides';
   };
 
@@ -91,14 +93,14 @@ export default function OnboardingScreen() {
   }, [onboarding]);
 
   // ── First Check-In ──────────────────────────────────────────────────
-  const handleCheckInComplete = useCallback(async (emotion: MappedEmotion, coordinateId?: number) => {
+  const handleCheckInComplete = useCallback(async (emotion: MappedEmotion, coordinateId: number, checkinView: 'slider' | 'grid') => {
     Alert.alert('Check In', `Do you want to check in as ${emotion.name}?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Confirm',
         onPress: async () => {
           try {
-            await createCheckIn(emotion, undefined, coordinateId);
+            await createCheckIn(emotion, coordinateId, undefined, checkinView);
             markCheckedInToday();
           } catch {
             // Non-fatal
@@ -114,12 +116,22 @@ export default function OnboardingScreen() {
   useEffect(() => {
     if (step === 'course_enrollment') {
       coursesHook.fetchNextCourse(Number(user?.id));
+      coursesHook.fetchNextLesson();
     }
   }, [step]);
 
   const handleEnroll = useCallback(async () => {
     setIsSubmitting(true);
     try {
+      // Create the enrollment record
+      const courseId = coursesHook.nextCourse?.id ?? coursesHook.nextCourse?.courses_id;
+      if (courseId) {
+        await xanoCourses.enroll(Number(user?.id), Number(courseId));
+      }
+      // Set pending lesson so AppNavigator navigates after onboarding completes
+      if (coursesHook.nextLesson) {
+        setPendingLesson(coursesHook.nextLesson);
+      }
       await onboarding.markCourseEnrollmentSeen(Number(user?.id));
       await onboarding.markComplete();
       await refreshUser();
@@ -128,7 +140,7 @@ export default function OnboardingScreen() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [onboarding, user?.id, refreshUser]);
+  }, [onboarding, user?.id, refreshUser, coursesHook.nextLesson, coursesHook.nextCourse]);
 
   const handleSkipCourse = useCallback(async () => {
     setIsSubmitting(true);

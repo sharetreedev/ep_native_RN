@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, fonts, fontSizes } from '../theme';
 
-type QuickLinkVariant = 'checkIn' | 'support' | 'trends' | 'lesson';
+type QuickLinkVariant = 'checkIn' | 'support' | 'trends' | 'lesson' | 'aiMHFR' | 'pairs';
 
 const variantConfig = {
   checkIn: {
@@ -21,6 +21,14 @@ const variantConfig = {
   lesson: {
     gradient: ['#6A8F8A', '#587B76'] as [string, string],
     subtitle: 'Build your skills',
+  },
+  aiMHFR: {
+    gradient: ['#5A6B4A', '#3D4F32'] as [string, string],
+    subtitle: 'Immediate support',
+  },
+  pairs: {
+    gradient: ['#8B7A9E', '#6F6080'] as [string, string],
+    subtitle: 'Your trusted people',
   },
 } as const;
 
@@ -149,7 +157,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   subtitle: {
-    fontSize: 13,
+    fontSize: fontSizes.sm,
     fontFamily: fonts.body,
     color: 'rgba(255, 255, 255, 0.5)',
     letterSpacing: 0.1,

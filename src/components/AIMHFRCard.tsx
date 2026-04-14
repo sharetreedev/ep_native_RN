@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Defs, RadialGradient, Stop, Rect } from 'react-native-svg';
 import { MessageCircleMore, Sparkles } from 'lucide-react-native';
 import { colors, fonts, fontSizes } from '../theme';
 
@@ -11,12 +11,19 @@ interface AIMHFRCardProps {
 export default function AIMHFRCard({ onPress }: AIMHFRCardProps) {
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={styles.outer}>
-      <LinearGradient
-        colors={['#7E8FA6', '#6A7B92']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.card}
-      >
+      <View style={styles.card}>
+        {/* Radial gradient background — similar to the Pulse AI orb */}
+        <Svg style={StyleSheet.absoluteFill} preserveAspectRatio="none">
+          <Defs>
+            <RadialGradient id="cardGrad" cx="30%" cy="50%" rx="70%" ry="120%" fx="30%" fy="50%">
+              <Stop offset="0" stopColor="#A8B896" stopOpacity="1" />
+              <Stop offset="0.5" stopColor={colors.primary} stopOpacity="1" />
+              <Stop offset="1" stopColor="#30442B" stopOpacity="1" />
+            </RadialGradient>
+          </Defs>
+          <Rect x="0" y="0" width="100%" height="100%" fill="url(#cardGrad)" />
+        </Svg>
+
         {/* Decorative rings — top-right */}
         <View style={styles.decoWrap}>
           <View style={styles.decoRing1} />
@@ -38,7 +45,7 @@ export default function AIMHFRCard({ onPress }: AIMHFRCardProps) {
             <Text style={styles.subtitle}>Your mental health first responder</Text>
           </View>
         </View>
-      </LinearGradient>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -50,7 +57,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginTop: 12,
     marginBottom: 0,
-    shadowColor: '#3A4560',
+    shadowColor: '#30442B',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.12,
     shadowRadius: 14,
@@ -60,6 +67,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 18,
     overflow: 'hidden',
+    backgroundColor: colors.primary,
   },
 
   // Decorative rings — top-right

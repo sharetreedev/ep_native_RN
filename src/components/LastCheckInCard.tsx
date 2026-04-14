@@ -1,7 +1,9 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, LayoutChangeEvent, Animated, TouchableOpacity } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
-import Svg, { Text as SvgText, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
+import { Text as SvgText } from 'react-native-svg';
+import MaskedView from '@react-native-masked-view/masked-view';
+import { LinearGradient } from 'expo-linear-gradient';
 import { format, isToday, isYesterday } from 'date-fns';
 import { colors, fonts, fontSizes } from '../theme';
 import { XanoRecentCheckInEmotion, XanoLast7CheckIn } from '../api';
@@ -17,13 +19,6 @@ function formatCheckInDate(timestamp: number): string {
   return format(date, 'MMM d');
 }
 
-function lightenColor(hex: string, amount: number): string {
-  const h = hex.replace('#', '');
-  const r = parseInt(h.substring(0, 2), 16);
-  const g = parseInt(h.substring(2, 4), 16);
-  const b = parseInt(h.substring(4, 6), 16);
-  return `rgb(${Math.min(255, Math.round(r + (255 - r) * amount))}, ${Math.min(255, Math.round(g + (255 - g) * amount))}, ${Math.min(255, Math.round(b + (255 - b) * amount))})`;
-}
 
 // Fixed chart line colours — consistent regardless of emotion
 const ENERGY_COLOUR = '#B8907A';       // terracotta
@@ -33,6 +28,8 @@ interface LastCheckInCardProps {
   recentEmotion?: XanoRecentCheckInEmotion | null;
   last7CheckIns?: XanoLast7CheckIn[] | null;
   onTrendsPress?: () => void;
+  /** When provided, replaces the chart area with custom content (e.g. onboarding progress) */
+  children?: React.ReactNode;
 }
 
 interface TooltipState {
@@ -42,10 +39,13 @@ interface TooltipState {
   date: string;
 }
 
-export default function LastCheckInCard({ recentEmotion, last7CheckIns = [], onTrendsPress }: LastCheckInCardProps) {
+export default function LastCheckInCard({ recentEmotion, last7CheckIns = [], onTrendsPress, children }: LastCheckInCardProps) {
   const [chartWidth, setChartWidth] = useState(0);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const emotionName = capitalize(recentEmotion?.Display ?? 'Reflective');
+  // themeColour is the readable, darker brand tone — use it as the base.
+  // emotionColour is typically lighter / more saturated, so it reads as a
+  // shine highlight rather than the body of the word.
   const emotionColour = recentEmotion?.emotionColour ?? colors.primary;
   const themeColour = recentEmotion?.themeColour ?? colors.primary;
 
@@ -56,9 +56,11 @@ export default function LastCheckInCard({ recentEmotion, last7CheckIns = [], onT
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.delay(3000),
-        Animated.timing(shineAnim, { toValue: 1, duration: 600, useNativeDriver: false }),
-        Animated.timing(shineAnim, { toValue: 0, duration: 600, useNativeDriver: false }),
+        Animated.delay(3500),
+        Animated.timing(shineAnim, { toValue: 1, duration: 1200, useNativeDriver: false }),
+        // Snap back off-screen so the next sweep starts from the left again
+        // rather than sliding backwards.
+        Animated.timing(shineAnim, { toValue: 0, duration: 0, useNativeDriver: false }),
       ])
     );
     loop.start();
@@ -66,8 +68,15 @@ export default function LastCheckInCard({ recentEmotion, last7CheckIns = [], onT
     return () => { loop.stop(); shineAnim.removeListener(id); };
   }, [shineAnim]);
 
-  const gradStart = shineLift > 0 ? lightenColor(themeColour, shineLift * 0.35) : themeColour;
-  const gradEnd = shineLift > 0 ? lightenColor(emotionColour, shineLift * 0.35) : emotionColour;
+  // Shine sweeps as a narrow emotion-coloured band across the theme-coloured
+  // word. rawPos ranges [-0.2, 1.2] so at rest (shineLift=0) and after the
+  // sweep completes the band is clamped off-screen and the word reads as
+  // pure themeColour. Clamping keeps `locations` monotonic and in [0, 1].
+  const rawPos = -0.2 + shineLift * 1.4;
+  const band = 0.18;
+  const shineA = Math.max(0, Math.min(1, rawPos - band));
+  const shineB = Math.max(0, Math.min(1, rawPos));
+  const shineC = Math.max(0, Math.min(1, rawPos + band));
 
   const onChartLayout = useCallback((e: LayoutChangeEvent) => {
     setChartWidth(e.nativeEvent.layout.width);
@@ -98,7 +107,7 @@ export default function LastCheckInCard({ recentEmotion, last7CheckIns = [], onT
 
   const useBezier = sortedCheckIns.length !== 1;
 
-  const handleDataPointClick = (data: { index: number; value: number; x: number; y: number; datasetIndex: number }) => {
+  const handleDataPointClick = (data: { index: number; value: number; x: number; y: number; dataset: unknown; getColor: (opacity: number) => string }) => {
     if (sortedCheckIns.length === 0) return;
     const checkIn = sortedCheckIns[data.index];
     if (!checkIn) return;
@@ -119,28 +128,28 @@ export default function LastCheckInCard({ recentEmotion, last7CheckIns = [], onT
       {/* ── "I'm feeling, [Gradient Emotion]" ── */}
       <View style={styles.feelingRow}>
         <Text style={styles.feelingLabel}>I'm feeling,</Text>
-        <Svg height={32} width={emotionName.length * 16} style={styles.emotionSvg}>
-          <Defs>
-            <SvgLinearGradient id="emotionGrad" x1="0" y1="0" x2="1" y2="0">
-              <Stop offset="0" stopColor={gradStart} />
-              <Stop offset="1" stopColor={gradEnd} />
-            </SvgLinearGradient>
-          </Defs>
-          <SvgText
-            fill="url(#emotionGrad)"
-            fontSize={24}
-            fontWeight="900"
-            fontFamily={fonts.bodyBold}
-            y={24}
-            x={0}
+        <MaskedView
+          style={styles.emotionMask}
+          maskElement={
+            <Text style={[styles.feelingLabel, styles.emotionText]}>{emotionName}</Text>
+          }
+        >
+          <LinearGradient
+            colors={[themeColour, themeColour, emotionColour, themeColour, themeColour]}
+            locations={[0, shineA, shineB, shineC, 1]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
           >
-            {emotionName}
-          </SvgText>
-        </Svg>
+            {/* Invisible text sizes the gradient to the rendered text bounds */}
+            <Text style={[styles.feelingLabel, styles.emotionText, styles.emotionSizer]}>
+              {emotionName}
+            </Text>
+          </LinearGradient>
+        </MaskedView>
       </View>
 
-      {/* ── Pulse: your 7-day rhythm ── */}
-      <View style={styles.pulseArea}>
+      {/* ── Body: onboarding progress or 7-day chart ── */}
+      {children ? children : <View style={styles.pulseArea}>
         <View style={styles.chartTitleRow}>
           <Text style={styles.chartTitle}>Last 7 Check Ins</Text>
           {onTrendsPress && (
@@ -245,7 +254,7 @@ export default function LastCheckInCard({ recentEmotion, last7CheckIns = [], onT
           ) : null}
         </View>
 
-      </View>
+      </View>}
     </View>
   );
 }
@@ -268,8 +277,19 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     letterSpacing: -0.4,
   },
-  emotionSvg: {
+  emotionMask: {
     flexShrink: 1,
+    flexDirection: 'row',
+  },
+  emotionText: {
+    // Keeps the gradient emotion on the same baseline as "I'm feeling,"
+    // on both iOS and Android (SVG text baselines drift on Android).
+    includeFontPadding: false,
+  },
+  emotionSizer: {
+    // Transparent text used purely to size the LinearGradient container
+    // to the mask — its visible fill comes from the mask, not from here.
+    opacity: 0,
   },
 
   // ── Pulse ──

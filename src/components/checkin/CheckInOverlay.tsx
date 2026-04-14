@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, StyleSheet, Animated } from 'react-native';
 import Svg, { Text as SvgText, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { MappedEmotion } from '../../hooks/useEmotionStates';
@@ -125,6 +125,23 @@ export function CheckInConfirmModal({ emotion, onConfirm, onCancel }: CheckInCon
     const emotionColour = emotion.emotionColour || emotion.color;
     const themeColour = emotion.themeColour || emotionColour;
 
+    // Entrance animation — backdrop fades, card scales up
+    const backdropOpacity = useRef(new Animated.Value(0)).current;
+    const cardScale = useRef(new Animated.Value(0.9)).current;
+    const cardOpacity = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        Animated.sequence([
+            // Backdrop fades in
+            Animated.timing(backdropOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+            // Card scales up + fades in together
+            Animated.parallel([
+                Animated.spring(cardScale, { toValue: 1, tension: 65, friction: 8, useNativeDriver: true }),
+                Animated.timing(cardOpacity, { toValue: 1, duration: 150, useNativeDriver: true }),
+            ]),
+        ]).start();
+    }, [backdropOpacity, cardScale, cardOpacity]);
+
     // Shine — gentle brightness pulse on the gradient text
     const shineAnim = useRef(new Animated.Value(0)).current;
     const [shineLift, setShineLift] = useState(0);
@@ -151,52 +168,60 @@ export function CheckInConfirmModal({ emotion, onConfirm, onCancel }: CheckInCon
     };
 
     return (
-        <TouchableOpacity
-            style={modalStyles.backdrop}
-            activeOpacity={1}
-            onPress={onCancel}
-        >
-            <View style={modalStyles.modal} onStartShouldSetResponder={() => true}>
-                <Text style={modalStyles.prompt}>Do you want to check in as</Text>
-                <Svg height={30} width={(displayName.length + 1) * 15} style={modalStyles.emotionSvg}>
-                    <Defs>
-                        <SvgLinearGradient id="confirmGrad" x1="0" y1="0" x2="1" y2="0">
-                            <Stop offset="0" stopColor={gradStart} />
-                            <Stop offset="1" stopColor={gradEnd} />
-                        </SvgLinearGradient>
-                    </Defs>
-                    <SvgText
-                        fill="url(#confirmGrad)"
-                        fontSize={22}
-                        fontWeight="900"
-                        fontFamily={fonts.bodyBold}
-                        y={22}
-                        x={(displayName.length + 1) * 15 / 2}
-                        textAnchor="middle"
-                    >
-                        {displayName}?
-                    </SvgText>
-                </Svg>
+        <Modal visible transparent animationType="none" onRequestClose={onCancel}>
+            <Animated.View style={[modalStyles.backdrop, { opacity: backdropOpacity }]}>
+                <TouchableOpacity
+                    style={modalStyles.backdropTouch}
+                    activeOpacity={1}
+                    onPress={onCancel}
+                />
+            </Animated.View>
+            <View style={modalStyles.contentWrap} pointerEvents="box-none">
+                <Animated.View
+                    style={[modalStyles.modal, { opacity: cardOpacity, transform: [{ scale: cardScale }] }]}
+                    onStartShouldSetResponder={() => true}
+                >
+                    <Text style={modalStyles.prompt}>Do you want to check in as</Text>
+                    <Svg height={30} width={(displayName.length + 1) * 15} style={modalStyles.emotionSvg}>
+                        <Defs>
+                            <SvgLinearGradient id="confirmGrad" x1="0" y1="0" x2="1" y2="0">
+                                <Stop offset="0" stopColor={gradStart} />
+                                <Stop offset="1" stopColor={gradEnd} />
+                            </SvgLinearGradient>
+                        </Defs>
+                        <SvgText
+                            fill="url(#confirmGrad)"
+                            fontSize={22}
+                            fontWeight="900"
+                            fontFamily={fonts.bodyBold}
+                            y={22}
+                            x={(displayName.length + 1) * 15 / 2}
+                            textAnchor="middle"
+                        >
+                            {displayName}?
+                        </SvgText>
+                    </Svg>
 
-                <View style={modalStyles.actions}>
-                    <TouchableOpacity
-                        style={modalStyles.confirmButton}
-                        onPress={handleConfirm}
-                        activeOpacity={0.7}
-                    >
-                        <Text style={modalStyles.confirmText}>Check In</Text>
-                    </TouchableOpacity>
+                    <View style={modalStyles.actions}>
+                        <TouchableOpacity
+                            style={modalStyles.confirmButton}
+                            onPress={handleConfirm}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={modalStyles.confirmText}>Check In</Text>
+                        </TouchableOpacity>
 
-                    <TouchableOpacity
-                        onPress={onCancel}
-                        activeOpacity={0.7}
-                        style={modalStyles.cancelButton}
-                    >
-                        <Text style={modalStyles.cancelText}>Cancel</Text>
-                    </TouchableOpacity>
-                </View>
+                        <TouchableOpacity
+                            onPress={onCancel}
+                            activeOpacity={0.7}
+                            style={modalStyles.cancelButton}
+                        >
+                            <Text style={modalStyles.cancelText}>Cancel</Text>
+                        </TouchableOpacity>
+                    </View>
+                </Animated.View>
             </View>
-        </TouchableOpacity>
+        </Modal>
     );
 }
 
@@ -204,9 +229,14 @@ const modalStyles = StyleSheet.create({
     backdrop: {
         ...StyleSheet.absoluteFillObject,
         backgroundColor: colors.overlay,
+    },
+    backdropTouch: {
+        flex: 1,
+    },
+    contentWrap: {
+        ...StyleSheet.absoluteFillObject,
         justifyContent: 'center',
         alignItems: 'center',
-        zIndex: 20,
     },
     modal: {
         backgroundColor: colors.surface,

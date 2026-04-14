@@ -4,13 +4,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, CircleCheck, Lock, CirclePlay } from 'lucide-react-native';
 import Markdown from 'react-native-markdown-display';
 
-const LESSON_IMAGE = require('../../../assets/Ep - App - Imageryt.webp');
+const LESSON_IMAGE = require('../../../assets/ep-app-imagery.webp');
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../types/navigation';
 import { useCourses, getEnrollmentCourseName, getEnrollmentCourseDescription, getEnrollmentModuleCount } from '../../hooks/useCourses';
 import { XanoEnrollment, XanoNextLesson } from '../../api';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
+import { useSafeEdges } from '../../contexts/MHFRContext';
 
 type Tab = 'modules' | 'details';
 
@@ -21,6 +22,7 @@ interface DerivedModule {
 }
 
 export default function CourseDetailsScreen() {
+  const safeEdges = useSafeEdges(['top']);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'CourseDetails'>>();
   const enrollment = route.params?.enrollment ?? null;
@@ -58,7 +60,7 @@ export default function CourseDetailsScreen() {
   const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={safeEdges}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <ArrowLeft color={colors.textPrimary} size={22} />

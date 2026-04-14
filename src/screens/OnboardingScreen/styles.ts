@@ -97,6 +97,14 @@ export const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.base,
   },
+  bottomButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.base,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xl,
+    paddingTop: spacing.base,
+  },
   slideButton: {
     flex: 1,
   },

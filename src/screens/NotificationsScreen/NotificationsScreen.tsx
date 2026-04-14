@@ -11,6 +11,7 @@ import { useNotifications } from '../../hooks/useNotifications';
 import { usePairs } from '../../hooks/usePairs';
 import { RootStackParamList } from '../../types/navigation';
 import { EMOTIONS } from '../../constants/emotions';
+import { useSafeEdges } from '../../contexts/MHFRContext';
 
 type Tab = 'action' | 'all';
 
@@ -36,8 +37,9 @@ function renderMessageWithEmotions(message: string) {
 }
 
 export default function NotificationsScreen() {
+  const safeEdges = useSafeEdges(['top']);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { notifications, isLoading: loading, refetch, markRead } = useNotifications();
+  const { notifications, unreadCount, isLoading: loading, refetch, markRead, markAllRead } = useNotifications();
   const { getPairById } = usePairs();
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('action');
@@ -133,8 +135,13 @@ export default function NotificationsScreen() {
 
   const defaultIcon = { icon: <Bell size={iconSize} color={colors.primary} />, bg: colors.primaryLight };
 
+  const handleMarkAllRead = useCallback(async () => {
+    const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
+    if (unreadIds.length > 0) await markAllRead(unreadIds);
+  }, [notifications, markAllRead]);
+
   const filteredNotifications = notifications.filter((n) =>
-    activeTab === 'action' ? !n.read : true
+    activeTab === 'action' ? n.requires_action && !n.read : true
   );
 
   const formatTime = (timestamp: number) => {
@@ -146,7 +153,7 @@ export default function NotificationsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={safeEdges}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <ArrowLeft color={colors.textPrimary} size={24} />
@@ -172,6 +179,12 @@ export default function NotificationsScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {unreadCount > 0 && (
+        <TouchableOpacity style={styles.markAllRow} onPress={handleMarkAllRead}>
+          <Text style={styles.markAllText}>Mark all as read</Text>
+        </TouchableOpacity>
+      )}
 
       {loading ? (
         <View style={styles.loaderContainer}>
@@ -218,6 +231,7 @@ export default function NotificationsScreen() {
                     {renderMessageWithEmotions(notification.message)}
                     <Text style={styles.itemTime}>{formatTime(notification.created_at)}</Text>
                   </View>
+                  {!notification.read && <View style={styles.unreadDot} />}
                 </View>
               </TouchableOpacity>
             ))
@@ -235,8 +249,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.base,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
   backButton: { marginRight: spacing.base },
   title: {
@@ -251,7 +263,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: spacing.xl,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: 'rgba(48, 68, 43, 0.10)',
     marginBottom: spacing.base,
   },
   tab: {
@@ -317,6 +329,24 @@ const styles = StyleSheet.create({
   },
   itemTitleUnread: {
     fontFamily: fonts.bodyBold,
+  },
+  unreadDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.primary,
+    marginLeft: spacing.sm,
+    marginTop: 4,
+  },
+  markAllRow: {
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.sm,
+    alignItems: 'flex-end',
+  },
+  markAllText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.base,
+    color: colors.primary,
   },
   itemMessage: {
     fontFamily: fonts.body,

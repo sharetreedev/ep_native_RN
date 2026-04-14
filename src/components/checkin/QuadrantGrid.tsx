@@ -5,40 +5,17 @@ import {
   TouchableOpacity,
   StyleSheet,
   Animated,
-  Dimensions,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import EmotionDetailSheet from '../EmotionDetailSheet';
-import CoordinatePicker from './CoordinatePicker';
 import { MappedEmotion } from '../../hooks/useEmotionStates';
 import { XanoStateCoordinate } from '../../api';
-import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
+import { colors, fonts, fontSizes, buttonStyles } from '../../theme';
+import QuadrantStep from './quadrantGrid/QuadrantStep';
+import EmotionStep from './quadrantGrid/EmotionStep';
+import { Quadrant, QUADRANTS, MAX_EMOTION_TILES, GRID_PADDING } from './quadrantGrid/quadrantGridUtils';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const MAX_EMOTION_TILES = 4;
-const LIGHT_TEXT_EMOTIONS = ['depressed', 'ecstatic', 'enraged', 'blissful'];
-
-function getEmotionFontColor(name: string): string {
-  return LIGHT_TEXT_EMOTIONS.includes(name.toLowerCase()) ? '#FFFFFF' : '#1F2937';
-}
-
-interface Quadrant {
-  key: string;
-  label: string;
-  energy: 'high' | 'low';
-  pleasantness: 'high' | 'low';
-  color: string;
-  fontColor: string;
-}
-
-const QUADRANTS: Quadrant[] = [
-  { key: 'high-low', label: 'High Energy\nUnpleasant', energy: 'high', pleasantness: 'low', color: '#CA501C', fontColor: '#FFFFFF' },
-  { key: 'high-high', label: 'High Energy\nPleasant', energy: 'high', pleasantness: 'high', color: '#6FAD42', fontColor: '#FFFFFF' },
-  { key: 'low-low', label: 'Low Energy\nUnpleasant', energy: 'low', pleasantness: 'low', color: '#9B9D93', fontColor: '#FFFFFF' },
-  { key: 'low-high', label: 'Low Energy\nPleasant', energy: 'low', pleasantness: 'high', color: '#7EA8BE', fontColor: '#FFFFFF' },
-];
-
-type Step = 'quadrant' | 'emotion' | 'coordinate';
+type Step = 'quadrant' | 'emotion';
 
 interface QuadrantGridProps {
   emotions: MappedEmotion[];
@@ -162,25 +139,30 @@ export default function QuadrantGrid({ emotions, coordinates, onComplete, onCanc
   const handleConfirm = () => {
     if (selectedEmotion) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      contentShiftAnim.setValue(0);
-      animateTransition(() => {
-        setStep('coordinate');
-      });
+      // Pick the first coordinate for this emotion (center-ish default)
+      const emotionCoords = coordinates.filter(c => c.emotion_states_id === selectedEmotion.xanoId);
+      if (emotionCoords.length > 0) {
+        const sorted = [...emotionCoords].sort((a, b) => {
+          const ay = a.yAxis ?? 0; const by = b.yAxis ?? 0;
+          if (ay !== by) return ay - by;
+          return (a.xAxis ?? 0) - (b.xAxis ?? 0);
+        });
+        // Pick the coordinate closest to center (middle of sorted list)
+        const mid = Math.floor(sorted.length / 2);
+        const coord = sorted[mid];
+        onComplete(selectedEmotion, coord.id);
+      }
     }
   };
 
   const handleBack = () => {
     Haptics.selectionAsync();
     animateTransition(() => {
-      if (step === 'coordinate') {
-        setStep('emotion');
-      } else if (step === 'emotion') {
-        contentShiftAnim.setValue(0);
-        setStep('quadrant');
-        setSelectedQuadrant(null);
-        setSelectedEmotion(null);
-        clearSelection();
-      }
+      contentShiftAnim.setValue(0);
+      setStep('quadrant');
+      setSelectedQuadrant(null);
+      setSelectedEmotion(null);
+      clearSelection();
     });
   };
 
@@ -198,148 +180,27 @@ export default function QuadrantGrid({ emotions, coordinates, onComplete, onCanc
     return rows;
   }, [selectedQuadrant, emotionsByQuadrant]);
 
-  let emotionFlatIdx = 0;
-
   return (
     <View style={styles.container}>
-      <Animated.View style={[step === 'coordinate' ? styles.container : styles.centeredContent, { opacity: fadeAnim, transform: [{ translateY: contentShiftAnim }] }]}>
+      <Animated.View style={[styles.centeredContent, { opacity: fadeAnim, transform: [{ translateY: contentShiftAnim }] }]}>
         {step === 'quadrant' && (
-          <>
-            <Text style={styles.heading}>How are you feeling?</Text>
-            <View style={styles.grid}>
-              <View style={styles.gridRow}>
-                {QUADRANTS.slice(0, 2).map((q, i) => (
-                  <Animated.View
-                    key={q.key}
-                    style={{
-                      opacity: tileAnims[i],
-                      transform: [{ scale: tileAnims[i].interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) }],
-                    }}
-                  >
-                    <TouchableOpacity
-                      style={[styles.quadrantTile, { backgroundColor: q.color }]}
-                      onPress={() => handleQuadrantPress(q)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.quadrantLabel, { color: q.fontColor }]}>
-                        {q.label}
-                      </Text>
-                    </TouchableOpacity>
-                  </Animated.View>
-                ))}
-              </View>
-              <View style={styles.gridRow}>
-                {QUADRANTS.slice(2, 4).map((q, i) => (
-                  <Animated.View
-                    key={q.key}
-                    style={{
-                      opacity: tileAnims[i + 2],
-                      transform: [{ scale: tileAnims[i + 2].interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) }],
-                    }}
-                  >
-                    <TouchableOpacity
-                      style={[styles.quadrantTile, { backgroundColor: q.color }]}
-                      onPress={() => handleQuadrantPress(q)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.quadrantLabel, { color: q.fontColor }]}>
-                        {q.label}
-                      </Text>
-                    </TouchableOpacity>
-                  </Animated.View>
-                ))}
-              </View>
-            </View>
-            <View style={styles.centeringSpacer} />
-          </>
+          <QuadrantStep
+            tileAnims={tileAnims}
+            onQuadrantPress={handleQuadrantPress}
+          />
         )}
 
         {step === 'emotion' && selectedQuadrant && (
           <>
-            <Text style={styles.heading}>What emotion fits best?</Text>
-            <Text style={[styles.subheading, { color: selectedQuadrant.color }]}>
-              {selectedQuadrant.label.replace('\n', ' · ')}
-            </Text>
-
-            <View style={styles.emotionGridWrapper}>
-              <View style={styles.emotionGrid}>
-                {emotionRows.map((row, rowIdx) => (
-                  <View key={rowIdx} style={styles.emotionGridRow}>
-                    {row.map((emotion) => {
-                      const idx = emotionFlatIdx++;
-                      const isSelected = selectedEmotion?.id === emotion.id;
-                      const entranceAnim = emotionTileAnims[idx] ?? new Animated.Value(1);
-                      const selAnim = selectionAnims[idx] ?? new Animated.Value(0);
-                      return (
-                        <Animated.View
-                          key={emotion.id}
-                          style={{
-                            zIndex: isSelected ? 2 : 1,
-                            opacity: Animated.multiply(
-                              entranceAnim,
-                              selAnim.interpolate({
-                                inputRange: [-1, 0, 1],
-                                outputRange: [0.45, 1, 1],
-                              })
-                            ),
-                            transform: [
-                              {
-                                scale: Animated.multiply(
-                                  entranceAnim.interpolate({
-                                    inputRange: [0, 1],
-                                    outputRange: [0.7, 1],
-                                  }),
-                                  selAnim.interpolate({
-                                    inputRange: [-1, 0, 1],
-                                    outputRange: [1, 1, 1.1],
-                                  })
-                                ),
-                              },
-                              {
-                                rotate: selAnim.interpolate({
-                                  inputRange: [-1, 0, 1],
-                                  outputRange: ['0deg', '0deg', '2deg'],
-                                }),
-                              },
-                            ],
-                          }}
-                        >
-                          <TouchableOpacity
-                            style={[
-                              styles.emotionTile,
-                              { backgroundColor: emotion.emotionColour || selectedQuadrant.color },
-                            ]}
-                            onPress={() => handleEmotionPress(emotion, idx)}
-                            activeOpacity={0.8}
-                          >
-                            <Text
-                              style={[
-                                styles.emotionLabel,
-                                { color: getEmotionFontColor(emotion.name) },
-                              ]}
-                            >
-                              {emotion.name.charAt(0).toUpperCase() + emotion.name.slice(1).toLowerCase()}
-                            </Text>
-                          </TouchableOpacity>
-                        </Animated.View>
-                      );
-                    })}
-                  </View>
-                ))}
-              </View>
-
-              {selectedEmotion?.description ? (
-                <View style={styles.belowGrid} pointerEvents="box-none">
-                  <TouchableOpacity onPress={() => setShowDetail(true)} activeOpacity={0.7}>
-                    <Text style={styles.emotionDescription} numberOfLines={1}>
-                      {selectedEmotion.description}
-                    </Text>
-                    <Text style={styles.seeMore}>See more</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : null}
-            </View>
-            <View style={styles.centeringSpacer} />
+            <EmotionStep
+              selectedQuadrant={selectedQuadrant}
+              emotionRows={emotionRows}
+              selectedEmotion={selectedEmotion}
+              emotionTileAnims={emotionTileAnims}
+              selectionAnims={selectionAnims}
+              onEmotionPress={handleEmotionPress}
+              onShowDetail={() => setShowDetail(true)}
+            />
 
             <EmotionDetailSheet
               emotion={selectedEmotion}
@@ -352,21 +213,9 @@ export default function QuadrantGrid({ emotions, coordinates, onComplete, onCanc
                   e.pleasantness === selectedEmotion.pleasantness
               )}
             />
-
           </>
         )}
 
-        {step === 'coordinate' && selectedEmotion && (
-          <CoordinatePicker
-            emotion={selectedEmotion}
-            coordinates={coordinates}
-            clusterEmotions={emotions.filter(
-              (e) => e.energy === selectedEmotion.energy && e.pleasantness === selectedEmotion.pleasantness
-            )}
-            onSelect={onComplete}
-            onBack={handleBack}
-          />
-        )}
       </Animated.View>
 
       {/* Footer — outside animated content so it stays pinned at bottom */}
@@ -374,14 +223,14 @@ export default function QuadrantGrid({ emotions, coordinates, onComplete, onCanc
         <View style={styles.footer}>
           <TouchableOpacity
             style={[
-              styles.confirmButton,
-              !selectedEmotion && styles.confirmButtonDisabled,
+              buttonStyles.primary.container,
+              !selectedEmotion && buttonStyles.primary.disabled,
             ]}
             onPress={handleConfirm}
             disabled={!selectedEmotion}
             activeOpacity={0.8}
           >
-            <Text style={styles.confirmButtonText}>Continue</Text>
+            <Text style={buttonStyles.primary.text}>Check In</Text>
           </TouchableOpacity>
 
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
@@ -393,9 +242,6 @@ export default function QuadrantGrid({ emotions, coordinates, onComplete, onCanc
   );
 }
 
-const GRID_PADDING = 20;
-const TILE_SIZE = (SCREEN_WIDTH - GRID_PADDING * 2) / 2;
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -405,92 +251,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: GRID_PADDING,
   },
-  centeringSpacer: {
-    height: 28,
-  },
-  heading: {
-    fontSize: fontSizes['2xl'],
-    fontFamily: fonts.heading,
-    fontWeight: 'bold',
-    color: colors.textPrimary,
-    textAlign: 'center',
-    marginBottom: 32,
-  },
-  subheading: {
-    fontSize: fontSizes.md,
-    fontFamily: fonts.body,
-    color: colors.textMuted,
-    textAlign: 'center',
-    marginTop: -20,
-    marginBottom: 24,
-  },
-  grid: {
-    // no gap — tiles flush against each other
-  },
-  gridRow: {
-    flexDirection: 'row',
-  },
-  quadrantTile: {
-    width: TILE_SIZE,
-    height: TILE_SIZE,
-    borderRadius: borderRadius.xl + 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.base,
-  },
-  quadrantLabel: {
-    fontSize: fontSizes.lg,
-    fontFamily: fonts.headingSemiBold,
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  emotionGridWrapper: {
-    overflow: 'visible',
-  },
-  emotionGrid: {
-    // no gap — tiles flush
-  },
-  belowGrid: {
-    position: 'absolute',
-    top: TILE_SIZE * 2 + 8,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  emotionGridRow: {
-    flexDirection: 'row',
-  },
-  emotionTile: {
-    width: TILE_SIZE,
-    height: TILE_SIZE,
-    borderRadius: borderRadius.xl + 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.base,
-  },
-  emotionLabel: {
-    fontSize: fontSizes.lg,
-    fontFamily: fonts.headingSemiBold,
-    fontWeight: '600',
-    textAlign: 'center',
-    letterSpacing: 1,
-  },
-  emotionDescription: {
-    fontSize: fontSizes.base,
-    fontFamily: fonts.body,
-    color: colors.textMuted,
-    textAlign: 'center',
-    marginTop: 16,
-    paddingHorizontal: 20,
-  },
-  seeMore: {
-    fontFamily: fonts.bodyBold,
-    fontWeight: '700',
-    color: colors.textMuted,
-    fontSize: fontSizes.md,
-    textAlign: 'center',
-    marginTop: 4,
-  },
   footer: {
     position: 'absolute',
     bottom: 0,
@@ -499,21 +259,6 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     paddingTop: 16,
     paddingHorizontal: GRID_PADDING,
-  },
-  confirmButton: {
-    backgroundColor: colors.primary,
-    borderRadius: borderRadius.button,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-  },
-  confirmButtonDisabled: {
-    opacity: 0.4,
-  },
-  confirmButtonText: {
-    color: colors.textOnPrimary,
-    fontFamily: fonts.bodyBold,
-    fontSize: fontSizes.base,
-    fontWeight: '700',
   },
   backButton: {
     alignItems: 'center',

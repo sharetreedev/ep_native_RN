@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, Image } from 'react-native';
+import { View, Text } from 'react-native';
 import { styles } from '../styles';
+import Avatar from '../../../components/Avatar';
 import PulseLoader from '../../../components/PulseLoader';
 
 interface GroupMembersTabProps {
@@ -27,13 +28,7 @@ export default function GroupMembersTab({ members, membersLoading }: GroupMember
               key={`member-${member.id ?? index}`}
               style={[styles.memberRow, !isLast && styles.memberRowBorder]}
             >
-              {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.memberAvatar} />
-              ) : (
-                <View style={styles.memberAvatarPlaceholder}>
-                  <Text style={styles.memberAvatarInitial}>{initial}</Text>
-                </View>
-              )}
+              <Avatar source={avatarUrl} name={name} style={{ marginRight: 12 }} />
               <View style={styles.memberInfo}>
                 <Text style={styles.memberName}>{name}</Text>
                 {member.role && (

@@ -17,9 +17,11 @@ import { useCheckIns } from '../../hooks/useCheckIns';
 import { useRunningStats } from '../../hooks/useRunningStats';
 import { usePairs } from '../../hooks/usePairs';
 import { useCourses } from '../../hooks/useCourses';
+import { useEmotionStates } from '../../hooks/useEmotionStates';
 import TimelineView from '../../components/DailyInsight/TimelineView';
-import TrendsView from '../../components/DailyInsight/TrendsView';
+import UserOutlookTab from '../UserProfileScreen/components/UserOutlookTab';
 import PairsListView from '../../components/DailyInsight/PairsListView';
+import { useSafeEdges } from '../../contexts/MHFRContext';
 import { colors, fonts, fontSizes, spacing, buttonStyles } from '../../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DailyInsight'>;
@@ -34,11 +36,13 @@ const STEP_TITLES: Record<InsightStep, string> = {
 };
 
 export default function DailyInsightScreen({ navigation }: Props) {
+  const safeEdges = useSafeEdges(['top', 'bottom']);
   const { user } = useAuth();
   const checkInsHook = useCheckIns();
   const runningStatsHook = useRunningStats();
   const pairsHook = usePairs();
   const coursesHook = useCourses();
+  const { emotionStates } = useEmotionStates();
 
   const [step, setStep] = useState<InsightStep>('timeline');
   const [dataReady, setDataReady] = useState(false);
@@ -98,7 +102,11 @@ export default function DailyInsightScreen({ navigation }: Props) {
   }, []);
 
   const handleSkip = useCallback(() => {
-    navigation.popToTop();
+    if (navigation.canGoBack()) {
+      navigation.popToTop();
+    } else {
+      navigation.navigate('Main' as any);
+    }
   }, [navigation]);
 
   const handleBack = useCallback(() => {
@@ -118,7 +126,11 @@ export default function DailyInsightScreen({ navigation }: Props) {
       if (enrollmentNextLesson) {
         navigation.replace('Lessons', { lesson: enrollmentNextLesson });
       } else {
-        navigation.popToTop();
+        if (navigation.canGoBack()) {
+          navigation.popToTop();
+        } else {
+          navigation.navigate('Main' as any);
+        }
       }
     }
   }, [step, navigation, enrollmentNextLesson, animateTransition]);
@@ -129,6 +141,34 @@ export default function DailyInsightScreen({ navigation }: Props) {
     },
     [navigation],
   );
+
+  // Derive outlook data from running stats for the current user
+  const stats = runningStatsHook.stats as any;
+  const prevCheckin = stats?.prev_checkin_location;
+  const currentCheckin = stats?.current_checkin_location;
+  const rawLastCheckin = stats?.days_since_last_pulse || 'No data';
+  const lastCheckinLabel = rawLastCheckin.charAt(0).toUpperCase() + rawLastCheckin.slice(1);
+  const checkinRate = stats?.checkin_frequency
+    ? `${stats.checkin_frequency.toFixed(1)}x`
+    : 'N/A';
+  const totalCheckins = stats?.checkInCount ?? 'N/A';
+  const modeEmotion = stats?.checkInMode?.emotionText;
+  const modeEmotionStatesId = stats?.checkInMode?.emotion_states_id;
+  const modeEmotionColour = (() => {
+    for (const period of [stats?.at, stats?.w1, stats?.m1]) {
+      if (period?.emotion_states_id === modeEmotionStatesId && period?.emotion_states?.emotionColour) {
+        return period.emotion_states.emotionColour;
+      }
+    }
+    return colors.textPlaceholder;
+  })();
+  const allTimeEmotion = emotionStates.find(e => e.xanoId === modeEmotionStatesId);
+  const outlookDirections = useMemo(() => [
+    { label: 'Daily', data: stats?.direction_t_p, themeColour: currentCheckin?.colour },
+    { label: '7 Day', data: stats?.direction_w1_w2, themeColour: stats?.w1?.themeColour ?? stats?.w1?.emotion_states?.themeColour },
+    { label: '30 Day', data: stats?.direction_m1_m2, themeColour: stats?.m1?.themeColour ?? stats?.m1?.emotion_states?.themeColour },
+    { label: 'All Time', data: stats?.direction_m1_at, themeColour: allTimeEmotion?.themeColour },
+  ], [stats, currentCheckin, allTimeEmotion]);
 
   const stepIndex = STEPS.indexOf(step);
   const isFirstStep = stepIndex === 0;
@@ -149,7 +189,7 @@ export default function DailyInsightScreen({ navigation }: Props) {
 
   if (!dataReady) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={safeEdges}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
@@ -158,7 +198,7 @@ export default function DailyInsightScreen({ navigation }: Props) {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={safeEdges}>
       {/* Header */}
       <View style={styles.header}>
         {isFirstStep ? (
@@ -183,7 +223,8 @@ export default function DailyInsightScreen({ navigation }: Props) {
           style={styles.scroll}
           contentContainerStyle={[
             styles.scrollContent,
-            (step === 'trends' || step === 'timeline') && styles.scrollContentCentered,
+            step === 'timeline' && styles.scrollContentCentered,
+            step === 'trends' && styles.scrollContentFullWidth,
           ]}
           showsVerticalScrollIndicator={false}
         >
@@ -191,10 +232,20 @@ export default function DailyInsightScreen({ navigation }: Props) {
             <TimelineView checkIns={checkInsHook.timeline} />
           )}
           {step === 'trends' && (
-            <TrendsView
-              stats={runningStatsHook.stats}
-              isLoading={runningStatsHook.isLoading}
-            />
+            stats ? (
+              <UserOutlookTab
+                directions={outlookDirections}
+                prevCheckin={prevCheckin}
+                currentCheckin={currentCheckin}
+                lastCheckinLabel={lastCheckinLabel}
+                checkinRate={checkinRate}
+                totalCheckins={totalCheckins}
+                modeEmotion={modeEmotion}
+                modeEmotionColour={modeEmotionColour}
+              />
+            ) : runningStatsHook.isLoading ? (
+              <ActivityIndicator size="large" color={colors.primary} />
+            ) : null
           )}
           {step === 'pairs' && (
             <PairsListView
@@ -273,6 +324,9 @@ const styles = StyleSheet.create({
   scrollContentCentered: {
     flexGrow: 1,
     justifyContent: 'center',
+  },
+  scrollContentFullWidth: {
+    paddingHorizontal: 0,
   },
   footer: {
     paddingHorizontal: spacing.xl,

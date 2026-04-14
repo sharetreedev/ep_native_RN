@@ -5,6 +5,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { ArrowLeft, Mail, Link, Copy } from 'lucide-react-native';
 import { RootStackParamList } from '../../types/navigation';
 import { colors, fonts, fontSizes, borderRadius, buttonStyles } from '../../theme';
+import { logger } from '../../lib/logger';
 
 export default function InvitePairActionsScreen() {
   const navigation = useNavigation();
@@ -22,7 +23,7 @@ export default function InvitePairActionsScreen() {
         message: 'Join me on Pulse to stay connected and mindful! https://pulse.app/invite/123',
       });
     } catch (error) {
-      console.error(error);
+      logger.error(error);
     }
   };
 

@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import EmotionBadge from '../EmotionBadge';
+import Avatar from '../Avatar';
 import CheckInWithUser from '../CheckInWithUser';
 import { XanoPair } from '../../api';
 import { colors, fonts, fontSizes, spacing } from '../../theme';
@@ -64,15 +65,9 @@ export default function PairsListView({
             onPress={() => onPairPress(String(otherUserId), pair.id)}
           >
             <View style={styles.itemLeft}>
-              {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-              ) : (
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>{initial}</Text>
-                </View>
-              )}
-              <View>
-                <Text style={styles.name}>{name}</Text>
+              <Avatar source={avatarUrl} name={name} style={{ marginRight: 12 }} />
+              <View style={styles.nameContainer}>
+                <Text style={styles.name} numberOfLines={1}>{name}</Text>
                 <Text style={styles.meta}>{pairTypeLabel}</Text>
               </View>
             </View>
@@ -141,6 +136,10 @@ const styles = StyleSheet.create({
   avatarText: {
     fontFamily: fonts.bodyBold,
     color: colors.primary,
+  },
+  nameContainer: {
+    flex: 1,
+    marginRight: 8,
   },
   name: {
     fontFamily: fonts.bodyBold,

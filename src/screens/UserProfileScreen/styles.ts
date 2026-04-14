@@ -2,7 +2,7 @@ import { StyleSheet, Dimensions } from 'react-native';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
 
 export const AVATAR_SIZE = 88;
-export const HEADER_HEIGHT = 192;
+export const HEADER_HEIGHT = 156;
 export const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export const styles = StyleSheet.create({
@@ -33,7 +33,7 @@ export const styles = StyleSheet.create({
   profileHeader: {
     marginHorizontal: spacing.xl,
     alignItems: 'flex-start',
-    marginTop: 44,
+    marginTop: 8,
   },
   /* Avatar left-aligned with emotion badge inline, badge pushed down
      so the banner base bisects both avatar and badge equally. */
@@ -92,11 +92,13 @@ export const styles = StyleSheet.create({
     fontSize: 32,
     fontFamily: fonts.heading,
     color: colors.textPrimary,
+    flex: 1,
   },
   displayNamePair: {
     fontSize: 22,
     fontFamily: fonts.heading,
     color: colors.textPrimary,
+    flex: 1,
   },
   tags: {
     flexDirection: 'row',
@@ -104,7 +106,7 @@ export const styles = StyleSheet.create({
     gap: spacing.md,
   },
   tag: {
-    backgroundColor: colors.border,
+    backgroundColor: 'rgba(145, 162, 125, 0.25)',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderRadius: borderRadius.full,
@@ -115,7 +117,7 @@ export const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   scroll: { flex: 1 },
-  scrollContent: { paddingBottom: spacing['3xl'] },
+  scrollContent: { paddingBottom: 80 },
   pulseContent: { padding: spacing.base },
 
   /* ---- Direction row (horizontal) ---- */

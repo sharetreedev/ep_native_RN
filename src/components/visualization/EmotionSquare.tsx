@@ -13,7 +13,7 @@ interface EmotionSquareProps {
     selected?: boolean;
 }
 
-export default function EmotionSquare({ emotion, selected }: EmotionSquareProps) {
+function EmotionSquare({ emotion, selected }: EmotionSquareProps) {
     const isMapped = 'emotionColour' in emotion;
     const backgroundColor = isMapped && emotion.emotionColour ? emotion.emotionColour : undefined;
 
@@ -33,3 +33,5 @@ export default function EmotionSquare({ emotion, selected }: EmotionSquareProps)
         </View>
     );
 }
+
+export default React.memo(EmotionSquare);

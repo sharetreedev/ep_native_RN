@@ -2,44 +2,18 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
-  TextInput,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  PermissionsAndroid,
+  Animated,
+  Easing,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { ArrowLeft, Mic, Send, MessageSquare } from 'lucide-react-native';
-// Safe import — SDK may fail to load if LiveKit native modules aren't linked
-let _useConversation: any = null;
-let _sdkAvailable = false;
-try {
-  _useConversation = require('@elevenlabs/react-native').useConversation;
-  _sdkAvailable = typeof _useConversation === 'function';
-} catch {
-  // Will fall back to mock
-}
-
-// Stable hook wrapper — always calls the hook if SDK loaded, never if it didn't
-function useConversationSafe(opts: any) {
-  if (_sdkAvailable) {
-    return _useConversation(opts);
-  }
-  return null;
-}
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withTiming,
-  withSequence,
-  Easing,
-  cancelAnimation,
-} from 'react-native-reanimated';
+import { ArrowLeft } from 'lucide-react-native';
 import Svg, { Defs, RadialGradient, Stop, Circle } from 'react-native-svg';
 import { RootStackParamList } from '../../types/navigation';
 import {
@@ -49,102 +23,70 @@ import {
   spacing,
   borderRadius,
 } from '../../theme';
-import ConfirmModal from '../../components/ConfirmModal';
+import { request } from '../../api/client';
+import { useAuth } from '../../contexts/AuthContext';
+import { useSafeEdges } from '../../contexts/MHFRContext';
+import { logger } from '../../lib/logger';
+import ChatMessage from './components/ChatMessage';
+import MessageInput from './components/MessageInput';
+import ConsentModal from './components/ConsentModal';
 
-const AGENT_ID = '1774497719828';
+type Message = { role: 'user' | 'ai'; text: string; _streaming?: boolean };
 
-type Tab = 'chat' | 'voice';
-type Message = { role: 'user' | 'ai'; text: string };
-
-const CONSENT_MESSAGE =
-  'This AI supports self-reflection but does not replace professional help. ' +
-  'ShareTree encourages professional support when you feel distressed. ' +
-  'By clicking "Agree," you consent to the recording of your conversation, ' +
-  'which will be kept confidential. If there\'s serious risk of harm, we may ' +
-  'share information by appropriate means to protect you or others.';
-
-async function requestMicPermission(): Promise<boolean> {
-  if (Platform.OS === 'android') {
-    const granted = await PermissionsAndroid.request(
-      PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-      {
-        title: 'Microphone Permission',
-        message: 'Pulse AI needs microphone access for voice conversations.',
-        buttonPositive: 'OK',
-        buttonNegative: 'Cancel',
-      },
-    );
-    return granted === PermissionsAndroid.RESULTS.GRANTED;
-  }
-  return true;
-}
-
-// ─── Animated voice orb ─────────────────────────────────────────────
+// ─── Animated orb (decorative, shown while AI responds) ──────────────
 const ORB_BASE = 120;
 const ORB_MAX = 160;
 
-function VoiceOrb({ isSpeaking }: { isSpeaking: boolean }) {
-  const scale = useSharedValue(1);
-  const pulseOpacity = useSharedValue(0.5);
+function PulseOrb({ isActive }: { isActive: boolean }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const pulseOpacity = useRef(new Animated.Value(0.5)).current;
 
   useEffect(() => {
-    if (isSpeaking) {
-      // When agent speaks, grow larger and pulse faster
-      scale.value = withRepeat(
-        withSequence(
-          withTiming(ORB_MAX / ORB_BASE, { duration: 400, easing: Easing.inOut(Easing.ease) }),
-          withTiming(1.05, { duration: 400, easing: Easing.inOut(Easing.ease) }),
-        ),
-        -1,
-        true,
+    let scaleAnim: Animated.CompositeAnimation;
+    let opacityAnim: Animated.CompositeAnimation;
+
+    if (isActive) {
+      scaleAnim = Animated.loop(
+        Animated.sequence([
+          Animated.timing(scale, { toValue: ORB_MAX / ORB_BASE, duration: 400, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          Animated.timing(scale, { toValue: 1.05, duration: 400, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        ]),
       );
-      pulseOpacity.value = withRepeat(
-        withSequence(
-          withTiming(0.8, { duration: 400 }),
-          withTiming(0.3, { duration: 400 }),
-        ),
-        -1,
-        true,
+      opacityAnim = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseOpacity, { toValue: 0.8, duration: 400, useNativeDriver: true }),
+          Animated.timing(pulseOpacity, { toValue: 0.3, duration: 400, useNativeDriver: true }),
+        ]),
       );
     } else {
-      // Idle connected state — gentle breathing
-      scale.value = withRepeat(
-        withSequence(
-          withTiming(1.08, { duration: 1800, easing: Easing.inOut(Easing.ease) }),
-          withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.ease) }),
-        ),
-        -1,
-        true,
+      scaleAnim = Animated.loop(
+        Animated.sequence([
+          Animated.timing(scale, { toValue: 1.08, duration: 1800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          Animated.timing(scale, { toValue: 1, duration: 1800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        ]),
       );
-      pulseOpacity.value = withRepeat(
-        withSequence(
-          withTiming(0.6, { duration: 1800 }),
-          withTiming(0.35, { duration: 1800 }),
-        ),
-        -1,
-        true,
+      opacityAnim = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseOpacity, { toValue: 0.6, duration: 1800, useNativeDriver: true }),
+          Animated.timing(pulseOpacity, { toValue: 0.35, duration: 1800, useNativeDriver: true }),
+        ]),
       );
     }
 
+    scaleAnim.start();
+    opacityAnim.start();
+
     return () => {
-      cancelAnimation(scale);
-      cancelAnimation(pulseOpacity);
+      scaleAnim.stop();
+      opacityAnim.stop();
     };
-  }, [isSpeaking]);
+  }, [isActive]);
 
-  const orbStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  const glowStyle = useAnimatedStyle(() => ({
-    opacity: pulseOpacity.value,
-    transform: [{ scale: scale.value * 1.3 }],
-  }));
+  const glowScale = Animated.multiply(scale, 1.3);
 
   return (
     <View style={orbStyles.wrapper}>
-      {/* Outer glow ring */}
-      <Animated.View style={[orbStyles.glow, glowStyle]}>
+      <Animated.View style={[orbStyles.glow, { opacity: pulseOpacity, transform: [{ scale: glowScale }] }]}>
         <Svg width={ORB_MAX * 1.6} height={ORB_MAX * 1.6} viewBox={`0 0 ${ORB_MAX * 1.6} ${ORB_MAX * 1.6}`}>
           <Defs>
             <RadialGradient id="glowGrad" cx="50%" cy="50%" rx="50%" ry="50%">
@@ -157,19 +99,17 @@ function VoiceOrb({ isSpeaking }: { isSpeaking: boolean }) {
         </Svg>
       </Animated.View>
 
-      {/* Main orb */}
-      <Animated.View style={[orbStyles.orb, orbStyle]}>
+      <Animated.View style={[orbStyles.orb, { transform: [{ scale }] }]}>
         <Svg width={ORB_BASE} height={ORB_BASE} viewBox={`0 0 ${ORB_BASE} ${ORB_BASE}`}>
           <Defs>
             <RadialGradient id="orbGrad" cx="40%" cy="38%" rx="55%" ry="55%">
-              <Stop offset="0%" stopColor="#A8B896" stopOpacity="1" />
+              <Stop offset="0%" stopColor={colors.primaryGradientEnd} stopOpacity="1" />
               <Stop offset="50%" stopColor={colors.primary} stopOpacity="1" />
-              <Stop offset="100%" stopColor="#30442B" stopOpacity="1" />
+              <Stop offset="100%" stopColor={colors.darkForest} stopOpacity="1" />
             </RadialGradient>
           </Defs>
           <Circle cx={ORB_BASE / 2} cy={ORB_BASE / 2} r={ORB_BASE / 2} fill="url(#orbGrad)" />
         </Svg>
-        <Mic color={colors.textOnPrimary} size={36} style={orbStyles.micIcon} />
       </Animated.View>
     </View>
   );
@@ -198,251 +138,311 @@ const orbStyles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 10,
   },
-  micIcon: {
-    position: 'absolute',
-  },
 });
 
-// ─── Main screen ─────────────────────────────────────────────────────
-export default function AIMHFRScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [activeTab, setActiveTab] = useState<Tab>('chat');
-  const [error, setError] = useState<string | null>(null);
+// ─── WebSocket-based conversation manager ────────────────────────────
+// Uses ElevenLabs Conversational AI WebSocket protocol directly,
+// bypassing the native SDK that crashes on mount.
+function useElevenLabsChat(dynamicVars: { user_name: string; emotion: string }) {
+  const wsRef = useRef<WebSocket | null>(null);
+  const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const [messages, setMessages] = useState<Message[]>([]);
-  const [inputText, setInputText] = useState('');
-  const [showConsent, setShowConsent] = useState(false);
-  const [hasConsented, setHasConsented] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
+  const [isResponding, setIsResponding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Accumulate streamed text for current agent turn
+  const agentTextRef = useRef('');
+  const streamHandledRef = useRef(false);
 
-  const realConversation = useConversationSafe({
-    onMessage: (message: any) => {
-      if (message.source === 'user') {
-        setMessages((prev) => [...prev, { role: 'user', text: message.message }]);
-      } else if (message.source === 'ai') {
-        setMessages((prev) => [...prev, { role: 'ai', text: message.message }]);
+  const connect = useCallback(async () => {
+    if (wsRef.current) return;
+    setStatus('connecting');
+    setError(null);
+
+    try {
+      logger.log('[AI] Fetching signed URL via Xano...');
+      const raw = await request<any>('POST', '/auth/elevenlabs/token');
+      let signedUrl: string;
+      if (typeof raw === 'string') {
+        signedUrl = raw;
+      } else if (raw?.signed_url) {
+        signedUrl = raw.signed_url;
+      } else {
+        throw new Error('Unexpected response format');
       }
-    },
-    onError: (err: any) => {
-      setError(typeof err === 'string' ? err : err?.message ?? 'Something went wrong');
-    },
-  });
+      if (!signedUrl || !signedUrl.startsWith('wss://')) throw new Error('Invalid signed URL');
 
-  const conversation = realConversation ?? {
-    status: 'disconnected' as const,
-    isSpeaking: false,
-    startSession: async (_cfg: any) => { setError('ElevenLabs SDK not available — rebuild required'); },
-    endSession: async () => {},
-    sendUserMessage: (_text: string) => {},
-    setMicMuted: (_muted: boolean) => {},
-  };
+      logger.log('[AI] Connecting WebSocket...');
+      const ws = new WebSocket(signedUrl);
+      wsRef.current = ws;
 
-  const isConnected = conversation.status === 'connected';
+      ws.onopen = () => {
+        logger.log('[AI] WebSocket opened');
+        setStatus('connected');
+        ws.send(JSON.stringify({
+          type: 'conversation_initiation_client_data',
+          dynamic_variables: dynamicVars,
+        }));
+      };
 
-  // Cleanup session on unmount
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          switch (data.type) {
+            case 'conversation_initiation_metadata':
+              logger.log('[AI] Conversation started:', data.conversation_initiation_metadata_event?.conversation_id);
+              break;
+
+            // Full agent response (non-streamed) — skip if streaming already handled it
+            case 'agent_response':
+              logger.log('[AI] agent_response (streamHandled:', streamHandledRef.current, ')');
+              if (!streamHandledRef.current) {
+                setMessages((prev) => [...prev, { role: 'ai', text: data.agent_response_event?.agent_response }]);
+              }
+              setIsResponding(false);
+              agentTextRef.current = '';
+              streamHandledRef.current = false;
+              break;
+
+            // Streamed text response parts
+            case 'agent_chat_response_part': {
+              const part = data.text_response_part;
+              if (part?.type === 'delta' && part.text) {
+                const isFirst = agentTextRef.current === '';
+                agentTextRef.current += part.text;
+                streamHandledRef.current = true;
+                const accumulated = agentTextRef.current;
+                if (isFirst) {
+                  // Add new AI message
+                  setMessages((prev) => [...prev, { role: 'ai', text: accumulated }]);
+                } else {
+                  // Update last AI message in-place
+                  setMessages((prev) => {
+                    const copy = [...prev];
+                    copy[copy.length - 1] = { role: 'ai', text: accumulated };
+                    return copy;
+                  });
+                }
+                setIsResponding(false);
+              } else if (part?.type === 'stop') {
+                agentTextRef.current = '';
+              }
+              break;
+            }
+
+            // Replace last AI message with corrected full text
+            case 'agent_response_correction':
+              if (data.agent_response_correction_event?.corrected_text) {
+                const corrected = data.agent_response_correction_event.corrected_text;
+                setMessages((prev) => {
+                  const copy = [...prev];
+                  const lastAi = copy.findLastIndex((m) => m.role === 'ai');
+                  if (lastAi >= 0) copy[lastAi] = { role: 'ai', text: corrected };
+                  return copy;
+                });
+              }
+              break;
+
+            case 'user_transcript':
+              // Already added locally on send
+              break;
+
+            case 'ping':
+              ws.send(JSON.stringify({ type: 'pong', event_id: data.ping_event?.event_id }));
+              break;
+
+            case 'audio':
+              // Audio chunks — ignore for now (text-only chat)
+              break;
+
+            case 'interruption':
+              setIsResponding(false);
+              break;
+
+            default:
+              logger.log('[AI] WS:', data.type, JSON.stringify(data).slice(0, 300));
+              break;
+          }
+        } catch {
+          // binary audio frame or unparseable — ignore
+        }
+      };
+
+      ws.onerror = (e) => {
+        logger.error('[AI] WebSocket error');
+        setError('Connection error');
+        setStatus('disconnected');
+      };
+
+      ws.onclose = (e) => {
+        logger.log('[AI] WebSocket closed:', e.code, e.reason);
+        wsRef.current = null;
+        setStatus('disconnected');
+        setIsResponding(false);
+      };
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to connect');
+      setStatus('disconnected');
+    }
+  }, [dynamicVars]);
+
+  const disconnect = useCallback(() => {
+    wsRef.current?.close();
+    wsRef.current = null;
+    setStatus('disconnected');
+  }, []);
+
+  const sendMessage = useCallback(async (text: string) => {
+    setMessages((prev) => [...prev, { role: 'user', text }]);
+    setIsResponding(true);
+
+    // Connect if not already
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      await connect();
+      await new Promise<void>((resolve, reject) => {
+        const check = setInterval(() => {
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            clearInterval(check);
+            resolve();
+          }
+        }, 100);
+        setTimeout(() => { clearInterval(check); reject(new Error('Connection timeout')); }, 10000);
+      });
+    }
+
+    // ElevenLabs direct WebSocket text input format
+    const msg = JSON.stringify({ type: 'user_message', text });
+    logger.log('[AI] Sending text:', text.slice(0, 80));
+    wsRef.current?.send(msg);
+    // Reset stream tracking for next response
+    streamHandledRef.current = false;
+  }, [connect]);
+
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (conversation.status === 'connected') {
-        conversation.endSession();
-      }
+      wsRef.current?.close();
+      wsRef.current = null;
     };
   }, []);
 
-  // Auto-scroll when messages change
+  return { status, messages, isResponding, error, connect, disconnect, sendMessage, setError };
+}
+
+// ─── Main screen ─────────────────────────────────────────────────────
+export default function AIMHFRScreen() {
+  const safeEdges = useSafeEdges(['top']);
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { user } = useAuth();
+  const [showConsent, setShowConsent] = useState(false);
+  const [hasConsented, setHasConsented] = useState(false);
+  const [inputText, setInputText] = useState('');
+  const scrollRef = useRef<ScrollView>(null);
+  const dynamicVars = React.useMemo(
+    () => ({
+      user_name: user?.firstName ?? user?.name ?? 'User',
+      emotion: user?.recentCheckInEmotion?.Display ?? 'neutral',
+    }),
+    [user?.firstName, user?.name, user?.recentCheckInEmotion?.Display],
+  );
+  const { status, messages, isResponding, error, connect, sendMessage, setError } = useElevenLabsChat(dynamicVars);
+
+  // Auto-scroll on every message update (including streaming deltas)
   useEffect(() => {
     if (messages.length > 0) {
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
     }
-  }, [messages.length]);
-
-  const startSession = useCallback(async () => {
-    setError(null);
-    const hasPermission = await requestMicPermission();
-    if (!hasPermission) {
-      setError('Microphone permission is required.');
-      return false;
-    }
-    try {
-      await conversation.startSession({ agentId: AGENT_ID });
-      return true;
-    } catch (e: any) {
-      setError(e.message ?? 'Failed to connect');
-      return false;
-    }
-  }, [conversation]);
-
-  const ensureSession = useCallback(async () => {
-    if (isConnected) return true;
-    return startSession();
-  }, [isConnected, startSession]);
+  }, [messages]);
 
   const handleSend = useCallback(async () => {
     const text = inputText.trim();
     if (!text) return;
-    setInputText('');
-    const started = await ensureSession();
-    if (!started) return;
-    conversation.sendUserMessage(text);
-  }, [inputText, ensureSession, conversation]);
 
-  const handleVoiceToggle = useCallback(() => {
-    if (isConnected) {
-      conversation.endSession();
-      return;
+    setInputText('');
+    try {
+      await sendMessage(text);
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to send');
     }
-    // Show consent modal if user hasn't agreed yet this session
-    if (!hasConsented) {
-      setShowConsent(true);
-      return;
-    }
-    startSession();
-  }, [isConnected, hasConsented, conversation, startSession]);
+  }, [inputText, sendMessage, setError]);
 
   const handleConsentAccept = useCallback(async () => {
     setHasConsented(true);
     setShowConsent(false);
-    await startSession();
-  }, [startSession]);
-
-  // Mute mic when on chat tab, unmute on voice tab
-  useEffect(() => {
-    if (isConnected) {
-      conversation.setMicMuted(activeTab === 'chat');
+    // Connect immediately so the agent's first message arrives
+    try {
+      await connect();
+    } catch {}
+    // Re-trigger send if there was pending text
+    if (inputText.trim()) {
+      const text = inputText.trim();
+      setInputText('');
+      sendMessage(text).catch((e: any) => setError(e.message ?? 'Failed to send'));
     }
-  }, [activeTab, isConnected]);
+  }, [inputText, connect, sendMessage, setError]);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={safeEdges}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <ArrowLeft color={colors.textSecondary} size={24} />
         </TouchableOpacity>
-        <Text style={styles.title}>Pulse AI</Text>
+        <Text style={styles.title}>AI MHFR</Text>
         <View style={{ width: 24 }} />
       </View>
 
-      {/* Tabs */}
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'chat' && styles.activeTab]}
-          onPress={() => setActiveTab('chat')}
-        >
-          <Text style={[styles.tabText, activeTab === 'chat' && styles.activeTabText]}>
-            Chat
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'voice' && styles.activeTab]}
-          onPress={() => setActiveTab('voice')}
-        >
-          <Text style={[styles.tabText, activeTab === 'voice' && styles.activeTabText]}>
-            Voice
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Content */}
-      {activeTab === 'chat' ? (
-        <KeyboardAvoidingView
+      {/* Chat content */}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
+      >
+        <ScrollView
+          ref={scrollRef}
           style={styles.flex}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={80}
+          contentContainerStyle={styles.scrollContent}
         >
-          <ScrollView
-            ref={scrollRef}
-            style={styles.flex}
-            contentContainerStyle={styles.scrollContent}
-          >
-            {messages.length === 0 && (
-              <View style={styles.emptyChat}>
-                <MessageSquare color={colors.textPlaceholder} size={40} />
-                <Text style={styles.emptyChatText}>
-                  Send a message to start a conversation
-                </Text>
-              </View>
-            )}
-            {messages.map((msg, i) => (
-              <View
-                key={i}
-                style={[styles.bubble, msg.role === 'user' ? styles.bubbleUser : styles.bubbleAi]}
-              >
-                <Text
-                  style={[
-                    styles.bubbleText,
-                    msg.role === 'user' ? styles.bubbleTextUser : styles.bubbleTextAi,
-                  ]}
-                >
-                  {msg.text}
-                </Text>
-              </View>
-            ))}
-          </ScrollView>
-
-          <View style={styles.inputRow}>
-            <TextInput
-              style={styles.input}
-              placeholder="Type a message..."
-              placeholderTextColor={colors.textPlaceholder}
-              value={inputText}
-              onChangeText={setInputText}
-              returnKeyType="send"
-              onSubmitEditing={handleSend}
-            />
-            <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-              <Send color={colors.textOnPrimary} size={20} />
-            </TouchableOpacity>
-          </View>
-
-          {error && <Text style={styles.error}>{error}</Text>}
-        </KeyboardAvoidingView>
-      ) : (
-        <View style={styles.voiceBody}>
-          <Text style={styles.statusLabel}>
-            {isConnected
-              ? conversation.isSpeaking
-                ? 'Pulse AI is speaking...'
-                : 'Listening...'
-              : 'Tap to start a conversation'}
-          </Text>
-
-          {isConnected ? (
-            <TouchableOpacity onPress={handleVoiceToggle} activeOpacity={0.8}>
-              <VoiceOrb isSpeaking={conversation.isSpeaking} />
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              onPress={handleVoiceToggle}
-              activeOpacity={0.8}
-              style={styles.micButton}
-            >
-              <Mic color={colors.primary} size={36} />
-            </TouchableOpacity>
+          {messages.length === 0 && (
+            <View style={styles.emptyChat}>
+              <PulseOrb isActive={false} />
+              <Text style={styles.emptyChatHeading}>
+                How are you feeling today?
+              </Text>
+              <Text style={styles.emptyChatText}>
+                Speak with an AI MHFR to get immediate support.
+              </Text>
+            </View>
           )}
+          {messages.map((msg, i) => (
+            <ChatMessage key={i} role={msg.role} text={msg.text} />
+          ))}
+          {isResponding && <ChatMessage role="ai" text="..." />}
+          {error && (
+            <View style={styles.chatError}>
+              <Text style={styles.chatErrorText}>{error}</Text>
+            </View>
+          )}
+        </ScrollView>
 
-          <Text style={styles.hint}>
-            {isConnected ? 'Tap to end' : 'Your mental health first responder'}
-          </Text>
+        <MessageInput
+          hasConsented={hasConsented}
+          value={inputText}
+          onChangeText={setInputText}
+          onSend={handleSend}
+          onStart={() => setShowConsent(true)}
+        />
+      </KeyboardAvoidingView>
 
-          {error && <Text style={styles.error}>{error}</Text>}
-        </View>
-      )}
-
-      {/* Voice consent modal */}
-      <ConfirmModal
+      {/* Consent modal */}
+      <ConsentModal
         visible={showConsent}
         onClose={() => setShowConsent(false)}
         onConfirm={handleConsentAccept}
-        title=""
-        message={CONSENT_MESSAGE}
-        confirmText="Accept"
-        cancelText="Cancel"
-        variant="bottom"
       />
     </SafeAreaView>
   );
 }
-
-const MIC_SIZE = 80;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
@@ -454,36 +454,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.base,
   },
-  backButton: { width: 24, alignItems: 'flex-start' },
+  backButton: { width: 24, alignItems: 'flex-start' as const },
   title: {
     fontSize: fontSizes.xl,
     fontFamily: fonts.heading,
     color: colors.textPrimary,
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: spacing.xl,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    marginBottom: spacing.base,
-  },
-  tab: {
-    alignItems: 'flex-start',
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-    marginRight: spacing.xl,
-  },
-  activeTab: {
-    borderBottomColor: colors.primary,
-  },
-  tabText: {
-    fontFamily: fonts.bodySemiBold,
-    fontSize: fontSizes.lg,
-    color: colors.textMuted,
-  },
-  activeTabText: {
-    color: colors.primary,
   },
 
   // Chat
@@ -496,8 +471,15 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: spacing.base,
+    gap: spacing.xs,
     paddingVertical: spacing['4xl'],
+  },
+  emptyChatHeading: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.base + 4,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 2,
   },
   emptyChatText: {
     fontFamily: fonts.body,
@@ -505,108 +487,18 @@ const styles = StyleSheet.create({
     color: colors.textPlaceholder,
     textAlign: 'center',
   },
-  bubble: {
-    maxWidth: '80%',
-    padding: spacing.lg,
-    borderRadius: borderRadius.button,
-    marginBottom: spacing.base,
-  },
-  bubbleUser: {
-    backgroundColor: colors.chatBubbleUser,
-    alignSelf: 'flex-end',
-    borderTopRightRadius: spacing.xs,
-  },
-  bubbleAi: {
-    backgroundColor: colors.surface,
-    alignSelf: 'flex-start',
-    borderTopLeftRadius: spacing.xs,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  bubbleText: { fontSize: fontSizes.base, fontFamily: fonts.body },
-  bubbleTextUser: { color: colors.textOnPrimary },
-  bubbleTextAi: { color: colors.textPrimary },
-  inputRow: {
-    padding: spacing.base,
-    paddingBottom: spacing['2xl'],
-    backgroundColor: colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.base,
-  },
-  input: {
-    flex: 1,
+  chatError: {
+    alignSelf: 'center',
     backgroundColor: colors.surfaceMuted,
-    borderRadius: borderRadius.full,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.base,
-    fontSize: fontSizes.base,
-    fontFamily: fonts.body,
-    color: colors.textPrimary,
+    borderRadius: borderRadius.sm,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
   },
-  sendButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-
-  // Voice
-  voiceBody: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-  },
-  statusLabel: {
-    fontFamily: fonts.heading,
-    fontSize: fontSizes['2xl'],
-    color: colors.textPrimary,
-    textAlign: 'center',
-    marginBottom: spacing['2xl'],
-  },
-  micButton: {
-    width: MIC_SIZE,
-    height: MIC_SIZE,
-    borderRadius: MIC_SIZE / 2,
-    backgroundColor: colors.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 6,
-    borderWidth: 2,
-    borderColor: colors.border,
-  },
-  hint: {
+  chatErrorText: {
     fontFamily: fonts.body,
     fontSize: fontSizes.sm,
     color: colors.textSecondary,
-    marginTop: spacing.base,
     textAlign: 'center',
-  },
-  error: {
-    fontFamily: fonts.body,
-    fontSize: fontSizes.sm,
-    color: colors.destructive,
-    marginTop: spacing.base,
-    textAlign: 'center',
-    paddingHorizontal: spacing.base,
   },
 });

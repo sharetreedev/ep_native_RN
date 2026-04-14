@@ -1,26 +1,33 @@
 import './global.css';
 import React from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { Platform, View, ActivityIndicator } from 'react-native';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
+import * as Updates from 'expo-updates';
 import AppNavigator from './src/navigation/AppNavigator';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { CheckInProvider } from './src/contexts/CheckInContext';
 import { MHFRProvider } from './src/contexts/MHFRContext';
-// Wrapped in try/catch — registerGlobals() in the ElevenLabs SDK can crash
-// at import time if LiveKit native modules aren't linked correctly.
-let ElevenLabsProvider: React.ComponentType<{ children: React.ReactNode }> | null = null;
-try {
-  ElevenLabsProvider = require('@elevenlabs/react-native').ElevenLabsProvider;
-} catch (e) {
-  console.warn('ElevenLabs SDK failed to load:', e);
-}
 import { fontAssets } from './src/theme/fonts';
 import { colors } from './src/theme';
 
 // Keep splash screen visible while we load fonts
 SplashScreen.preventAutoHideAsync();
+
+// Initialise OneSignal (native-only — guarded so Expo Go doesn't crash)
+if (Platform.OS !== 'web') {
+  try {
+    const { OneSignal } = require('react-native-onesignal');
+    const appId = process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID;
+    if (appId) {
+      OneSignal.initialize(appId);
+      OneSignal.Notifications.requestPermission(false);
+    }
+  } catch (e) {
+    console.warn('[OneSignal] Native module not available (Expo Go?):', e);
+  }
+}
 
 export default function App() {
   const [fontsLoaded] = useFonts(fontAssets);
@@ -30,6 +37,22 @@ export default function App() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded]);
+
+  // Check for OTA updates on launch
+  React.useEffect(() => {
+    if (__DEV__) return;
+    (async () => {
+      try {
+        const update = await Updates.checkForUpdateAsync();
+        if (update.isAvailable) {
+          await Updates.fetchUpdateAsync();
+          await Updates.reloadAsync();
+        }
+      } catch (e) {
+        console.warn('[Updates] Error checking for update:', e);
+      }
+    })();
+  }, []);
 
   if (!fontsLoaded) {
     return (
@@ -44,13 +67,7 @@ export default function App() {
       <AuthProvider>
         <CheckInProvider>
           <MHFRProvider>
-            {ElevenLabsProvider ? (
-              <ElevenLabsProvider>
-                <AppNavigator />
-              </ElevenLabsProvider>
-            ) : (
-              <AppNavigator />
-            )}
+            <AppNavigator />
           </MHFRProvider>
         </CheckInProvider>
       </AuthProvider>

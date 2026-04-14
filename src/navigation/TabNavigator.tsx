@@ -2,13 +2,11 @@ import React from 'react';
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
 import { MainTabParamList } from '../types/navigation';
 import MyPulseScreen from '../screens/MyPulseScreen/MyPulseScreen';
-import { Blend, Activity, Users, Globe } from 'lucide-react-native';
-import { View, Text } from 'react-native';
-import { colors, fonts, fontSizes } from '../theme';
+import { Home, Activity, Hand } from 'lucide-react-native';
+import { colors, fonts } from '../theme';
 
-import MyPairsScreen from '../screens/MyPairsScreen/MyPairsScreen';
-import GlobalPulseScreen from '../screens/GlobalPulseScreen/GlobalPulseScreen';
-import GroupsScreen from '../screens/GroupsScreen/GroupsScreen';
+import PulseNavigator from './PulseNavigator';
+import EmergencyServicesScreen from '../screens/EmergencyServicesScreen/EmergencyServicesScreen';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const Tab = createMaterialTopTabNavigator<MainTabParamList>();
@@ -23,9 +21,9 @@ export default function TabNavigator() {
             screenOptions={{
                 tabBarStyle: {
                     backgroundColor: colors.background,
-                    borderTopWidth: 1,
-                    borderTopColor: colors.border,
+                    borderTopWidth: 0,
                     paddingBottom: insets.bottom,
+                    paddingHorizontal: 4,
                     height: 60 + insets.bottom,
                 },
                 tabBarIndicatorStyle: {
@@ -35,7 +33,7 @@ export default function TabNavigator() {
                 tabBarActiveTintColor: colors.primary,
                 tabBarInactiveTintColor: colors.textSecondary,
                 tabBarLabelStyle: {
-                    fontSize: fontSizes.xs,
+                    fontSize: 12,
                     fontFamily: fonts.bodySemiBold,
                     textTransform: 'none',
                     marginTop: 0,
@@ -48,35 +46,26 @@ export default function TabNavigator() {
                 name="MyPulse"
                 component={MyPulseScreen}
                 options={{
-                    tabBarLabel: 'My Pulse',
+                    tabBarLabel: 'Home',
+                    tabBarIcon: ({ color }) => <Home color={color} size={24} />,
+                }}
+            />
+            <Tab.Screen
+                name="Pulse"
+                component={PulseNavigator}
+                options={{
+                    tabBarLabel: 'Pulse',
                     tabBarIcon: ({ color }) => <Activity color={color} size={24} />,
                 }}
             />
             <Tab.Screen
-                name="MyPairs"
-                component={MyPairsScreen}
+                name="GetSupport"
+                component={EmergencyServicesScreen}
                 options={{
-                    tabBarLabel: 'Pairs',
-                    tabBarIcon: ({ color }) => <Blend color={color} size={24} />,
+                    tabBarLabel: 'Get Support',
+                    tabBarIcon: ({ color }) => <Hand color={color} size={24} />,
                 }}
             />
-            <Tab.Screen
-                name="Groups"
-                component={GroupsScreen}
-                options={{
-                    tabBarLabel: 'Groups',
-                    tabBarIcon: ({ color }) => <Users color={color} size={24} />,
-                }}
-            />
-            <Tab.Screen
-                name="GlobalPulse"
-                component={GlobalPulseScreen}
-                options={{
-                    tabBarLabel: 'Global',
-                    tabBarIcon: ({ color }) => <Globe color={color} size={24} />,
-                }}
-            />
-
         </Tab.Navigator>
     );
 }

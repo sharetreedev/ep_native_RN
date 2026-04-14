@@ -49,11 +49,16 @@ export default function PhoneInput({
       <TextInput
         style={styles.input}
         value={value}
-        onChangeText={onChangePhone}
+        onChangeText={(text) => {
+          // Strip non-digits and cap at 15 (E.164 max national subscriber length)
+          const digitsOnly = text.replace(/\D/g, '').slice(0, 15);
+          onChangePhone(digitsOnly);
+        }}
         placeholder="Phone number"
         placeholderTextColor={colors.textPlaceholder}
         keyboardType="phone-pad"
         autoComplete="tel"
+        maxLength={15}
       />
 
       <Modal visible={pickerVisible} transparent animationType="slide">
@@ -109,7 +114,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   chevron: {
-    fontSize: 10,
+    fontSize: fontSizes.sm,
     color: colors.textMuted,
   },
   input: {

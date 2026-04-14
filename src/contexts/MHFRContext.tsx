@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import { supportRequests as xanoSupportRequests, XanoSupportRequest } from '../api';
+import { logger } from '../lib/logger';
 
 interface MHFRContextValue {
   mhfrRequests: XanoSupportRequest[];
@@ -24,7 +25,7 @@ export function MHFRProvider({ children }: { children: React.ReactNode }) {
     }
     xanoSupportRequests.getMHFRRequests()
       .then(setMhfrRequests)
-      .catch((e) => console.warn('[MHFRContext] Failed to fetch MHFR requests:', e));
+      .catch((e) => logger.warn('[MHFRContext] Failed to fetch MHFR requests:', e));
   }, [isMHFR]);
 
   const refreshMHFRRequests = useCallback(async () => {
@@ -33,7 +34,7 @@ export function MHFRProvider({ children }: { children: React.ReactNode }) {
       const data = await xanoSupportRequests.getMHFRRequests();
       setMhfrRequests(data);
     } catch (e) {
-      console.warn('[MHFRContext] Failed to refresh MHFR requests:', e);
+      logger.warn('[MHFRContext] Failed to refresh MHFR requests:', e);
     }
   }, [isMHFR]);
 
@@ -42,7 +43,10 @@ export function MHFRProvider({ children }: { children: React.ReactNode }) {
     [mhfrRequests],
   );
 
-  const value: MHFRContextValue = { mhfrRequests, hasOpenMHFRRequest, refreshMHFRRequests };
+  const value = useMemo<MHFRContextValue>(
+    () => ({ mhfrRequests, hasOpenMHFRRequest, refreshMHFRRequests }),
+    [mhfrRequests, hasOpenMHFRRequest, refreshMHFRRequests],
+  );
 
   return <MHFRContext.Provider value={value}>{children}</MHFRContext.Provider>;
 }
@@ -51,4 +55,11 @@ export function useMHFR(): MHFRContextValue {
   const ctx = useContext(MHFRContext);
   if (!ctx) throw new Error('useMHFR must be used within MHFRProvider');
   return ctx;
+}
+
+/** Safe-area edges helper: omits 'top' when the MHFR banner is visible */
+export function useSafeEdges(base: ('top' | 'bottom' | 'left' | 'right')[] = ['top']): ('top' | 'bottom' | 'left' | 'right')[] {
+  const ctx = useContext(MHFRContext);
+  const bannerVisible = ctx?.hasOpenMHFRRequest ?? false;
+  return bannerVisible ? base.filter((e) => e !== 'top') : base;
 }

@@ -10,6 +10,7 @@ import { useStateCoordinates } from '../../hooks/useStateCoordinates';
 import { useCachedFetch } from '../../hooks/useCachedFetch';
 import { CACHE_KEYS } from '../../lib/fetchCache';
 import PulseLoader from '../../components/PulseLoader';
+import { logger } from '../../lib/logger';
 
 export default function GlobalPulseScreen() {
     const [refreshing, setRefreshing] = useState(false);
@@ -27,7 +28,7 @@ export default function GlobalPulseScreen() {
             setGlobalData(countMap);
             hasLoadedOnce.current = true;
         } catch (error) {
-            console.error('[GlobalPulse] Failed to fetch:', error);
+            logger.error('[GlobalPulse] Failed to fetch:', error);
         }
     }, []);
 
@@ -64,15 +65,8 @@ export default function GlobalPulseScreen() {
     if (!hasLoadedOnce.current) return <PulseLoader delay={150} />;
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.container}>
             <View style={styles.page}>
-                <View style={styles.header}>
-                    <Text style={styles.title}>Global Pulse</Text>
-                </View>
-
-                {/* Spacer to match GroupsScreen subHeader height */}
-                <View style={styles.subHeaderSpacer} />
-
                 <View style={styles.gridWrap}>
                     <PulseGrid mode="global" isInteractive={false}>
                         <View style={StyleSheet.absoluteFill}>
@@ -87,7 +81,7 @@ export default function GlobalPulseScreen() {
                 {/* Spacer to match swipeHint on other screens */}
                 <View style={styles.swipeHintSpacer} />
             </View>
-        </SafeAreaView>
+        </View>
     );
 }
 

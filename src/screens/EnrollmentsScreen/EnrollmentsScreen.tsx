@@ -8,10 +8,12 @@ import { RootStackParamList } from '../../types/navigation';
 import { XanoEnrollment } from '../../api';
 import { getEnrollmentCourseName, getEnrollmentCourseDescription } from '../../hooks/useCourses';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
+import { useSafeEdges } from '../../contexts/MHFRContext';
 
-const COURSE_IMAGE = require('../../../assets/Ep - App - Imageryt.webp');
+const COURSE_IMAGE = require('../../../assets/ep-app-imagery.webp');
 
 export default function EnrollmentsScreen() {
+  const safeEdges = useSafeEdges(['top']);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'Enrollments'>>();
   const enrollments = route.params?.enrollments ?? [];
@@ -21,7 +23,7 @@ export default function EnrollmentsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={safeEdges}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <ArrowLeft color={colors.textPrimary} size={22} />

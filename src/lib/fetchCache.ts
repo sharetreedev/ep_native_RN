@@ -1,6 +1,13 @@
+import { AppState } from 'react-native';
+
 const cache = new Map<string, number>();
 
 export const DEFAULT_CACHE_TTL = 45_000; // 45 seconds
+
+// Invalidate all caches when app returns to foreground so screens refetch fresh data
+AppState.addEventListener('change', (state) => {
+  if (state === 'active') cache.clear();
+});
 
 export const CACHE_KEYS = {
   USER: 'user',

@@ -1,4 +1,4 @@
-import { request } from './client';
+import { request, requestMultipart } from './client';
 import type { XanoUser, XanoCourseModules } from './types';
 
 export const user = {
@@ -37,16 +37,19 @@ export const user = {
     phone_number?: string;
     country?: string;
     full_name?: string;
-    profile_pic_uri?: string;
-  }) => {
-    const body: Record<string, unknown> = {};
-    if (fields.first_name) body.first_name = fields.first_name;
-    if (fields.last_name) body.last_name = fields.last_name;
-    if (fields.phone_number) body.phone_number = fields.phone_number;
-    if (fields.country) body.country = fields.country;
-    if (fields.full_name) body.full_name = fields.full_name;
-    if (fields.profile_pic_uri) body.profile_pic = fields.profile_pic_uri;
-    return request<XanoUser>('PATCH', '/user/update/profile', body);
+  }) =>
+    request<XanoUser>('PATCH', '/user/update/profile', fields as Record<string, unknown>),
+
+  updateProfilePic: (profilePicUri: string) => {
+    const formData = new FormData();
+    const ext = profilePicUri.split('.').pop()?.split(';')[0]?.toLowerCase() || 'jpeg';
+    const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+    formData.append('profile_pic', {
+      uri: profilePicUri,
+      type: mime,
+      name: `profile.${ext}`,
+    } as any);
+    return requestMultipart<XanoUser>('POST', '/user/update_profile_pic', formData);
   },
 };
 

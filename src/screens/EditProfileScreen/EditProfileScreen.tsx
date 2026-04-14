@@ -18,16 +18,18 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useUser } from '../../hooks/useUser';
 import { colors, fonts, fontSizes, spacing, borderRadius } from '../../theme';
 import ModalPicker from '../../components/ModalPicker';
-import AvatarDisplay from '../../components/AvatarDisplay';
+import Avatar from '../../components/Avatar';
 import { COUNTRIES } from '../../constants/countries';
+import { useSafeEdges } from '../../contexts/MHFRContext';
 
 // App logo used as profile avatar placeholder
 const appLogo = require('../../../assets/Logo.png');
 
 export default function EditProfileScreen() {
+  const safeEdges = useSafeEdges(['top']);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user, refreshUser } = useAuth();
-  const { updateProfile, isLoading } = useUser();
+  const { updateProfile, updateProfilePic, isLoading } = useUser();
 
   const [firstName, setFirstName] = useState(user?.firstName || '');
   const [lastName, setLastName] = useState(user?.lastName || '');
@@ -35,7 +37,7 @@ export default function EditProfileScreen() {
   const [email] = useState(user?.email || '');
   const [country, setCountry] = useState(user?.country || '');
   const [avatarUri, setAvatarUri] = useState(user?.avatarUrl || '');
-  const [avatarBase64, setAvatarBase64] = useState('');
+  const [avatarFileUri, setAvatarFileUri] = useState('');
   const [countryPickerVisible, setCountryPickerVisible] = useState(false);
 
   const selectedCountryLabel = COUNTRIES.find((c) => c.value === country)?.label || '';
@@ -51,16 +53,10 @@ export default function EditProfileScreen() {
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
-      base64: true,
     });
     if (!result.canceled && result.assets[0]) {
       setAvatarUri(result.assets[0].uri);
-      const b64 = result.assets[0].base64;
-      if (b64) {
-        const ext = result.assets[0].uri.split('.').pop()?.toLowerCase() || 'jpeg';
-        const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
-        setAvatarBase64(`data:${mime};base64,${b64}`);
-      }
+      setAvatarFileUri(result.assets[0].uri);
     }
   }, []);
 
@@ -73,8 +69,10 @@ export default function EditProfileScreen() {
         full_name: fullName,
         phone_number: phone.trim(),
         country: country,
-        profile_pic_uri: avatarBase64 || undefined,
       });
+      if (avatarFileUri) {
+        await updateProfilePic(avatarFileUri);
+      }
       await refreshUser();
       Alert.alert('Success', 'Profile updated successfully.');
       navigation.goBack();
@@ -84,7 +82,7 @@ export default function EditProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={safeEdges}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <ArrowLeft color={colors.textSecondary} size={24} />
@@ -96,11 +94,10 @@ export default function EditProfileScreen() {
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
         <View style={styles.avatarSection}>
           <TouchableOpacity style={styles.avatarWrap} onPress={handlePickImage} activeOpacity={0.7}>
-            <AvatarDisplay
-              imageUrl={avatarUri || null}
+            <Avatar
+              source={avatarUri || null}
               fallbackImage={appLogo}
-              size={96}
-              borderRadius={24}
+              size="2xl"
             />
             <View style={styles.editAvatarButton}>
               <Pencil color={colors.textSecondary} size={14} />

@@ -44,6 +44,7 @@ export interface XanoUser {
   emailVerified?: boolean;
   phoneVerified?: boolean;
   onboarding_complete?: boolean;
+  intro_slides_seen?: boolean;
   running_stats_id?: number | null;
   reminder_frequency?: 'WEEKDAYS' | 'WEEKLY' | 'DAILY' | 'NONE';
   reminder_hour?: number;
@@ -207,6 +208,7 @@ export interface XanoNotification {
   message: string;
   read: boolean;
   delivered?: boolean;
+  requires_action?: boolean;
   payload?: Record<string, unknown>;
 }
 
@@ -356,6 +358,7 @@ export interface XanoTriggerEmotion {
   coordinates_id: number;
   emotion_states_id: number;
   timestamp: number | null;
+  emotionColour?: string;
   emotion_item: XanoEmotionItem | null;
 }
 

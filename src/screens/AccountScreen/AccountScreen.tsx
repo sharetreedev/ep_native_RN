@@ -1,17 +1,24 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Alert, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../types/navigation';
 import { useAuth } from '../../contexts/AuthContext';
+import { useCourses } from '../../hooks/useCourses';
 import { Pencil, Bell, Info, User, ArrowLeft } from 'lucide-react-native';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
-import AvatarDisplay from '../../components/AvatarDisplay';
+import Avatar from '../../components/Avatar';
+import { useSafeEdges } from '../../contexts/MHFRContext';
 
 export default function AccountScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user, logout } = useAuth();
+  const { enrollment, fetchEnrollment } = useCourses();
+  const safeEdges = useSafeEdges(['top']);
+  const courseProgress = enrollment ? (enrollment.progress_percent ?? 0) / 100 : 0;
+
+  useEffect(() => { fetchEnrollment(); }, []);
 
   const displayUser = user ?? { email: 'dylan+2@sharetree.org', id: '1' };
 
@@ -23,7 +30,7 @@ export default function AccountScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={safeEdges}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <ArrowLeft color={colors.textSecondary} size={24} />
@@ -34,14 +41,21 @@ export default function AccountScreen() {
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
         <View style={styles.profileSection}>
-          <AvatarDisplay
-            imageUrl={user?.avatarUrl}
+          <Avatar
+            source={user?.avatarUrl}
+            name={user?.name}
             fallbackIcon={<User color={colors.textOnPrimary} size={48} />}
-            size={96}
-            borderRadius={24}
-            backgroundColor={colors.primary}
+            size="2xl"
+            shadow="md"
+            progress={courseProgress}
+            progressStrokeWidth={3.5}
             style={styles.avatar}
           />
+          {courseProgress > 0 && (
+            <View style={styles.progressPill}>
+              <Text style={styles.progressPillText}>{Math.round(courseProgress * 100)}%</Text>
+            </View>
+          )}
           {user?.name && <Text style={styles.name}>{user.name}</Text>}
           <Text style={styles.email}>{displayUser.email}</Text>
         </View>
@@ -99,12 +113,29 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: 100 },
   profileSection: { alignItems: 'center', marginBottom: 40 },
   avatar: {
-    marginBottom: 16,
+    marginBottom: 6,
     shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+  },
+  progressPill: {
+    backgroundColor: colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 10,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  progressPillText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 12,
+    color: colors.primary,
   },
   name: {
     fontSize: fontSizes['2xl'],
@@ -127,7 +158,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#CDCFD3',
+    borderBottomColor: colors.borderLight,
   },
   menuItemNoBorder: {
     flexDirection: 'row',

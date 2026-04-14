@@ -28,6 +28,7 @@ interface UseGroupsResult {
     phone_numbers?: string[];
   }) => Promise<XanoGroup | null>;
   getForestMap: (groupId?: number) => Promise<XanoForestMapEntry[] | null>;
+  getGroupById: (groupId: number) => Promise<any>;
   getMembers: (groupId: number) => Promise<{ id: number; reqStatus: string; role: string; admin: string; sinceOnDate: number | null; user: { fullName: string; profilePic_url: string } | null }[] | null>;
   getGroupRunningStats: (groupRunningStatsId: number) => Promise<XanoRunningStats | null>;
   updateGroupName: (groupsId: number, groupName: string) => Promise<Record<string, unknown> | null>;
@@ -35,8 +36,13 @@ interface UseGroupsResult {
   updateBanner: (groupsId: number, banner: { uri: string; name: string; type: string }) => Promise<Record<string, unknown> | null>;
 }
 
+/**
+ * Composite hook that aggregates `useGroupData`, `useGroupInvites`, and
+ * `useGroupProfile` into a single surface for screens that need to show,
+ * mutate, and invite members to groups.
+ */
 export function useGroups(): UseGroupsResult {
-  const { activeGroups, invites, isLoading, error, fetchAll, createGroup, acceptInvite, declineInvite, getForestMap, getGroupRunningStats } = useGroupData();
+  const { activeGroups, invites, isLoading, error, fetchAll, createGroup, acceptInvite, declineInvite, getForestMap, getGroupById, getGroupRunningStats } = useGroupData();
   const { inviteViaEmail, inviteUsers } = useGroupInvites();
   const { getMembers, updateGroupName, updateProfilePic, updateBanner } = useGroupProfile();
 
@@ -52,6 +58,7 @@ export function useGroups(): UseGroupsResult {
     inviteViaEmail,
     inviteUsers,
     getForestMap,
+    getGroupById,
     getMembers,
     getGroupRunningStats,
     updateGroupName,

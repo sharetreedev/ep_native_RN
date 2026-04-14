@@ -24,13 +24,16 @@ import CoordinatesGrid from '../../components/visualization/CoordinatesGrid';
 import { useStateCoordinates } from '../../hooks/useStateCoordinates';
 import { useCoordinateMapping } from '../../hooks/useCoordinateMapping';
 import { useEmotionStates } from '../../hooks/useEmotionStates';
+import PairsAvatarOverlay from '../../components/visualization/PairsAvatarOverlay';
+import { CheckInConfirmModal } from '../../components/checkin/CheckInOverlay';
+import { useQuickCheckIn } from '../../hooks/useQuickCheckIn';
 import { colors, pillTabStyles } from '../../theme';
 import GroupOutlookTab from './components/GroupOutlookTab';
 import GroupMembersTab from './components/GroupMembersTab';
 import GroupAdminModals from './components/GroupAdminModals';
 import { styles } from './styles';
 
-const bannerImage = require('../../../assets/Ep - App - Imageryt.webp');
+const bannerImage = require('../../../assets/ep-app-imagery.webp');
 
 type GroupProfileRouteProp = RouteProp<RootStackParamList, 'GroupProfile'>;
 type GroupProfileNavProp = NativeStackNavigationProp<RootStackParamList, 'GroupProfile'>;
@@ -108,6 +111,10 @@ export default function GroupProfileScreen() {
   }, [pulsePeriod, checkins7day, checkins30day, membersCoordinatesCount]);
 
   const { densityData } = useCoordinateMapping(coordinates, rawCheckinData);
+
+  const { pendingCheckIn, handleCellPress, confirmCheckIn, cancelCheckIn } = useQuickCheckIn(
+    () => (navigation as any).navigate('DailyInsight')
+  );
 
   // Admin actions
   const handleSaveGroupName = async () => {
@@ -230,7 +237,7 @@ export default function GroupProfileScreen() {
               </View>
             )}
           </View>
-          <Text style={styles.displayName}>{groupName}</Text>
+          <Text style={styles.displayName} numberOfLines={1}>{groupName}</Text>
           <View style={styles.tags}>
             {groupRole ? (
               <View style={styles.tag}><Text style={styles.tagText}>{groupRole}</Text></View>
@@ -266,6 +273,11 @@ export default function GroupProfileScreen() {
                   <View style={StyleSheet.absoluteFill}>
                     <CoordinatesGrid visualizationMode="group" densityData={densityData} />
                   </View>
+                  <PairsAvatarOverlay
+                    points={[]}
+                    onUserPress={() => {}}
+                    onCellPress={handleCellPress}
+                  />
                 </PulseGrid>
               </View>
             </View>
@@ -317,6 +329,14 @@ export default function GroupProfileScreen() {
           <ActivityIndicator size="large" color={colors.textOnPrimary} />
           <Text style={styles.savingText}>Saving...</Text>
         </View>
+      )}
+
+      {pendingCheckIn && (
+        <CheckInConfirmModal
+          emotion={pendingCheckIn.emotion}
+          onConfirm={confirmCheckIn}
+          onCancel={cancelCheckIn}
+        />
       )}
     </View>
   );

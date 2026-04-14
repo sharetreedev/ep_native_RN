@@ -49,6 +49,14 @@ function mergeWithFallback(apiData: XanoEmotionState[]): MappedEmotion[] {
     });
 }
 
+/**
+ * Fetches the Xano `emotion_states` catalogue and merges it with the static
+ * `EMOTIONS` grid constants so each emotion carries both API metadata
+ * (xanoId, colours) and UI metadata (grid position, quadrant).
+ *
+ * Downstream hooks (`useCheckIns`, `useCoordinateMapping`, etc.) depend on
+ * the returned `MappedEmotion[]` shape.
+ */
 export function useEmotionStates(): UseEmotionStatesResult {
   const [emotionStates, setEmotionStates] = useState<MappedEmotion[]>(() =>
     EMOTIONS.map((e) => ({
@@ -58,7 +66,7 @@ export function useEmotionStates(): UseEmotionStatesResult {
       themeColour: '',
     }))
   );
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
