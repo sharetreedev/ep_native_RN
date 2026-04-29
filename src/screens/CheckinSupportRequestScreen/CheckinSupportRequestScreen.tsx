@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     View,
     Text,
@@ -15,6 +15,7 @@ import { RootStackParamList } from '../../types/navigation';
 import { colors, fonts, fontSizes, spacing, borderRadius } from '../../theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { users, XanoUser, supportRequests as xanoSupportRequests } from '../../api';
+import { invalidate, CACHE_KEYS } from '../../lib/fetchCache';
 import Button from '../../components/Button';
 import { logger } from '../../lib/logger';
 
@@ -27,6 +28,12 @@ type Step =
     | 'notify_mhfr'
     | 'mhfr_confirmed'
     | 'follow_up';
+
+interface NumberViewed {
+    users_id: number | null;
+    support_services_id: number | null;
+    attempted_date: number;
+}
 
 const hotlines = [
     { name: 'Emergency Services', number: '000', description: 'For life-threatening emergencies' },
@@ -46,22 +53,53 @@ function makeCall(phoneNumber: string) {
         .catch((err) => logger.error(err));
 }
 
-/* ─── Contact Card ────────────────────────────────────────────────────────── */
+/* ─── Contact Card with View Number ──────────────────────────────────────── */
 
-function ContactCard({ name, description, number }: { name: string; description: string; number: string }) {
+function ContactCard({
+    name,
+    description,
+    number,
+    onReveal,
+    onCall,
+}: {
+    name: string;
+    description: string;
+    number: string;
+    onReveal?: () => void;
+    onCall?: () => void;
+}) {
+    const [revealed, setRevealed] = useState(false);
+
+    const handleReveal = () => {
+        setRevealed(true);
+        onReveal?.();
+    };
+
+    const handleCall = () => {
+        onCall?.();
+        makeCall(number);
+    };
+
     return (
-        <TouchableOpacity onPress={() => makeCall(number)} style={styles.card} activeOpacity={0.7}>
+        <View style={styles.card}>
             <View style={{ flex: 1 }}>
                 <Text style={styles.cardName}>{name}</Text>
                 <Text style={styles.cardDesc}>{description}</Text>
-                {number ? <Text style={styles.cardNumber}>{number}</Text> : null}
+                {revealed && number ? <Text style={styles.cardNumber}>{number}</Text> : null}
             </View>
             {number ? (
-                <View style={styles.phoneIconWrap}>
-                    <Phone color={colors.primary} size={20} />
-                </View>
+                revealed ? (
+                    <TouchableOpacity onPress={handleCall} style={styles.phoneIconWrap} activeOpacity={0.7}>
+                        <Phone color={colors.primary} size={20} />
+                    </TouchableOpacity>
+                ) : (
+                    <TouchableOpacity onPress={handleReveal} style={styles.viewNumberButton} activeOpacity={0.7}>
+                        <Phone color="#FFFFFF" size={14} />
+                        <Text style={styles.viewNumberText}>View Number</Text>
+                    </TouchableOpacity>
+                )
             ) : null}
-        </TouchableOpacity>
+        </View>
     );
 }
 
@@ -69,12 +107,48 @@ function ContactCard({ name, description, number }: { name: string; description:
 
 export default function CheckinSupportRequestScreen({ route, navigation }: Props) {
     const { emotionName, supportRequestId } = route.params;
-    const { user } = useAuth();
+    const { user, refreshUser } = useAuth();
     const firstName = user?.firstName || 'there';
 
     const [step, setStep] = useState<Step>('invitation');
     const [mhfrContacts, setMhfrContacts] = useState<XanoUser[]>([]);
     const [loadingMhfr, setLoadingMhfr] = useState(true);
+
+    // Track numbers viewed during this session
+    const numbersViewedRef = useRef<NumberViewed[]>([]);
+
+    const trackNumberViewed = useCallback((userId: number | null) => {
+        numbersViewedRef.current.push({
+            users_id: userId,
+            support_services_id: null,
+            attempted_date: Date.now(),
+        });
+    }, []);
+
+    // Track contact attempts (calls made)
+    const contactHistoryRef = useRef<{ users_id: number | null; timestamp: number }[]>([]);
+
+    const trackContactAttempt = useCallback((userId: number | null) => {
+        contactHistoryRef.current.push({ users_id: userId, timestamp: Date.now() });
+    }, []);
+
+    // Flush numbers_viewed and contact history to backend
+    const flushTracking = useCallback(async () => {
+        const payload: Record<string, unknown> = {};
+        if (numbersViewedRef.current.length > 0) {
+            payload.numbers_viewed = numbersViewedRef.current;
+        }
+        if (contactHistoryRef.current.length > 0) {
+            payload.Contact_History = contactHistoryRef.current;
+            payload.contact_attempts_count = contactHistoryRef.current.length;
+        }
+        if (Object.keys(payload).length === 0) return;
+        try {
+            await xanoSupportRequests.patch(supportRequestId, payload);
+        } catch (e) {
+            logger.error('Failed to flush support tracking:', e);
+        }
+    }, [supportRequestId]);
 
     const hasMhfr = !loadingMhfr && mhfrContacts.length > 0;
 
@@ -86,6 +160,7 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
     }, []);
 
     const handleNotifyMhfr = useCallback(async () => {
+        await flushTracking();
         try {
             await xanoSupportRequests.patch(supportRequestId, {
                 is_support_requested: true,
@@ -94,7 +169,23 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
             logger.error('Failed to notify MHFR:', e);
         }
         setStep('mhfr_confirmed');
-    }, [supportRequestId]);
+    }, [supportRequestId, flushTracking]);
+
+    const handleIveBeenSupported = useCallback(async () => {
+        await flushTracking();
+        setStep('log_resolution');
+    }, [flushTracking]);
+
+    // Before returning to the main app, re-fetch the user so last_7_checkins
+    // reflects the check-in that triggered this flow. The `/checkins` create
+    // endpoint updates running_stats (which feeds last_7_checkins) in a
+    // background task on the backend; the refreshUser in CheckInScreen fires
+    // too soon to see it, and without this refresh MyPulseScreen can render
+    // the onboarding progress instead of the chart.
+    const refreshBeforeExit = useCallback(async () => {
+        invalidate(CACHE_KEYS.USER);
+        try { await refreshUser(); } catch {}
+    }, [refreshUser]);
 
     const handleScheduleCircleBack = useCallback(async () => {
         const checkbackTime = Date.now() + 30 * 60 * 1000;
@@ -106,12 +197,14 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
         } catch (e) {
             logger.error('Failed to schedule circle-back:', e);
         }
+        await refreshBeforeExit();
         navigation.replace('DailyInsight');
-    }, [supportRequestId, navigation]);
+    }, [supportRequestId, navigation, refreshBeforeExit]);
 
-    const exitToDailyInsight = useCallback(() => {
+    const exitToDailyInsight = useCallback(async () => {
+        await refreshBeforeExit();
         navigation.replace('DailyInsight');
-    }, [navigation]);
+    }, [navigation, refreshBeforeExit]);
 
     const navigateToSupportCheckIn = useCallback(() => {
         navigation.navigate('CheckIn', {
@@ -120,7 +213,12 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
         });
     }, [navigation, supportRequestId]);
 
-    const pairs = user?.pairs ?? [];
+    const pairs = (user?.pairs ?? []).filter((p: any) => {
+        const otherUser = p.other_user || p._pair_user || p._user;
+        const phone = otherUser?.phoneNumber || p.phoneNumber;
+        const status = p.reqStatus || p.pair_status;
+        return !!phone && status === 'ACCEPTED';
+    });
 
     /* ─── Step Renderers ──────────────────────────────────────────────────── */
 
@@ -132,7 +230,7 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
             </Text>
             <View style={styles.actions}>
                 <Button title="Yes" onPress={() => setStep('support_options')} />
-                <Button title="No, thanks" variant="secondary" onPress={() => setStep('notify_mhfr')} />
+                <Button title="No, thanks" variant="secondary" onPress={() => setStep(hasMhfr ? 'notify_mhfr' : 'follow_up')} />
             </View>
         </View>
     );
@@ -159,6 +257,8 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
                             name={c.fullName || `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim() || 'Contact'}
                             description="MHFR Support"
                             number={c.phoneNumber || ''}
+                            onReveal={() => trackNumberViewed(c.id)}
+                            onCall={() => trackContactAttempt(c.id)}
                         />
                     ))}
                 </View>
@@ -168,7 +268,14 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>EAP Provider</Text>
                 {eapContacts.map((c, i) => (
-                    <ContactCard key={i} name={c.name} description={c.description} number={c.number} />
+                    <ContactCard
+                        key={i}
+                        name={c.name}
+                        description={c.description}
+                        number={c.number}
+                        onReveal={() => trackNumberViewed(null)}
+                        onCall={() => trackContactAttempt(null)}
+                    />
                 ))}
             </View>
 
@@ -178,14 +285,30 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
                 {pairs.length === 0 ? (
                     <Text style={styles.emptyText}>No pairs connected</Text>
                 ) : (
-                    pairs.map((p: any) => (
-                        <ContactCard
-                            key={p.id}
-                            name={p.fullName || `Pair #${p.id}`}
-                            description={p.pairType ?? 'Pair'}
-                            number={p.phoneNumber || ''}
-                        />
-                    ))
+                    pairs.map((p: any) => {
+                        const otherUser = p.other_user || p._pair_user || p._user || {};
+                        const otherUserId = otherUser?.id ?? null;
+                        const name = otherUser.fullName
+                            || [otherUser.firstName, otherUser.lastName].filter(Boolean).join(' ')
+                            || `Pair #${p.id}`;
+                        const phone = otherUser.phoneNumber || p.phoneNumber || '';
+                        const currentUserId = Number(user?.id);
+                        const pairLabel = p.pairType === 'DUAL'
+                            ? 'Trusted Pair'
+                            : p.pairType === 'PULL' && p.requestToId === currentUserId
+                              ? 'Supporting Me'
+                              : p.pairType ?? 'Trusted Pair';
+                        return (
+                            <ContactCard
+                                key={p.id}
+                                name={name}
+                                description={pairLabel}
+                                number={phone}
+                                onReveal={() => trackNumberViewed(otherUserId)}
+                                onCall={() => trackContactAttempt(otherUserId)}
+                            />
+                        );
+                    })
                 )}
             </View>
 
@@ -193,7 +316,14 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Hotlines</Text>
                 {hotlines.map((c, i) => (
-                    <ContactCard key={i} name={c.name} description={c.description} number={c.number} />
+                    <ContactCard
+                        key={i}
+                        name={c.name}
+                        description={c.description}
+                        number={c.number}
+                        onReveal={() => trackNumberViewed(null)}
+                        onCall={() => trackContactAttempt(null)}
+                    />
                 ))}
             </View>
 
@@ -204,7 +334,7 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
                 <Button
                     title="I've been supported"
                     variant="secondary"
-                    onPress={() => setStep('log_resolution')}
+                    onPress={handleIveBeenSupported}
                 />
             </View>
         </ScrollView>
@@ -325,7 +455,7 @@ const styles = StyleSheet.create({
         paddingVertical: spacing.base,
     },
 
-    /* Flat sections (matching EmergencyServicesScreen) */
+    /* Flat sections */
     section: {
         marginBottom: spacing['2xl'],
     },
@@ -372,5 +502,19 @@ const styles = StyleSheet.create({
         backgroundColor: colors.primaryLight,
         padding: spacing.base,
         borderRadius: borderRadius.full,
+    },
+    viewNumberButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: colors.primary,
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: borderRadius.button,
+    },
+    viewNumberText: {
+        fontFamily: fonts.bodySemiBold,
+        fontSize: fontSizes.sm,
+        color: '#FFFFFF',
     },
 });

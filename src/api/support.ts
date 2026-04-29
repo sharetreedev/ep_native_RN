@@ -5,6 +5,10 @@ export const supportRequests = {
   getAll: () =>
     request<XanoSupportRequest[]>('GET', '/support_request/get_all'),
 
+  // Path is intentionally `support_requests` (plural) — confirmed against the
+  // Xano OpenAPI spec for the Mobile Native API group. The singular
+  // `support_request/...` paths below are a separate (older) function group
+  // that wasn't renamed when this endpoint was added.
   getMHFRRequests: (status?: 'OPEN' | 'RESOLVED') =>
     request<XanoSupportRequest[]>('GET', '/support_requests/get_mhfr_requests', status ? { status } : undefined),
 

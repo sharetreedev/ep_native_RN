@@ -48,6 +48,10 @@ interface AvatarProps {
   fill?: boolean;
   /** Additional style on the outermost container. */
   style?: ViewStyle;
+  /** Persistent hex colour for the initials-fallback background. When omitted
+   *  (or when this user has no assigned hex), the avatar falls back to the
+   *  default green gradient. Matches the WeWeb onboarding palette. */
+  hexColour?: string | null;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
@@ -183,6 +187,7 @@ function Avatar({
   borderRadius: borderRadiusOverride,
   fill,
   style,
+  hexColour,
 }: AvatarProps) {
   // Resolve size
   const token = typeof size === 'string' ? SIZE_MAP[size] : null;
@@ -243,7 +248,14 @@ function Avatar({
         </View>
       );
     }
-    // Gradient initials
+    // Initials fallback — solid hex background when assigned, gradient otherwise.
+    if (hexColour) {
+      return (
+        <View style={[styles.fallback, contentSize, { backgroundColor: hexColour }]}>
+          <Text style={[styles.initialsText, { fontSize }]}>{initials}</Text>
+        </View>
+      );
+    }
     return (
       <LinearGradient
         colors={['#91A27D', '#6B7D5A']}

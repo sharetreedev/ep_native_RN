@@ -8,7 +8,7 @@ import { styles } from '../styles';
 
 interface DirectionItem {
   label: string;
-  data: { directionLabel?: string } | undefined;
+  data: { directionLabel?: string; [key: string]: unknown } | undefined | null;
   themeColour: string | undefined;
 }
 

@@ -1,12 +1,10 @@
 import { Emotion, EMOTIONS } from '../constants/emotions';
 
-/** Emotion tile IDs that use light (white) text for contrast on dark backgrounds */
+/** Emotion tile IDs that use light (white) text for contrast on dark backgrounds.
+ *  Background colours themselves come from the API — only text colour is our call. */
 const LIGHT_LABEL_EMOTION_IDS = [
   'enraged',
-  'angry',
   'ecstatic',
-  'excited',
-  'overwhelmed',
   'depressed',
   'blissful',
 ];

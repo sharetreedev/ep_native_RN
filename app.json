@@ -47,10 +47,19 @@
       "expo-font",
       "expo-secure-store",
       "expo-web-browser",
+      "expo-apple-authentication",
       [
         "onesignal-expo-plugin",
         {
           "mode": "production"
+        }
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "project": "react-native",
+          "organization": "sharetree"
         }
       ]
     ]

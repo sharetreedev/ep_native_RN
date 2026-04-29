@@ -16,6 +16,8 @@ export interface OverlayUser {
   pairsId?: number;
   name: string;
   avatarUrl?: string | null;
+  /** Persistent hex colour used for the initials fallback when `avatarUrl` is empty. */
+  hexColour?: string | null;
   isCurrentUser?: boolean;
   /** How stale the user's last check-in is */
   staleness?: StalenessLevel;
@@ -82,6 +84,7 @@ export default function PairsAvatarOverlay({
         <Avatar
           source={user.avatarUrl}
           name={user.name}
+          hexColour={user.hexColour}
           fill
           borderRadius={borderRadius}
           opacity={avatarOpacity}
@@ -242,6 +245,7 @@ export default function PairsAvatarOverlay({
                     <Avatar
                       source={user.avatarUrl}
                       name={user.name}
+                      hexColour={user.hexColour}
                       size="sm"
                       border={isStale ? { width: 2, color: colors.alert } : undefined}
                       style={{ marginRight: 12 }}

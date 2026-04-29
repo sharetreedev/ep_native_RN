@@ -8,9 +8,32 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { CheckInProvider } from './src/contexts/CheckInContext';
+import { CourseProvider } from './src/contexts/CourseContext';
 import { MHFRProvider } from './src/contexts/MHFRContext';
+import { NotificationsProvider } from './src/contexts/NotificationsContext';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { fontAssets } from './src/theme/fonts';
 import { colors } from './src/theme';
+import * as Sentry from '@sentry/react-native';
+
+Sentry.init({
+  dsn: 'https://2660ada112620cc2162f58a8c1472cce@o4511233478819840.ingest.us.sentry.io/4511233481768960',
+
+  // Adds more context data to events (IP address, cookies, user, etc.)
+  // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
+  sendDefaultPii: true,
+
+  // Enable Logs
+  enableLogs: true,
+
+  // Configure Session Replay
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1,
+  integrations: [Sentry.mobileReplayIntegration(), Sentry.feedbackIntegration()],
+
+  // uncomment the line below to enable Spotlight (https://spotlightjs.com)
+  // spotlight: __DEV__,
+});
 
 // Keep splash screen visible while we load fonts
 SplashScreen.preventAutoHideAsync();
@@ -29,7 +52,7 @@ if (Platform.OS !== 'web') {
   }
 }
 
-export default function App() {
+export default Sentry.wrap(function App() {
   const [fontsLoaded] = useFonts(fontAssets);
 
   React.useEffect(() => {
@@ -63,14 +86,20 @@ export default function App() {
   }
 
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <CheckInProvider>
-          <MHFRProvider>
-            <AppNavigator />
-          </MHFRProvider>
-        </CheckInProvider>
-      </AuthProvider>
-    </SafeAreaProvider>
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <CourseProvider>
+            <CheckInProvider>
+              <MHFRProvider>
+                <NotificationsProvider>
+                  <AppNavigator />
+                </NotificationsProvider>
+              </MHFRProvider>
+            </CheckInProvider>
+          </CourseProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
-}
+});

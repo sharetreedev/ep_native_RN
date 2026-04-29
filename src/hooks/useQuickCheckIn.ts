@@ -17,10 +17,10 @@ interface PendingCheckIn {
  * shows a pending state for the confirmation modal, and handles submission.
  */
 export function useQuickCheckIn(onComplete?: () => void) {
-  const { user, refreshUser, _setUser } = useAuth();
+  const { refreshUser, _setUser } = useAuth();
   const { coordinates } = useStateCoordinates();
   const { emotionStates } = useEmotionStates();
-  const { createCheckIn } = useCheckIns(user?.id, emotionStates);
+  const { createCheckIn } = useCheckIns();
   const { markCheckedInToday } = useCheckIn();
 
   const [pendingCheckIn, setPendingCheckIn] = useState<PendingCheckIn | null>(null);
@@ -58,7 +58,7 @@ export function useQuickCheckIn(onComplete?: () => void) {
 
     // Fire API calls in the background
     // Quick check-ins are always initiated by tapping a PulseGrid cell
-    createCheckIn(emotion, coordinateId, undefined, 'grid')
+    createCheckIn(emotion, coordinateId, 'grid')
       .then(() => refreshUser())
       .catch(() => {});
   }, [pendingCheckIn, createCheckIn, markCheckedInToday, _setUser, refreshUser, onComplete]);

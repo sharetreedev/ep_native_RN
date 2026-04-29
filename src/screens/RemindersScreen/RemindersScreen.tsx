@@ -80,7 +80,15 @@ export default function RemindersScreen() {
   const handleSave = async () => {
     try {
       const finalFrequency = isCustom ? frequency : 'NONE';
-      const days = frequency === 'WEEKLY' && isCustom ? [selectedDay] : [];
+      const days = !isCustom
+        ? []
+        : frequency === 'WEEKLY'
+          ? [selectedDay]
+          : frequency === 'WEEKDAYS'
+            ? [1, 2, 3, 4, 5]
+            : frequency === 'DAILY'
+              ? [0, 1, 2, 3, 4, 5, 6]
+              : [];
 
       await updateReminderSettings({
         frequency: finalFrequency,

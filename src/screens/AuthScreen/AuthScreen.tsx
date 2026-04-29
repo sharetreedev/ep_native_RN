@@ -5,6 +5,8 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
 import { RootStackParamList } from '../../types/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { ChevronDown } from 'lucide-react-native';
@@ -39,7 +41,13 @@ export default function AuthScreen() {
     const selectedCountryLabel = COUNTRIES.find((c) => c.value === country)?.label || '';
 
     const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'Auth'>>();
-    const { login, signup, loginWithMicrosoft, isLoading, error } = useAuth();
+    const { login, signup, loginWithMicrosoft, loginWithApple, isLoading, error } = useAuth();
+
+    const [appleAvailable, setAppleAvailable] = useState(false);
+    useEffect(() => {
+        if (Platform.OS !== 'ios') return;
+        AppleAuthentication.isAvailableAsync().then(setAppleAvailable).catch(() => setAppleAvailable(false));
+    }, []);
 
     // Microsoft OAuth PKCE flow
     const redirectUri = AuthSession.makeRedirectUri({ scheme: 'emotionalpulse', path: 'auth' });
@@ -126,6 +134,54 @@ export default function AuthScreen() {
         await promptMsAsync();
     }
 
+    async function handleAppleLogin() {
+        try {
+            // Generate a raw nonce client-side and send its SHA-256 hash to Apple.
+            // The hash is what Apple embeds in the identity token's `nonce` claim.
+            // The backend re-hashes the raw nonce and verifies it matches the claim,
+            // which prevents replay of a stolen identity token.
+            const rawNonce = Crypto.randomUUID();
+            const hashedNonce = await Crypto.digestStringAsync(
+                Crypto.CryptoDigestAlgorithm.SHA256,
+                rawNonce,
+            );
+
+            const credential = await AppleAuthentication.signInAsync({
+                requestedScopes: [
+                    AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+                    AppleAuthentication.AppleAuthenticationScope.EMAIL,
+                ],
+                nonce: hashedNonce,
+            });
+
+            if (!credential.identityToken) {
+                Alert.alert('Apple Login Failed', 'Apple did not return an identity token. Please try again.');
+                return;
+            }
+
+            await loginWithApple({
+                identityToken: credential.identityToken,
+                rawNonce,
+                authorizationCode: credential.authorizationCode,
+                firstName: credential.fullName?.givenName,
+                lastName: credential.fullName?.familyName,
+                email: credential.email,
+                appleUserId: credential.user,
+            });
+        } catch (e: any) {
+            // ERR_REQUEST_CANCELED fires when the user dismisses the Apple sheet —
+            // treat as a silent no-op rather than surfacing an error.
+            if (e?.code === 'ERR_REQUEST_CANCELED') return;
+            if (__DEV__) {
+                const body = e?.body ? JSON.stringify(e.body) : '';
+                const msg = [e?.message, body].filter(Boolean).join('\n\n');
+                Alert.alert('DEBUG: Apple Login', msg || JSON.stringify(e));
+            } else {
+                Alert.alert('Apple Login Failed', 'Something went wrong. Please try again.');
+            }
+        }
+    }
+
     const toggleMode = () => {
         setMode(prev => prev === 'login' ? 'signup' : 'login');
     };
@@ -153,20 +209,22 @@ export default function AuthScreen() {
 
                         {mode === 'signup' && (
                             <>
-                                <TextInput
-                                    style={styles.input}
-                                    onChangeText={setFirstName}
-                                    value={firstName}
-                                    placeholder="First Name"
-                                    placeholderTextColor={colors.textPlaceholder}
-                                />
-                                <TextInput
-                                    style={styles.input}
-                                    onChangeText={setLastName}
-                                    value={lastName}
-                                    placeholder="Last Name"
-                                    placeholderTextColor={colors.textPlaceholder}
-                                />
+                                <View style={styles.nameRow}>
+                                    <TextInput
+                                        style={[styles.input, styles.nameInput]}
+                                        onChangeText={setFirstName}
+                                        value={firstName}
+                                        placeholder="First Name"
+                                        placeholderTextColor={colors.textPlaceholder}
+                                    />
+                                    <TextInput
+                                        style={[styles.input, styles.nameInput, styles.nameInputLast]}
+                                        onChangeText={setLastName}
+                                        value={lastName}
+                                        placeholder="Last Name"
+                                        placeholderTextColor={colors.textPlaceholder}
+                                    />
+                                </View>
                                 <TouchableOpacity
                                     style={styles.countryPicker}
                                     onPress={() => setCountryPickerVisible(true)}
@@ -228,18 +286,34 @@ export default function AuthScreen() {
                         </View>
 
                         <Button
-                            title="Sign in with Microsoft"
+                            title={mode === 'login' ? 'Sign in with Microsoft' : 'Sign up with Microsoft'}
                             onPress={handleMicrosoftLogin}
                             variant="secondary"
                             style={styles.ssoButton}
                         />
 
-                        <Button
-                            title="Sign in via mobile"
-                            onPress={() => navigation.navigate('MobileSignIn')}
-                            variant="secondary"
-                            style={styles.mobileButton}
-                        />
+                        {Platform.OS === 'ios' && appleAvailable && (
+                            <AppleAuthentication.AppleAuthenticationButton
+                                buttonType={
+                                    mode === 'login'
+                                        ? AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
+                                        : AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP
+                                }
+                                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                                cornerRadius={borderRadius.button}
+                                style={styles.appleButton}
+                                onPress={handleAppleLogin}
+                            />
+                        )}
+
+                        {mode === 'login' && (
+                            <Button
+                                title="Sign in via mobile"
+                                onPress={() => navigation.navigate('MobileSignIn')}
+                                variant="secondary"
+                                style={styles.mobileButton}
+                            />
+                        )}
                     </View>
                 </ScrollView>
             </KeyboardAvoidingView>
@@ -336,7 +410,21 @@ const styles = StyleSheet.create({
     ssoButton: {
         marginBottom: spacing.base,
     },
+    appleButton: {
+        height: 48,
+        marginBottom: spacing.base,
+    },
     mobileButton: {
+    },
+    nameRow: {
+        flexDirection: 'row',
+    },
+    nameInput: {
+        flex: 1,
+        marginRight: spacing.sm,
+    },
+    nameInputLast: {
+        marginRight: 0,
     },
     countryPicker: {
         flexDirection: 'row',

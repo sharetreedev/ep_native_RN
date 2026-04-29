@@ -52,7 +52,7 @@ export function CheckInTouchGrid({ coordinates, emotions, selectedId, onSelect }
         for (const [emotionId, coords] of Object.entries(groups)) {
             const emotion = emotionMap[Number(emotionId)];
             if (!emotion) continue;
-            const sorted = [...coords].sort((a, b) => a.id - b.id);
+            const sorted = [...coords].sort((a, b) => (a.order_meta ?? 0) - (b.order_meta ?? 0));
             sorted.forEach((coord, i) => {
                 if (i >= 4) return;
                 const [dr, dc] = subPositions[i];
@@ -76,18 +76,41 @@ export function CheckInTouchGrid({ coordinates, emotions, selectedId, onSelect }
         <View style={gridStyles.touchGrid} pointerEvents="box-none">
             {grid.map((rowCells, rowIdx) => (
                 <View key={rowIdx} style={gridStyles.touchRow}>
-                    {rowCells.map((cell, colIdx) => (
-                        <TouchableOpacity
-                            key={colIdx}
-                            style={[
-                                gridStyles.touchCell,
-                                selectedId != null && cell?.coordinate.id === selectedId && gridStyles.touchCellSelected,
-                            ]}
-                            onPress={cell ? () => handlePress(cell) : undefined}
-                            disabled={!cell}
-                            activeOpacity={0.9}
-                        />
-                    ))}
+                    {rowCells.map((cell, colIdx) => {
+                        if (!cell) {
+                            return (
+                                <TouchableOpacity
+                                    key={colIdx}
+                                    style={gridStyles.touchCell}
+                                    disabled
+                                    accessible={false}
+                                />
+                            );
+                        }
+                        // Map the 8×8 grid back to the 4×4 circumplex so
+                        // VoiceOver users get quadrant context along with
+                        // the specific coordinate name.
+                        const energy = rowIdx <= 3 ? 'high energy' : 'low energy';
+                        const pleasantness = colIdx <= 3 ? 'unpleasant' : 'pleasant';
+                        const coordName = cell.coordinate.coordinateDisplay || cell.emotion.name;
+                        const a11yLabel = `${coordName}, ${cell.emotion.name}, ${energy}, ${pleasantness}`;
+                        const isSelected = selectedId != null && cell.coordinate.id === selectedId;
+                        return (
+                            <TouchableOpacity
+                                key={colIdx}
+                                style={[
+                                    gridStyles.touchCell,
+                                    isSelected && gridStyles.touchCellSelected,
+                                ]}
+                                onPress={() => handlePress(cell)}
+                                activeOpacity={0.9}
+                                accessibilityRole="button"
+                                accessibilityLabel={a11yLabel}
+                                accessibilityHint="Double tap to select this feeling"
+                                accessibilityState={{ selected: isSelected }}
+                            />
+                        );
+                    })}
                 </View>
             ))}
         </View>

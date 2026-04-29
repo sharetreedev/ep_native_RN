@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, LayoutChangeEvent, Animated, TouchableOpacity } from 'react-native';
+import React, { useState, useCallback, useMemo } from 'react';
+import { View, Text, StyleSheet, LayoutChangeEvent, TouchableOpacity } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
 import { Text as SvgText } from 'react-native-svg';
 import MaskedView from '@react-native-masked-view/masked-view';
@@ -49,61 +49,45 @@ export default function LastCheckInCard({ recentEmotion, last7CheckIns = [], onT
   const emotionColour = recentEmotion?.emotionColour ?? colors.primary;
   const themeColour = recentEmotion?.themeColour ?? colors.primary;
 
-  // Shine — gentle brightness pulse on the gradient
-  const shineAnim = useRef(new Animated.Value(0)).current;
-  const [shineLift, setShineLift] = useState(0);
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.delay(3500),
-        Animated.timing(shineAnim, { toValue: 1, duration: 1200, useNativeDriver: false }),
-        // Snap back off-screen so the next sweep starts from the left again
-        // rather than sliding backwards.
-        Animated.timing(shineAnim, { toValue: 0, duration: 0, useNativeDriver: false }),
-      ])
-    );
-    loop.start();
-    const id = shineAnim.addListener(({ value }) => setShineLift(value));
-    return () => { loop.stop(); shineAnim.removeListener(id); };
-  }, [shineAnim]);
-
-  // Shine sweeps as a narrow emotion-coloured band across the theme-coloured
-  // word. rawPos ranges [-0.2, 1.2] so at rest (shineLift=0) and after the
-  // sweep completes the band is clamped off-screen and the word reads as
-  // pure themeColour. Clamping keeps `locations` monotonic and in [0, 1].
-  const rawPos = -0.2 + shineLift * 1.4;
-  const band = 0.18;
-  const shineA = Math.max(0, Math.min(1, rawPos - band));
-  const shineB = Math.max(0, Math.min(1, rawPos));
-  const shineC = Math.max(0, Math.min(1, rawPos + band));
-
   const onChartLayout = useCallback((e: LayoutChangeEvent) => {
     setChartWidth(e.nativeEvent.layout.width);
   }, []);
 
-  const sortedCheckIns = [...(last7CheckIns || [])].sort(
-    (a, b) => a.loggedDateTime - b.loggedDateTime,
+  // Sanitize check-ins: drop any entry with non-finite numeric fields. Bad
+  // values flow through chart-kit into <Circle cx={NaN} /> and crash RNSVG's
+  // RawPropsParser on the new architecture.
+  const sortedCheckIns = useMemo(
+    () =>
+      [...(last7CheckIns || [])]
+        .filter(
+          (c) =>
+            c &&
+            Number.isFinite(c.loggedDateTime) &&
+            Number.isFinite(c.xAxis) &&
+            Number.isFinite(c.yAxis),
+        )
+        .sort((a, b) => a.loggedDateTime - b.loggedDateTime),
+    [last7CheckIns],
   );
 
-  // Use short day labels (e.g. "Mon", "Tue") for x-axis
-  let chartData = {
-    labels: [] as string[],
-    datasets: [
-      { data: [] as number[], color: () => ENERGY_COLOUR, strokeWidth: 2.5 },
-      { data: [] as number[], color: () => PLEASANTNESS_COLOUR, strokeWidth: 2.5 },
-    ],
-  };
-
-  if (sortedCheckIns.length > 0) {
-    chartData.labels = sortedCheckIns.map((c) => formatCheckInDate(c.loggedDateTime));
-    chartData.datasets[0].data = sortedCheckIns.map((c) => c.yAxis);
-    chartData.datasets[1].data = sortedCheckIns.map((c) => c.xAxis);
-  } else {
-    chartData.labels = ['–', '–', '–', '–', '–', '–', '–'];
-    chartData.datasets[0].data = [0, 0, 0, 0, 0, 0, 0];
-    chartData.datasets[1].data = [0, 0, 0, 0, 0, 0, 0];
-  }
+  const chartData = useMemo(() => {
+    if (sortedCheckIns.length === 0) {
+      return {
+        labels: ['–', '–', '–', '–', '–', '–', '–'],
+        datasets: [
+          { data: [0, 0, 0, 0, 0, 0, 0], color: () => ENERGY_COLOUR, strokeWidth: 2.5 },
+          { data: [0, 0, 0, 0, 0, 0, 0], color: () => PLEASANTNESS_COLOUR, strokeWidth: 2.5 },
+        ],
+      };
+    }
+    return {
+      labels: sortedCheckIns.map((c) => formatCheckInDate(c.loggedDateTime)),
+      datasets: [
+        { data: sortedCheckIns.map((c) => Number(c.yAxis)), color: () => ENERGY_COLOUR, strokeWidth: 2.5 },
+        { data: sortedCheckIns.map((c) => Number(c.xAxis)), color: () => PLEASANTNESS_COLOUR, strokeWidth: 2.5 },
+      ],
+    };
+  }, [sortedCheckIns]);
 
   const useBezier = sortedCheckIns.length !== 1;
 
@@ -128,24 +112,7 @@ export default function LastCheckInCard({ recentEmotion, last7CheckIns = [], onT
       {/* ── "I'm feeling, [Gradient Emotion]" ── */}
       <View style={styles.feelingRow}>
         <Text style={styles.feelingLabel}>I'm feeling,</Text>
-        <MaskedView
-          style={styles.emotionMask}
-          maskElement={
-            <Text style={[styles.feelingLabel, styles.emotionText]}>{emotionName}</Text>
-          }
-        >
-          <LinearGradient
-            colors={[themeColour, themeColour, emotionColour, themeColour, themeColour]}
-            locations={[0, shineA, shineB, shineC, 1]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-          >
-            {/* Invisible text sizes the gradient to the rendered text bounds */}
-            <Text style={[styles.feelingLabel, styles.emotionText, styles.emotionSizer]}>
-              {emotionName}
-            </Text>
-          </LinearGradient>
-        </MaskedView>
+        <Text style={[styles.feelingLabel, styles.emotionText, { color: themeColour }]}>{emotionName}</Text>
       </View>
 
       {/* ── Body: onboarding progress or 7-day chart ── */}

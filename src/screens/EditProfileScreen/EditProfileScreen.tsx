@@ -96,7 +96,9 @@ export default function EditProfileScreen() {
           <TouchableOpacity style={styles.avatarWrap} onPress={handlePickImage} activeOpacity={0.7}>
             <Avatar
               source={avatarUri || null}
-              fallbackImage={appLogo}
+              name={user?.name}
+              hexColour={user?.profileHexColour}
+              fallbackImage={user?.name ? undefined : appLogo}
               size="2xl"
             />
             <View style={styles.editAvatarButton}>

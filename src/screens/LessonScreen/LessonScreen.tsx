@@ -199,7 +199,7 @@ export default function LessonScreen() {
           onPress={() => (navigation as any).navigate('Main', { screen: 'MyPulse' })}
           style={styles.skipButton}
         >
-          <Text style={styles.skipText}>Skip</Text>
+          <Text style={styles.skipText}>Exit</Text>
         </TouchableOpacity>
       </View>
 

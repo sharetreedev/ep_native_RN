@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { staticData, XanoStateCoordinate } from '../api';
+import { errorMessage } from '../lib/errorUtils';
 
 interface UseStateCoordinatesResult {
   coordinates: XanoStateCoordinate[];
@@ -28,9 +29,9 @@ export function useStateCoordinates(): UseStateCoordinatesResult {
           );
           setCoordinates(sorted);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!cancelled) {
-          setError(err?.message ?? 'Failed to load state coordinates');
+          setError(errorMessage(err) ?? 'Failed to load state coordinates');
         }
       } finally {
         if (!cancelled) setIsLoading(false);

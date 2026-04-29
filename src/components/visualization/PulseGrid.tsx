@@ -65,12 +65,24 @@ export default function PulseGrid({
     // Overlay data for this emotion: check string id (for mocks) or numeric xanoId (for global pulse)
     const cellData = data?.[emotion.id] || data?.[emotion.xanoId];
 
+    // Screen-reader label. The four quadrants of the grid map to a standard
+    // "circumplex model" of affect — row 0-1 = high energy, 2-3 = low energy;
+    // col 0-1 = unpleasant, 2-3 = pleasant. We announce the emotion name plus
+    // the quadrant so a VoiceOver user has some mental map of where they are.
+    const energy = row <= 1 ? 'high energy' : 'low energy';
+    const pleasantness = col <= 1 ? 'unpleasant' : 'pleasant';
+    const a11yLabel = `${emotion.name}, ${energy}, ${pleasantness}`;
+
     return (
       <Pressable
         key={`${row}-${col}`}
         onPress={() => isInteractive && onEmotionPress?.(emotion)}
         onLongPress={() => isInteractive && onEmotionLongPress?.(emotion)}
         className="flex-1 aspect-square"
+        accessibilityRole={isInteractive ? 'button' : 'image'}
+        accessibilityLabel={a11yLabel}
+        accessibilityHint={isInteractive ? 'Double tap to select, long press for details' : undefined}
+        accessibilityState={{ selected: isSelected, disabled: !isInteractive }}
       >
         <EmotionSquare emotion={emotion} selected={isSelected} />
 

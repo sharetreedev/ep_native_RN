@@ -20,6 +20,11 @@ interface ButtonProps {
     loading?: boolean;
     style?: ViewStyle;
     textStyle?: TextStyle;
+    /** Override the screen-reader label. Defaults to `title`. Use when the
+     *  visible text is an icon-only label or needs a fuller description. */
+    accessibilityLabel?: string;
+    /** Optional hint spoken after the label ("double-tap to submit form"). */
+    accessibilityHint?: string;
 }
 
 export default function Button({
@@ -31,6 +36,8 @@ export default function Button({
     loading = false,
     style,
     textStyle,
+    accessibilityLabel,
+    accessibilityHint,
 }: ButtonProps) {
     // ── Resolve variant styles from theme tokens ──────────────────────────
     const resolveStyles = () => {
@@ -67,6 +74,10 @@ export default function Button({
             onPress={onPress}
             disabled={disabled || loading}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={accessibilityLabel ?? title}
+            accessibilityHint={accessibilityHint}
+            accessibilityState={{ disabled: disabled || loading, busy: loading }}
             style={[
                 variantStyles.container,
                 sizeOverrides.container,

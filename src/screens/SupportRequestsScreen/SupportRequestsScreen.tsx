@@ -14,7 +14,7 @@ import { useNavigation, useFocusEffect, useRoute, RouteProp } from '@react-navig
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ArrowLeft, ChevronRight } from 'lucide-react-native';
 import { formatDistanceToNow } from 'date-fns';
-import { supportRequests, XanoSupportRequest } from '../../api';
+import { XanoSupportRequest } from '../../api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useMHFR, useSafeEdges } from '../../contexts/MHFRContext';
 import { useEmotionStates } from '../../hooks/useEmotionStates';
@@ -22,7 +22,6 @@ import { RootStackParamList } from '../../types/navigation';
 import EmotionBadge from '../../components/EmotionBadge';
 import Avatar from '../../components/Avatar';
 import { colors, fonts, fontSizes, borderRadius, spacing, pillTabStyles } from '../../theme';
-import { logger } from '../../lib/logger';
 
 type MainTab = 'myRequests' | 'mhfr';
 type StatusFilter = 'OPEN' | 'RESOLVED';
@@ -33,7 +32,12 @@ export default function SupportRequestsScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'SupportRequests'>>();
   const { user } = useAuth();
   const { emotionStates } = useEmotionStates();
-  const { mhfrRequests, refreshMHFRRequests } = useMHFR();
+  const {
+    mhfrRequests,
+    ownRequests,
+    refreshMHFRRequests,
+    refreshOwnSupportRequests,
+  } = useMHFR();
 
   // Lookup emotion colour by emotion_states_id
   const emotionColourMap = React.useMemo(() => {
@@ -41,29 +45,19 @@ export default function SupportRequestsScreen() {
     emotionStates.forEach((e) => { if (e.xanoId) map[e.xanoId] = e.emotionColour; });
     return map;
   }, [emotionStates]);
-  const [requests, setRequests] = useState<XanoSupportRequest[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Show the loader only on the very first focus while the context list is
+  // still empty. After we have any data, subsequent focuses refresh in the
+  // background without flashing the spinner.
+  const [hasFetchedOnce, setHasFetchedOnce] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<MainTab>(route.params?.initialTab ?? 'myRequests');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('OPEN');
   const [mhfrStatusFilter, setMhfrStatusFilter] = useState<StatusFilter>('OPEN');
 
-  const fetchRequests = useCallback(async () => {
-    try {
-      const data = await supportRequests.getAll();
-      setRequests(data);
-    } catch (err) {
-      logger.error('Failed to fetch support requests:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
-      fetchRequests();
-    }, [fetchRequests]),
+      refreshOwnSupportRequests().finally(() => setHasFetchedOnce(true));
+    }, [refreshOwnSupportRequests]),
   );
 
   const onRefresh = useCallback(async () => {
@@ -71,12 +65,14 @@ export default function SupportRequestsScreen() {
     if (activeTab === 'mhfr') {
       await refreshMHFRRequests();
     } else {
-      await fetchRequests();
+      await refreshOwnSupportRequests();
     }
     setRefreshing(false);
-  }, [fetchRequests, refreshMHFRRequests, activeTab]);
+  }, [refreshOwnSupportRequests, refreshMHFRRequests, activeTab]);
 
-  const filtered = requests
+  const loading = !hasFetchedOnce && ownRequests.length === 0;
+
+  const filtered = ownRequests
     .filter((r) => r.status === statusFilter)
     .sort((a, b) => (b.logged_Date ?? 0) - (a.logged_Date ?? 0));
 
@@ -112,7 +108,7 @@ export default function SupportRequestsScreen() {
       >
         <View style={styles.cardBody}>
           <View style={styles.mhfrCardLeft}>
-            <Avatar source={user?.avatarUrl} name={user?.name} />
+            <Avatar source={user?.avatarUrl} name={user?.name} hexColour={user?.profileHexColour} />
             <View style={styles.mhfrCardInfo}>
               <Text style={styles.cardTitle}>{formatTimeAgo(item.logged_Date)}</Text>
               <Text style={styles.cardSubtext}>
@@ -273,7 +269,7 @@ export default function SupportRequestsScreen() {
                   >
                     <View style={styles.cardBody}>
                       <View style={styles.mhfrCardLeft}>
-                        <Avatar source={reqUser?.profilePic_url} name={reqUser?.fullName} />
+                        <Avatar source={reqUser?.profilePic_url} name={reqUser?.fullName} hexColour={reqUser?.profile_hex_colour} />
                         <View style={styles.mhfrCardInfo}>
                           <Text style={styles.cardTitle}>{reqUser?.fullName ?? 'Unknown'}</Text>
                           <Text style={styles.cardSubtext}>

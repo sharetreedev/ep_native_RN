@@ -31,7 +31,7 @@ export const auth = {
     request<{ status: string; message: string }>('POST', '/auth/2fa/generateCode', { type }),
 
   verifyCode: (verificationCode: number) =>
-    request<{ verified: string }>('POST', '/auth/2fa/verifyCode', { verificationCode }),
+    request<{ verified: boolean | string }>('POST', '/auth/2fa/verifyCode', { verificationCode }),
 
   signInWithMobile: (phone: string, country_iso: string) =>
     request<{ status: string; message: string; user_id: string }>(
@@ -51,5 +51,18 @@ export const auth = {
   }) =>
     request<{ authToken: string }>(
       'POST', '/auth/microsoft/callback', params as Record<string, unknown>,
+    ),
+
+  appleCallback: (params: {
+    identity_token: string;
+    raw_nonce: string;
+    authorization_code?: string;
+    first_name?: string;
+    last_name?: string;
+    email?: string;
+    apple_user_id?: string;
+  }) =>
+    request<{ authToken: string }>(
+      'POST', '/auth/apple/callback', params as Record<string, unknown>,
     ),
 };

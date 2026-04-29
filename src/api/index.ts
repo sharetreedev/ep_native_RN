@@ -1,5 +1,5 @@
 // Barrel re-export for all API modules
-export { tokenStore, XanoError } from './client';
+export { tokenStore, XanoError, setOnAuthExpired } from './client';
 export { auth } from './auth';
 export { checkIns } from './checkins';
 export { courses } from './courses';
@@ -19,10 +19,8 @@ export type {
   XanoLast7CheckIn,
   XanoUser,
   XanoAuthResponse,
-  XanoCheckIn,
   XanoTimelineCheckIn,
   XanoCheckInCreateResponse,
-  XanoCheckInsPage,
   XanoGlobalPulse,
   XanoEmotionState,
   XanoStateCoordinate,
@@ -35,6 +33,8 @@ export type {
   XanoPairCheckin,
   XanoNotification,
   XanoNotificationList,
+  XanoDirection,
+  XanoShift,
   XanoRunningStats,
   XanoCourse,
   XanoEnrollmentCourse,

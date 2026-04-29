@@ -1,8 +1,10 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Platform, AppState } from 'react-native';
-import { auth as xanoAuth, tokenStore, XanoError, XanoGroup, XanoUserGroup, XanoPair, XanoRecentCheckInEmotion, XanoLast7CheckIn, groups as xanoGroups, pairs as xanoPairs, onesignal as onesignalApi } from '../api';
+import { auth as xanoAuth, tokenStore, XanoError, XanoGroup, XanoUserGroup, XanoPair, XanoRecentCheckInEmotion, XanoLast7CheckIn, groups as xanoGroups, pairs as xanoPairs, onesignal as onesignalApi, setOnAuthExpired, user as xanoUserApi, runningStats as xanoRunningStats } from '../api';
 import { invalidateAll } from '../lib/fetchCache';
 import { logger } from '../lib/logger';
+import { errorStatus } from '../lib/errorUtils';
+import { pickRandomProfileHex } from '../lib/profileColours';
 
 /** Convert any date string (ISO/UTC or YYYY-MM-DD) to YYYY-MM-DD in the device's local timezone. */
 function toLocalDateString(iso: string): string {
@@ -21,6 +23,10 @@ export interface User {
   firstName?: string;
   lastName?: string;
   avatarUrl?: string;
+  /** Persistent hex colour used as the background for the initials fallback
+   *  when the user has no avatar. Assigned once per user and stored on the
+   *  Xano user row as `profile_hex_colour`. */
+  profileHexColour?: string;
   phoneNumber?: string;
   country?: string;
   emotionState?: {
@@ -60,6 +66,15 @@ interface AuthContextValue extends AuthState {
     country: string;
   }) => Promise<void>;
   loginWithMicrosoft: (code: string, codeVerifier: string, domain?: string, tenantId?: string) => Promise<void>;
+  loginWithApple: (params: {
+    identityToken: string;
+    rawNonce: string;
+    authorizationCode?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+    appleUserId?: string | null;
+  }) => Promise<void>;
   loginWithMobile: (authToken: string) => Promise<void>;
   logout: () => void;
   isLoading: boolean;
@@ -109,6 +124,7 @@ function mapXanoUser(xano: any): User {
     firstName: xano.firstName || undefined,
     lastName: xano.lastName || undefined,
     avatarUrl: (typeof xano.profilePic_url === 'object' ? xano.profilePic_url?.url : xano.profilePic_url) || xano.avatar?.url,
+    profileHexColour: xano.profile_hex_colour || undefined,
     phoneNumber: xano.phoneNumber || undefined,
     country: xano.country || undefined,
     runningStatsId: xano.running_stats_id,
@@ -138,7 +154,63 @@ function mapXanoUser(xano: any): User {
   };
 }
 
-/** Fetch the user's groups, pairs, and resolve isMHFR from their role. */
+function getTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return 'UTC';
+  }
+}
+
+async function syncLastSeen(): Promise<void> {
+  try {
+    await xanoUserApi.updateLastSeen(getTimezone());
+  } catch (e) {
+    logger.warn('[AuthContext] Failed to update last seen:', e);
+  }
+}
+
+/** Assign a persistent fallback hex colour for the initials avatar when the
+ *  user has neither a profile picture nor a previously-assigned hex. Mirrors
+ *  the WeWeb onboarding behaviour so colours are consistent across surfaces.
+ *  Silently no-ops on failure — the in-memory hex is still used for this
+ *  session and the next login will retry. */
+async function ensureProfileHexColour(user: User): Promise<User> {
+  if (user.avatarUrl || user.profileHexColour) return user;
+  const picked = pickRandomProfileHex();
+  try {
+    await xanoUserApi.updateProfile({ profile_hex_colour: picked });
+  } catch (e) {
+    logger.warn('[AuthContext] Failed to persist profile_hex_colour:', e);
+  }
+  return { ...user, profileHexColour: picked };
+}
+
+/** Backfill a running_stats row for users who don't have one (notably Apple
+ *  sign-up users — the Xano Apple callback historically skipped this).
+ *  `running_stats_id` of 0/null/undefined means "no record"; we create one
+ *  and merge the new id onto the user so downstream screens can fetch it.
+ *  Failures are logged and swallowed — My Pulse tolerates a missing id. */
+async function ensureRunningStats(user: User): Promise<User> {
+  if (user.runningStatsId && user.runningStatsId > 0) return user;
+  try {
+    const created = await xanoRunningStats.create();
+    const newId = created?.id;
+    if (!newId) {
+      logger.warn('[AuthContext] running_stats.create returned no id');
+      return user;
+    }
+    return { ...user, runningStatsId: newId };
+  } catch (e) {
+    logger.warn('[AuthContext] Failed to create running_stats:', e);
+    return user;
+  }
+}
+
+/** Fetch the user's groups, pairs, and resolve isMHFR from their role.
+ *  On failure, preserves existing data from the user object rather than overwriting with empty.
+ *  Also assigns a persistent profile hex colour if the user has no avatar and
+ *  no previously-assigned hex (WeWeb parity). */
 async function resolveGroupsPairsAndMHFR(user: User): Promise<User> {
   const updates: Partial<User> = {};
 
@@ -146,22 +218,31 @@ async function resolveGroupsPairsAndMHFR(user: User): Promise<User> {
   try {
     const data = await xanoGroups.getAll();
     const activeGroups = Array.isArray(data.active_groups) ? data.active_groups : [];
+    logger.log('[AuthContext] Groups response:', JSON.stringify({ active: activeGroups.length, isMHFR: activeGroups.some((g: any) => g.forest?.role === 'mhfr support') }));
     updates.groups = activeGroups;
     updates.isMHFR = activeGroups.some((g: any) => g.forest?.role === 'mhfr support');
   } catch (e) {
-    logger.warn('[AuthContext] Failed to fetch groups:', e);
+    logger.warn('[AuthContext] Failed to fetch groups, keeping existing:', e);
+    // Preserve existing data
+    if (user.groups) updates.groups = user.groups;
+    if (user.isMHFR !== undefined) updates.isMHFR = user.isMHFR;
   }
 
   // Fetch pairs
   try {
     const data = await xanoPairs.getAll();
+    logger.log('[AuthContext] Pairs response:', JSON.stringify({ active: data.active?.length ?? 0, invites: data.invites?.length ?? 0 }));
     const activePairs = Array.isArray(data.active) ? data.active : [];
     updates.pairs = activePairs;
   } catch (e) {
-    logger.warn('[AuthContext] Failed to fetch pairs:', e);
+    logger.warn('[AuthContext] Failed to fetch pairs, keeping existing:', e);
+    // Preserve existing data
+    if (user.pairs) updates.pairs = user.pairs;
   }
 
-  return { ...user, ...updates };
+  const merged = { ...user, ...updates };
+  const withHex = await ensureProfileHexColour(merged);
+  return ensureRunningStats(withHex);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -184,9 +265,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const user = await resolveGroupsPairsAndMHFR(mapXanoUser(raw));
         setState({ isAuthenticated: true, user });
         syncOneSignalSubscriptionId(raw);
+        syncLastSeen();
         return true;
-      } catch (e: any) {
-        const status = e?.status ?? e?.statusCode;
+      } catch (e: unknown) {
+        const status = errorStatus(e);
         if (status === 401 || status === 403) {
           await tokenStore.clear();
           return true; // stop retrying — token is invalid
@@ -221,26 +303,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initAuth();
   }, []);
 
+  // Mid-session 401/403: the HTTP client has already cleared the token; we
+  // just need to transition UI state to unauthenticated and flush caches so
+  // the next render drops to the auth screen instead of showing stale data.
+  useEffect(() => {
+    setOnAuthExpired(() => {
+      logger.warn('[AuthContext] Auth expired — forcing logout');
+      invalidateAll();
+      setState({ isAuthenticated: false, user: null });
+      pendingSessionRestore.current = false;
+    });
+    return () => setOnAuthExpired(null);
+  }, []);
+
   // When the app returns to foreground, retry session restore if it failed (e.g. was offline)
   useEffect(() => {
     const subscription = AppState.addEventListener('change', async (nextState) => {
-      if (nextState === 'active' && pendingSessionRestore.current) {
-        try {
-          const token = tokenStore.get();
-          if (token) {
+      if (nextState === 'active') {
+        const token = tokenStore.get();
+        if (token) {
+          syncLastSeen();
+        }
+        if (pendingSessionRestore.current && token) {
+          try {
             const raw = await xanoAuth.me();
             const user = await resolveGroupsPairsAndMHFR(mapXanoUser(raw));
             setState({ isAuthenticated: true, user });
             syncOneSignalSubscriptionId(raw);
             pendingSessionRestore.current = false;
+          } catch (e: unknown) {
+            const status = errorStatus(e);
+            if (status === 401 || status === 403) {
+              await tokenStore.clear();
+              pendingSessionRestore.current = false;
+            }
+            // Otherwise keep retrying on next foreground
           }
-        } catch (e: any) {
-          const status = e?.status ?? e?.statusCode;
-          if (status === 401 || status === 403) {
-            await tokenStore.clear();
-            pendingSessionRestore.current = false;
-          }
-          // Otherwise keep retrying on next foreground
         }
       }
     });
@@ -268,6 +366,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const user = await resolveGroupsPairsAndMHFR(mapXanoUser(raw));
       setState({ isAuthenticated: true, user });
       syncOneSignalSubscriptionId(raw);
+      syncLastSeen();
     } catch (e) {
       const msg = e instanceof XanoError ? e.message : 'Login failed. Please try again.';
       setError(msg);
@@ -294,6 +393,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const user = await resolveGroupsPairsAndMHFR(mapXanoUser(raw));
       setState({ isAuthenticated: true, user });
       syncOneSignalSubscriptionId(raw);
+      syncLastSeen();
     } catch (e) {
       const msg = e instanceof XanoError ? e.message : 'Sign up failed. Please try again.';
       setError(msg);
@@ -326,8 +426,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const user = await resolveGroupsPairsAndMHFR(mapXanoUser(raw));
       setState({ isAuthenticated: true, user });
       syncOneSignalSubscriptionId(raw);
+      syncLastSeen();
     } catch (e) {
       const msg = e instanceof XanoError ? e.message : 'Microsoft login failed. Please try again.';
+      setError(msg);
+      throw e;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loginWithApple = useCallback(async (params: {
+    identityToken: string;
+    rawNonce: string;
+    authorizationCode?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+    appleUserId?: string | null;
+  }) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const appleResult = await xanoAuth.appleCallback({
+        identity_token: params.identityToken,
+        raw_nonce: params.rawNonce,
+        authorization_code: params.authorizationCode ?? undefined,
+        first_name: params.firstName ?? undefined,
+        last_name: params.lastName ?? undefined,
+        email: params.email ?? undefined,
+        apple_user_id: params.appleUserId ?? undefined,
+      });
+      const authToken = typeof appleResult === 'string' ? appleResult : (appleResult as any).authToken;
+      if (!authToken || typeof authToken !== 'string') {
+        if (__DEV__) {
+          throw new Error('Bad token shape. Raw response: ' + JSON.stringify(appleResult).slice(0, 300));
+        }
+        throw new Error('Apple login returned an invalid session. Please try again.');
+      }
+      await tokenStore.set(authToken);
+
+      const raw = await xanoAuth.me();
+      const user = await resolveGroupsPairsAndMHFR(mapXanoUser(raw));
+      setState({ isAuthenticated: true, user });
+      syncOneSignalSubscriptionId(raw);
+      syncLastSeen();
+    } catch (e) {
+      const msg = e instanceof XanoError ? e.message : 'Apple login failed. Please try again.';
       setError(msg);
       throw e;
     } finally {
@@ -344,6 +489,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const user = await resolveGroupsPairsAndMHFR(mapXanoUser(raw));
       setState({ isAuthenticated: true, user });
       syncOneSignalSubscriptionId(raw);
+      syncLastSeen();
     } catch (e) {
       const msg = e instanceof XanoError ? e.message : 'Mobile login failed. Please try again.';
       setError(msg);
@@ -377,6 +523,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login,
       signup,
       loginWithMicrosoft,
+      loginWithApple,
       loginWithMobile,
       logout,
       refreshUser,
@@ -389,6 +536,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login,
       signup,
       loginWithMicrosoft,
+      loginWithApple,
       loginWithMobile,
       logout,
       refreshUser,

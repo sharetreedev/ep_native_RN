@@ -29,7 +29,7 @@ export default function OnboardingScreen() {
   const { markCheckedInToday } = useCheckIn();
   const onboarding = useOnboarding();
   const { emotionStates } = useEmotionStates();
-  const { createCheckIn } = useCheckIns(undefined, emotionStates);
+  const { createCheckIn } = useCheckIns();
   const coursesHook = useCourses();
 
   // Determine starting step based on user state
@@ -100,7 +100,7 @@ export default function OnboardingScreen() {
         text: 'Confirm',
         onPress: async () => {
           try {
-            await createCheckIn(emotion, coordinateId, undefined, checkinView);
+            await createCheckIn(emotion, coordinateId, checkinView);
             markCheckedInToday();
           } catch {
             // Non-fatal

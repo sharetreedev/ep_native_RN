@@ -29,31 +29,7 @@ import RemindersScreen from '../screens/RemindersScreen/RemindersScreen';
 import GroupProfileScreen from '../screens/GroupProfileScreen/GroupProfileScreen';
 import CreateGroupScreen from '../screens/CreateGroupScreen/CreateGroupScreen';
 import GroupInviteScreen from '../screens/GroupInviteScreen/GroupInviteScreen';
-// AIMHFRScreen is lazy-loaded to keep LiveKit / ElevenLabs dependencies out of
-// the startup bundle — those native modules are large and only needed once a
-// user actually opens the AI MHFR flow. See EP-799.
-const LazyAIMHFRScreen = React.lazy(() => import('../screens/AIMHFRScreen/AIMHFRScreen'));
-
-function AIMHFRScreen(props: any) {
-    return (
-        <React.Suspense
-            fallback={
-                <View
-                    style={{
-                        flex: 1,
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        backgroundColor: colors.background,
-                    }}
-                >
-                    <ActivityIndicator size="large" color={colors.primary} />
-                </View>
-            }
-        >
-            <LazyAIMHFRScreen {...props} />
-        </React.Suspense>
-    );
-}
+import AIMHFRScreen from '../screens/AIMHFRScreen/AIMHFRScreen';
 import CourseDetailsScreen from '../screens/CourseDetailsScreen/CourseDetailsScreen';
 import CourseEnrollScreen from '../screens/CourseEnrollScreen/CourseEnrollScreen';
 import EnrollmentsScreen from '../screens/EnrollmentsScreen/EnrollmentsScreen';

@@ -3,6 +3,7 @@ import { View, Text } from 'react-native';
 import { Emotion } from './emotions';
 import { getEmotionLabelContrast } from '../../lib/emotionUtils';
 import { MappedEmotion } from '../../hooks/useEmotionStates';
+import { fonts } from '../../theme';
 
 interface EmotionSquareProps {
     emotion: Emotion | MappedEmotion;
@@ -25,7 +26,8 @@ function EmotionSquare({ emotion, selected }: EmotionSquareProps) {
             {/* Emotion name centred — non-interactive, coordinate Pressables sit above */}
             <View className="absolute inset-0 justify-center items-center" pointerEvents="none">
                 <Text
-                    className={`font-bold text-xs text-center ${getEmotionLabelContrast(emotion.id) === 'light' ? 'text-white' : 'text-gray-900'}`}
+                    style={{ fontFamily: fonts.bodyBold, fontSize: 13 }}
+                    className={`text-center ${getEmotionLabelContrast(emotion.id) === 'light' ? 'text-white' : 'text-gray-900'}`}
                 >
                     {emotion.name.charAt(0).toUpperCase() + emotion.name.slice(1).toLowerCase()}
                 </Text>

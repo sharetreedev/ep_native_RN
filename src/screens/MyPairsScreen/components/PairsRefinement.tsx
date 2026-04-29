@@ -12,6 +12,21 @@ const PAIR_TABS: readonly PairTab[] = ['Trusted', "I'm Supporting", 'Supporting 
 
 const MAX_PAIR_SLOTS = 5;
 
+/** Format "2h ago" / "3 days ago" relative to a reference time. Module-scope
+ *  helper so it isn't reallocated per render. */
+function formatLastCheckIn(lastCheckInDate: string | number | null | undefined, now: number): string {
+    if (!lastCheckInDate) return '';
+    const msAgo = now - new Date(lastCheckInDate).getTime();
+    const minsAgo = Math.floor(msAgo / 60_000);
+    const hoursAgo = Math.floor(msAgo / 3_600_000);
+    const daysAgo = Math.floor(msAgo / 86_400_000);
+    if (minsAgo < 1) return 'Just now';
+    if (minsAgo < 60) return `${minsAgo}m ago`;
+    if (hoursAgo < 24) return `${hoursAgo}h ago`;
+    if (daysAgo === 1) return '1 day ago';
+    return `${daysAgo} days ago`;
+}
+
 interface PairsRefinementProps {
     active: any[];
     currentUser: any;
@@ -46,6 +61,11 @@ function PairsRefinement({
     const filledSlots = trustedPairs.length;
     const emptySlotsCount = activeTab === 'Trusted' ? Math.max(0, MAX_PAIR_SLOTS - filledSlots) : 0;
     const emptySlots = Array(emptySlotsCount).fill(null);
+
+    // Capture `now` once per render so every pair in the .map() formats against
+    // the same instant. Previously `Date.now()` was called per-pair inside the
+    // map, which was harmless but reallocated the formatter closures.
+    const nowMs = Date.now();
 
     return (
         <View style={[styles.page, { height: containerHeight }]}>
@@ -95,6 +115,8 @@ function PairsRefinement({
                                 <View style={styles.listItemLeft}>
                                     <Avatar
                                         source={avatarUrl}
+                                        name={name}
+                                        hexColour={otherUser?.profile_hex_colour}
                                         initials={initial}
                                         size="md"
                                         style={{ marginRight: 12 }}
@@ -111,25 +133,13 @@ function PairsRefinement({
                     // Trusted pair: full details
                     const lastCheckInDate = otherUser?.lastCheckInDate;
                     const daysSinceCheckIn = lastCheckInDate
-                        ? Math.floor((Date.now() - new Date(lastCheckInDate).getTime()) / (1000 * 60 * 60 * 24))
+                        ? Math.floor((nowMs - new Date(lastCheckInDate).getTime()) / 86_400_000)
                         : null;
                     const hasRecentCheckIn = daysSinceCheckIn !== null && daysSinceCheckIn <= 7;
                     const lastEmotion = otherUser?.recent_checkin_emotion
                         || (otherUser?.Display ? { Display: otherUser.Display, emotionColour: otherUser.emotionColour } : null);
 
-                    let lastCheckInLabel = '';
-                    if (lastCheckInDate) {
-                        const msAgo = Date.now() - new Date(lastCheckInDate).getTime();
-                        const minsAgo = Math.floor(msAgo / (1000 * 60));
-                        const hoursAgo = Math.floor(msAgo / (1000 * 60 * 60));
-                        const daysAgo = Math.floor(msAgo / (1000 * 60 * 60 * 24));
-                        if (minsAgo < 1) lastCheckInLabel = 'Just now';
-                        else if (minsAgo < 60) lastCheckInLabel = `${minsAgo}m ago`;
-                        else if (hoursAgo < 24) lastCheckInLabel = `${hoursAgo}h ago`;
-                        else if (daysAgo === 1) lastCheckInLabel = '1 day ago';
-                        else lastCheckInLabel = `${daysAgo} days ago`;
-                    }
-
+                    const lastCheckInLabel = formatLastCheckIn(lastCheckInDate, nowMs);
                     const metaText = lastCheckInLabel
                         ? `${pairTypeLabel} · ${lastCheckInLabel}`
                         : pairTypeLabel;
@@ -143,6 +153,8 @@ function PairsRefinement({
                             <View style={styles.listItemLeft}>
                                 <Avatar
                                     source={avatarUrl}
+                                    name={name}
+                                    hexColour={otherUser?.profile_hex_colour}
                                     initials={initial}
                                     size="md"
                                     style={{ marginRight: 12 }}
@@ -196,7 +208,7 @@ function PairsRefinement({
     );
 }
 
-export default PairsRefinement;
+export default React.memo(PairsRefinement);
 
 const styles = StyleSheet.create({
     page: { flex: 1, paddingHorizontal: 16, paddingBottom: 0 },

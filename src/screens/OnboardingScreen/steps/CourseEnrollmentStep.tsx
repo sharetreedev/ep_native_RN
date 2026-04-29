@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, ScrollView, ActivityIndicator, Image, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Markdown from 'react-native-markdown-display';
 import { colors, fonts, fontSizes, spacing, borderRadius } from '../../../theme';
 import Button from '../../../components/Button';
 import { styles } from '../styles';
@@ -43,7 +44,7 @@ export default function CourseEnrollmentStep({
             <Text style={courseStyles.title}>{courseName}</Text>
 
             {courseDescription ? (
-              <Text style={courseStyles.description}>{courseDescription}</Text>
+              <Markdown style={markdownStyles}>{courseDescription}</Markdown>
             ) : (
               <>
                 <Text style={courseStyles.description}>
@@ -79,17 +80,17 @@ export default function CourseEnrollmentStep({
       </ScrollView>
       <View style={courseStyles.buttons}>
         <Button
-          title="Enroll"
-          onPress={onEnroll}
-          loading={isSubmitting}
-          style={courseStyles.enrollButton}
-        />
-        <Button
           title="Do Later"
           variant="secondary"
           onPress={onSkip}
           loading={isSubmitting}
           style={courseStyles.laterButton}
+        />
+        <Button
+          title="Enroll"
+          onPress={onEnroll}
+          loading={isSubmitting}
+          style={courseStyles.enrollButton}
         />
       </View>
     </SafeAreaView>
@@ -149,5 +150,54 @@ const courseStyles = StyleSheet.create({
   },
   laterButton: {
     flex: 1,
+  },
+});
+
+const markdownStyles = StyleSheet.create({
+  body: {
+    fontFamily: fonts.body,
+    fontSize: fontSizes.md + 2,
+    color: colors.textSecondary,
+    lineHeight: 24,
+  },
+  strong: {
+    fontFamily: fonts.bodySemiBold,
+    color: colors.textPrimary,
+  },
+  em: {
+    fontFamily: fonts.body,
+    fontStyle: 'italic',
+  },
+  paragraph: {
+    marginTop: 0,
+    marginBottom: spacing.md,
+  },
+  bullet_list: {
+    marginBottom: spacing.md,
+  },
+  ordered_list: {
+    marginBottom: spacing.md,
+  },
+  list_item: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  heading1: {
+    fontFamily: fonts.heading,
+    fontSize: fontSizes['2xl'],
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+  },
+  heading2: {
+    fontFamily: fonts.heading,
+    fontSize: fontSizes.xl,
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+  },
+  heading3: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.lg,
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
   },
 });

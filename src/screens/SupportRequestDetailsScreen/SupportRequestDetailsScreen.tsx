@@ -118,7 +118,7 @@ export default function SupportRequestDetailsScreen() {
         {/* ── User card ── */}
         <View style={styles.userCard}>
           <View style={styles.userRow}>
-            <Avatar source={requestUser?.profilePic_url} name={requestUser?.fullName} size="lg" />
+            <Avatar source={requestUser?.profilePic_url} name={requestUser?.fullName} hexColour={requestUser?.profile_hex_colour} size="lg" />
 
             <View style={styles.userInfo}>
               <Text style={styles.userName}>{requestUser?.fullName ?? 'Unknown'}</Text>

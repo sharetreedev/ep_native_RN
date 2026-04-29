@@ -1,8 +1,10 @@
 const path = require("path");
-const { getDefaultConfig } = require("expo/metro-config");
 const { withNativeWind } = require("nativewind/metro");
+const {
+  getSentryExpoConfig
+} = require("@sentry/react-native/metro");
 
-const config = getDefaultConfig(__dirname);
+const config = getSentryExpoConfig(__dirname);
 
 config.transformer.getTransformOptions = async () => ({
   transform: {
@@ -23,12 +25,6 @@ finalConfig.resolver.resolveRequest = (context, moduleName, platform) => {
   ) {
     return {
       filePath: path.resolve(__dirname, "svg-shim.js"),
-      type: "sourceFile",
-    };
-  }
-  if (moduleName === "@livekit/components-react" && platform !== "web") {
-    return {
-      filePath: path.resolve(__dirname, "livekit-components-shim.js"),
       type: "sourceFile",
     };
   }

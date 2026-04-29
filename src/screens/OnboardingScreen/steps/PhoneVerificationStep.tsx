@@ -19,7 +19,7 @@ export default function PhoneVerificationStep({
   const handleCodeComplete = useCallback(
     async (code: string) => {
       const result = await xanoAuth.verifyCode(Number(code));
-      if (result.verified === 'true' || result.verified === '1') {
+      if (result.verified === true || result.verified === 'true' || result.verified === '1') {
         onComplete();
       } else {
         Alert.alert('Invalid Code', 'The code you entered is incorrect. Please try again.');

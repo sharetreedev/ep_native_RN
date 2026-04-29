@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { staticData, XanoEmotionState } from '../api';
 import { EMOTIONS, Emotion } from '../constants/emotions';
+import { errorMessage } from '../lib/errorUtils';
 
 // Map from API order (1-indexed, row-major) to grid row/col
 function mapOrderToRowCol(order: number): { row: number; col: number } {
@@ -66,7 +67,7 @@ export function useEmotionStates(): UseEmotionStatesResult {
       themeColour: '',
     }))
   );
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -77,9 +78,9 @@ export function useEmotionStates(): UseEmotionStatesResult {
         if (!cancelled && data.length > 0) {
           setEmotionStates(mergeWithFallback(data));
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!cancelled) {
-          setError(err?.message ?? 'Failed to load emotion states');
+          setError(errorMessage(err) ?? 'Failed to load emotion states');
         }
       } finally {
         if (!cancelled) setIsLoading(false);

@@ -27,6 +27,7 @@ import { request } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSafeEdges } from '../../contexts/MHFRContext';
 import { logger } from '../../lib/logger';
+import { errorMessage } from '../../lib/errorUtils';
 import ChatMessage from './components/ChatMessage';
 import MessageInput from './components/MessageInput';
 import ConsentModal from './components/ConsentModal';
@@ -280,8 +281,8 @@ function useElevenLabsChat(dynamicVars: { user_name: string; emotion: string }) 
         setStatus('disconnected');
         setIsResponding(false);
       };
-    } catch (e: any) {
-      setError(e.message ?? 'Failed to connect');
+    } catch (e: unknown) {
+      setError(errorMessage(e) ?? 'Failed to connect');
       setStatus('disconnected');
     }
   }, [dynamicVars]);
@@ -361,8 +362,8 @@ export default function AIMHFRScreen() {
     setInputText('');
     try {
       await sendMessage(text);
-    } catch (e: any) {
-      setError(e.message ?? 'Failed to send');
+    } catch (e: unknown) {
+      setError(errorMessage(e) ?? 'Failed to send');
     }
   }, [inputText, sendMessage, setError]);
 

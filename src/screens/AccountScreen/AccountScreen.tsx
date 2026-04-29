@@ -1,12 +1,13 @@
 import React, { useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Alert, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Alert, StyleSheet, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../types/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCourses } from '../../hooks/useCourses';
-import { Pencil, Bell, Info, User, ArrowLeft } from 'lucide-react-native';
+import { useMyPulseVersion } from '../../hooks/useMyPulseVersion';
+import { Pencil, Bell, Info, User, ArrowLeft, Sparkles } from 'lucide-react-native';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
 import Avatar from '../../components/Avatar';
 import { useSafeEdges } from '../../contexts/MHFRContext';
@@ -15,6 +16,7 @@ export default function AccountScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user, logout } = useAuth();
   const { enrollment, fetchEnrollment } = useCourses();
+  const { version: myPulseVersion, setVersion: setMyPulseVersion, loading: myPulseVersionLoading } = useMyPulseVersion();
   const safeEdges = useSafeEdges(['top']);
   const courseProgress = enrollment ? (enrollment.progress_percent ?? 0) / 100 : 0;
 
@@ -44,7 +46,8 @@ export default function AccountScreen() {
           <Avatar
             source={user?.avatarUrl}
             name={user?.name}
-            fallbackIcon={<User color={colors.textOnPrimary} size={48} />}
+            hexColour={user?.profileHexColour}
+            fallbackIcon={user?.name ? undefined : <User color={colors.textOnPrimary} size={48} />}
             size="2xl"
             shadow="md"
             progress={courseProgress}
@@ -76,6 +79,23 @@ export default function AccountScreen() {
             <Bell color={colors.textSecondary} size={20} />
             <Text style={styles.menuItemText}>Reminders</Text>
           </TouchableOpacity>
+        </View>
+
+        <Text style={styles.sectionLabel}>Display</Text>
+        <View style={styles.menu}>
+          <View style={styles.menuItemNoBorder}>
+            <Sparkles color={colors.textSecondary} size={20} />
+            <View style={styles.toggleTextWrap}>
+              <Text style={[styles.menuItemText, styles.toggleTitle]}>Try the new My Pulse</Text>
+              <Text style={styles.toggleSubtext}>Preview the redesigned home screen</Text>
+            </View>
+            <Switch
+              value={myPulseVersion === 'v2'}
+              onValueChange={(next) => setMyPulseVersion(next ? 'v2' : 'v1')}
+              disabled={myPulseVersionLoading}
+              trackColor={{ false: colors.borderLight, true: colors.primary }}
+            />
+          </View>
         </View>
 
         <View style={styles.billingCard}>
@@ -171,6 +191,28 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyMedium,
     fontSize: fontSizes.base,
     color: colors.textPrimary,
+  },
+  sectionLabel: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: fontSizes.sm,
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  toggleTextWrap: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  toggleTitle: {
+    marginLeft: 0,
+  },
+  toggleSubtext: {
+    fontFamily: fonts.body,
+    fontSize: fontSizes.sm,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   billingCard: {
     backgroundColor: colors.surface,

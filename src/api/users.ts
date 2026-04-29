@@ -37,6 +37,7 @@ export const user = {
     phone_number?: string;
     country?: string;
     full_name?: string;
+    profile_hex_colour?: string;
   }) =>
     request<XanoUser>('PATCH', '/user/update/profile', fields as Record<string, unknown>),
 
@@ -54,8 +55,10 @@ export const user = {
 };
 
 export const users = {
-  getTop4Mhfr: () =>
-    request<XanoUser[]>('GET', '/users/get_top_4_mhfr'),
+  getTop4Mhfr: async () => {
+    const data = await request<{ my_mhfr: XanoUser[]; groups?: number[] }>('GET', '/users/get_top_4_mhfr');
+    return data.my_mhfr ?? [];
+  },
 
   searchInGroups: (searchText: string) =>
     request<XanoUser[]>('GET', '/users/search_in_groups', { search_text: searchText }),

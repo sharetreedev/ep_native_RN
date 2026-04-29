@@ -59,6 +59,18 @@ Open the **EP (Dev)** app on your device and scan the QR code from the terminal.
 | Preview build | `test` (default) | `npx eas update --branch preview` |
 | Production | `live` (set in `eas.json`) | `npx eas update --branch production` |
 
+### Security note — dev logs contain passwords
+
+The Xano API client logs every request body via `logger.log` (gated on `__DEV__`). For the email/password login flow this means the plaintext password appears in your Metro / Flipper console during development. It is **never** sent to production logs, crash reporters, or the `/bugs` endpoint.
+
+**What this means for you:**
+
+- Don't share screen recordings, Metro transcripts, or Flipper logs from a dev session without scrubbing them — they may contain credentials you typed while testing.
+- Don't paste raw dev logs into Slack, Linear, or bug reports.
+- If you need to share a trace for debugging, redact `[Xano] Body:` lines that follow a login/signup request.
+
+This is intentional (valuable for debugging auth flows) but worth knowing about when sharing traces.
+
 ### Troubleshooting
 
 - **"Conflicts with existing package"** — The dev build uses a separate package name (`com.sharetree.emotionalpulse.dev`) so it should install alongside production. If it still conflicts, uninstall the old dev build first.

@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import EmotionBadge from '../EmotionBadge';
 import Avatar from '../Avatar';
 import CheckInWithUser from '../CheckInWithUser';
+import PairsEmptyState from '../../screens/MyPairsScreen/components/PairsEmptyState';
 import { XanoPair } from '../../api';
 import { colors, fonts, fontSizes, spacing } from '../../theme';
 import { getDirectionIcon } from '../../utils/getDirectionIcon';
@@ -13,6 +14,7 @@ interface PairsListViewProps {
   currentUserFirstName?: string;
   onPairPress: (userId: string, pairsId: number) => void;
   onSendReminder: (pairsUserId: number, message: string) => Promise<void>;
+  onInvitePress?: () => void;
 }
 
 function formatLastCheckIn(date: string | number | null | undefined): string | null {
@@ -30,19 +32,16 @@ function formatLastCheckIn(date: string | number | null | undefined): string | n
   return `${days} days ago`;
 }
 
-export default function PairsListView({
+function PairsListView({
   pairs,
   currentUserId,
   currentUserFirstName,
   onPairPress,
   onSendReminder,
+  onInvitePress,
 }: PairsListViewProps) {
   if (pairs.length === 0) {
-    return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyText}>No pairs yet</Text>
-      </View>
-    );
+    return <PairsEmptyState onInvitePress={onInvitePress ?? (() => {})} />;
   }
 
   return (
@@ -98,7 +97,7 @@ export default function PairsListView({
             onPress={() => onPairPress(String(otherUserId), pair.id)}
           >
             <View style={styles.itemLeft}>
-              <Avatar source={avatarUrl} name={name} style={{ marginRight: 12 }} />
+              <Avatar source={avatarUrl} name={name} hexColour={otherUser?.profile_hex_colour} style={{ marginRight: 12 }} />
               <View style={styles.nameContainer}>
                 <Text style={styles.name} numberOfLines={1}>{name}</Text>
                 <Text style={styles.meta}>{metaText}</Text>
@@ -189,3 +188,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
+
+export default React.memo(PairsListView);

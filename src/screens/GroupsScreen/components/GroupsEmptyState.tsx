@@ -35,7 +35,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   emptyStateCard: {
-    backgroundColor: 'rgba(145, 162, 125, 0.25)',
     borderRadius: borderRadius.lg,
     paddingVertical: 40,
     paddingHorizontal: 32,
@@ -60,8 +59,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   emptyStateCta: {
-    borderWidth: 1,
-    borderColor: colors.primary,
+    backgroundColor: colors.primary,
     borderRadius: borderRadius.button,
     paddingHorizontal: 24,
     paddingVertical: 12,
@@ -71,6 +69,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyBold,
     fontWeight: '600',
     fontSize: fontSizes.md,
-    color: colors.primary,
+    color: colors.textOnPrimary,
   },
 });

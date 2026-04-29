@@ -74,8 +74,8 @@ export function findBestCoordinate(
   const subCol = emotionFracX >= 0.5 ? 1 : 0;
   const subRow = emotionFracY >= 0.5 ? 1 : 0;
 
-  // Use the same ID-sorted mapping as CheckInTouchGrid: [0,0], [0,1], [1,0], [1,1]
-  const sorted = [...emotionCoords].sort((a, b) => a.id - b.id);
+  // Use the same order_meta-sorted mapping as CheckInTouchGrid: [0,0], [0,1], [1,0], [1,1]
+  const sorted = [...emotionCoords].sort((a, b) => (a.order_meta ?? 0) - (b.order_meta ?? 0));
   const targetIdx = subRow * 2 + subCol;
   return sorted[Math.min(targetIdx, sorted.length - 1)];
 }

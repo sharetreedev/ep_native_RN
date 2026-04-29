@@ -52,6 +52,7 @@ export interface XanoUser {
   timezone?: string;
   country?: string;
   profilePic_url?: string | null;
+  profile_hex_colour?: string | null;
   app_profile_banner_url?: string | null;
   onesignal_subscription_id?: string | null;
   recent_checkin_emotion?: XanoRecentCheckInEmotion | null;
@@ -63,19 +64,22 @@ export interface XanoAuthResponse {
   authToken: string;
 }
 
-export interface XanoCheckIn {
-  id: number;
-  created_at: number;
-  emotion_id: number;
-  coordinate_id: number;
-  related_support_request_id?: number | null;
-  user_id?: number;
-}
-
 export interface XanoTimelineCheckIn {
   user_id: number;
   loggedDate: string;
   dailyInsight: string;
+  coordinate?: {
+    id: number;
+    intensityNumber?: number;
+    coordinateDisplay?: string;
+    orderNumber?: number;
+    order_meta?: number;
+    xAxis?: number;
+    yAxis?: number;
+    needs_attention?: boolean;
+    emotion_states_id?: number;
+    [key: string]: unknown;
+  };
   state: {
     id: number;
     Display: string;
@@ -92,15 +96,6 @@ export interface XanoTimelineCheckIn {
 
 export interface XanoCheckInCreateResponse {
   checkin_id: string;
-}
-
-export interface XanoCheckInsPage {
-  items?: XanoCheckIn[];
-  curPage?: number;
-  nextPage?: number | null;
-  prevPage?: number | null;
-  offset?: number;
-  itemsReceived?: number;
 }
 
 export interface XanoGlobalPulse {
@@ -221,22 +216,137 @@ export interface XanoNotificationList {
   items: XanoNotification[];
 }
 
+export interface XanoDirection {
+  directionLabel?: string;
+  description?: string;
+  direction?: string;
+  shiftLabel?: string;
+  magnitude?: number;
+  significance?: string;
+  previousEmotion?: string;
+  previousEmotionColour?: string;
+  currentEmotion?: string;
+  currentEmotionColour?: string;
+  [key: string]: unknown;
+}
+
+export interface XanoShift {
+  significance?: string;
+  magnitude?: number;
+  [key: string]: unknown;
+}
+
+export type XanoZoneName =
+  | 'Active Flow'
+  | 'Challenged & Agitated'
+  | 'Contemplative & Connected'
+  | 'Loss & Exhaustion';
+
+/**
+ * Snapshot of a single check-in location (current or previous), as returned
+ * inline on /running_stats/{id}. Top-level fields use UK `colour` spelling
+ * and `emotion_name` (snake_case) — distinct from the period objects below
+ * which nest an `emotion_states` object using `emotionColour` / `Display`.
+ */
+export interface XanoCheckinLocation {
+  emotion_name?: string;
+  x?: number;
+  y?: number;
+  timestamp?: number | null;
+  coordinate_id?: number;
+  emotion_states_id?: number;
+  order?: string;
+  intensity?: string;
+  /** Accent color — used for visual elements like the aurora background. */
+  colour?: string;
+  /** Designed-for-readability theme color — use for text rendered over the accent. */
+  themeColour?: string;
+  zone_name?: XanoZoneName;
+}
+
+/**
+ * Aggregated period summary on a running_stats response. Used for w1/w2
+ * (last week / week-before), m1/m2 (last month / month-before), and at
+ * (all-time). The nested `emotion_states` object follows the same shape
+ * as XanoRecentCheckInEmotion (camelCase Display + emotionColour).
+ */
+export interface XanoRunningStatsPeriod {
+  emotion_states_id?: number;
+  emotion_states?: XanoRecentCheckInEmotion;
+  [key: string]: unknown;
+}
+
+export interface XanoCheckInModeEntry {
+  xy?: string;
+  count?: number;
+  emotionText?: string;
+  coordinate_id?: number;
+  emotion_states_id?: number;
+  emotionColour?: string;
+  themeColour?: string;
+  emotion_states?: XanoRecentCheckInEmotion;
+}
+
+export interface XanoRunningStatsRecentCheckIn {
+  emotion_name?: string;
+  x?: number;
+  y?: number;
+  timestamp?: number | null;
+  coordinate_id?: number;
+  emotion_states_id?: number;
+  colour?: string;
+  order?: number;
+  intensity?: number;
+}
+
 export interface XanoRunningStats {
   id: number;
   created_at?: number;
   userID?: number;
   checkInCount?: number;
-  currentCheckInDate?: string;
-  previousCheckInDate?: string;
-  updated_at?: number;
+  currentCheckInDate?: string | null;
+  previousCheckInDate?: string | null;
+  updated_at?: number | null;
   sum_x?: number;
   sum_y?: number;
   daily_insight?: string;
   weekly_insight?: string;
-  direction_t_p?: { directionLabel: string } | null;
-  direction_w1_w2?: { directionLabel: string } | null;
-  direction_m1_m2?: { directionLabel: string } | null;
-  direction_m1_at?: { directionLabel: string } | null;
+  monthly_insight?: string;
+  global_insight?: string;
+  public_insight?: string;
+  checkin_frequency?: number;
+  monthly_checkin_rate?: number;
+  days_since_last_checkin?: number;
+  days_since_last_pulse?: string;
+  weekly_report?: Record<string, unknown> | null;
+  // Period summaries
+  w1?: XanoRunningStatsPeriod | null;
+  w2?: XanoRunningStatsPeriod | null;
+  m1?: XanoRunningStatsPeriod | null;
+  m2?: XanoRunningStatsPeriod | null;
+  at?: XanoRunningStatsPeriod | null;
+  // Direction comparisons between adjacent periods
+  direction_t_p?: XanoDirection | null;
+  direction_w1_w2?: XanoDirection | null;
+  direction_m1_m2?: XanoDirection | null;
+  direction_m1_at?: XanoDirection | null;
+  // Shift magnitude/significance (paired with direction_*)
+  shift_t_p?: XanoShift | null;
+  shift_t_w1?: XanoShift | null;
+  shift_t_m1?: XanoShift | null;
+  shift_t_at?: XanoShift | null;
+  shift_w1_w2?: XanoShift | null;
+  shift_w1_m1?: XanoShift | null;
+  shift_w1_at?: XanoShift | null;
+  shift_m1_m2?: XanoShift | null;
+  shift_m1_at?: XanoShift | null;
+  // Check-in locations (inline on the response)
+  current_checkin_location?: XanoCheckinLocation | null;
+  prev_checkin_location?: XanoCheckinLocation | null;
+  // Mode (most-frequent emotion) tracking
+  checkInMode?: XanoCheckInModeEntry | null;
+  modeCheckInArray?: XanoCheckInModeEntry[];
+  recentCheckIns?: XanoRunningStatsRecentCheckIn[];
 }
 
 export interface XanoCourse {
@@ -388,6 +498,7 @@ export interface XanoSupportRequestUser {
   email: string | null;
   phoneNumber: string;
   profilePic_url: string;
+  profile_hex_colour?: string | null;
 }
 
 export interface XanoSupportRequest {

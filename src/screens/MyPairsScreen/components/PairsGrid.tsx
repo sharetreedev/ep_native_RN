@@ -32,14 +32,17 @@ function PairsGrid({
 }: PairsGridProps) {
     // Build grid overlay data from active pairs.
     // The API may include expanded user/emotion data; map by last check-in state.
-    const pairsGridData: Record<string, { users: { id: string }[] }> = {};
-    active.forEach((pair: any) => {
-        const emotionKey = pair._last_emotion_key || pair.lastEmotionKey;
-        if (emotionKey) {
-            if (!pairsGridData[emotionKey]) pairsGridData[emotionKey] = { users: [] };
-            pairsGridData[emotionKey].users.push({ id: String(pair.id) });
-        }
-    });
+    const pairsGridData = useMemo(() => {
+        const data: Record<string, { users: { id: string }[] }> = {};
+        active.forEach((pair: any) => {
+            const emotionKey = pair._last_emotion_key || pair.lastEmotionKey;
+            if (emotionKey) {
+                if (!data[emotionKey]) data[emotionKey] = { users: [] };
+                data[emotionKey].users.push({ id: String(pair.id) });
+            }
+        });
+        return data;
+    }, [active]);
 
     // Build avatar overlay data at coordinate level.
     const avatarPoints = useMemo(() => {
@@ -82,6 +85,7 @@ function PairsGrid({
                 pairsId: pair.id,
                 name: otherUser.fullName || otherUser.full_name || otherUser.firstName || otherUser.first_name || 'Pair',
                 avatarUrl: otherUser.profilePic_url || otherUser.avatar?.url || null,
+                hexColour: otherUser.profile_hex_colour || null,
                 staleness: getStaleness(otherUser.lastCheckInDate || otherUser.last_check_in_date),
             });
         });
@@ -96,6 +100,7 @@ function PairsGrid({
                     userId: currentUser.id,
                     name: currentUser.name,
                     avatarUrl: currentUser.avatarUrl || null,
+                    hexColour: currentUser.profileHexColour || null,
                     isCurrentUser: true,
                 });
             }

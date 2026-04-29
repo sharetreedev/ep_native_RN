@@ -33,6 +33,5 @@ hands off to the human MHFR flow.
 ## Notable gotchas
 
 - This screen is ~640 lines and is tracked for extraction in **EP-794**. Until then, treat subsections (consent modal, orb, chat) as candidates for their own components.
-- `@livekit/react-native` is imported at the top level today; bundle-size reduction via lazy loading is tracked in **EP-799**.
 - All `[AI] ...` logging goes through `logger` (dev-only). Do not add raw `console.*` calls.
 - The ElevenLabs WebSocket lifecycle is fragile — avoid changing mount order or cleanup without manually testing reconnection.

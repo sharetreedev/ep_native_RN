@@ -22,7 +22,20 @@ export type RootStackParamList = {
     GroupInvite: { groupId: number; groupName?: string };
     CreateGroup: undefined;
     CheckinSupportRequest: { coordinateId: number; emotionName: string; supportRequestId: number };
-    DailyInsight: undefined;
+    DailyInsight: {
+        // Optimistic seed for the timeline view: the just-completed check-in,
+        // injected from CheckInScreen. The Xano timeline endpoint reads from
+        // an aggregate that's populated via a background task on the create
+        // endpoint, so without this the first check-in of the day appears
+        // as "No check in" until the next refetch catches up.
+        justCheckedIn?: {
+            emotionName: string;
+            emotionColour: string;
+            coordinateId: number;
+            intensity?: number;
+            createdAt: string;
+        };
+    } | undefined;
     Lessons: { lesson: XanoNextLesson };
     CourseDetails: { enrollment?: XanoEnrollment } | undefined;
     Enrollments: { enrollments: XanoEnrollment[] };

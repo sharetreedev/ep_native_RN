@@ -28,7 +28,7 @@ export default function GroupMembersTab({ members, membersLoading }: GroupMember
               key={`member-${member.id ?? index}`}
               style={[styles.memberRow, !isLast && styles.memberRowBorder]}
             >
-              <Avatar source={avatarUrl} name={name} style={{ marginRight: 12 }} />
+              <Avatar source={avatarUrl} name={name} hexColour={member.user?.profile_hex_colour} style={{ marginRight: 12 }} />
               <View style={styles.memberInfo}>
                 <Text style={styles.memberName}>{name}</Text>
                 {member.role && (

@@ -1,11 +1,11 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState, useCallback, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { MeshGradientSlider } from '../../components/checkin';
-import { CheckInTouchGrid, CheckInConfirmModal } from '../../components/checkin/CheckInOverlay';
+import { CheckInTouchGrid } from '../../components/checkin/CheckInOverlay';
 import PulseGrid from '../../components/visualization/PulseGrid';
 import { RootStackParamList } from '../../types/navigation';
 import { useSafeEdges } from '../../contexts/MHFRContext';
@@ -17,61 +17,121 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useCheckIn } from '../../contexts/CheckInContext';
 import { supportRequests } from '../../api';
 import PulseLoader from '../../components/PulseLoader';
+import { reportError } from '../../lib/logger';
+import { invalidate, CACHE_KEYS } from '../../lib/fetchCache';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CheckIn'>;
 
 export default function CheckInScreen({ route, navigation }: Props) {
     const isSupportRequest = route.params?.isSupportRequest ?? false;
-    const supportRequestId = route.params?.supportRequestId;
     const { user, refreshUser, _setUser } = useAuth();
     const { markCheckedInToday, hasCheckedInToday } = useCheckIn();
     const { emotionStates } = useEmotionStates();
     const { coordinates } = useStateCoordinates();
     const [viewMode, setViewMode] = useState<'slider' | 'grid'>(user?.preferredCheckinView === 'grid' ? 'grid' : 'slider');
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [selectedCoord, setSelectedCoord] = useState<{ emotion: MappedEmotion; coordinateId: number; needsAttention: boolean } | null>(null);
+    // Synchronous guard against rapid double-taps. `isSubmitting` state only
+    // blocks touches after the next render — a fast second tap can land in
+    // the same frame. The ref is set synchronously and caught at the top of
+    // `handleComplete`, so the second call is dropped before any network
+    // call fires.
+    const inFlightRef = useRef(false);
     const safeEdges = useSafeEdges(['top']);
-    const { createCheckIn } = useCheckIns(undefined, emotionStates);
+    const { createCheckIn } = useCheckIns();
 
     const handleComplete = useCallback(
         async (emotion: MappedEmotion, coordinateId: number, needsAttention?: boolean) => {
+            if (inFlightRef.current) return;
+            inFlightRef.current = true;
             setIsSubmitting(true);
+
+            // Phase 1 — actually log the check-in. If this fails, nothing has
+            // been persisted and we must tell the user clearly.
+            let checkinId: string | null;
             try {
-                const checkinId = await createCheckIn(
+                checkinId = await createCheckIn(
                     emotion,
                     coordinateId,
-                    isSupportRequest ? supportRequestId : undefined,
                     viewMode,
                 );
-                markCheckedInToday();
-                // Immediately update the user's coordinate so overlays reflect the new check-in
-                _setUser((prev) => prev ? { ...prev, recentStateCoordinates: coordinateId } : prev);
-                await refreshUser();
+            } catch (e: unknown) {
+                reportError('CheckIn.create', e);
+                setIsSubmitting(false);
+                Alert.alert(
+                    'Check-in not saved',
+                    'We couldn\'t save your check-in — this can happen on a bad connection. Please try again.',
+                    [{ text: 'OK', onPress: () => navigation.goBack() }],
+                    { cancelable: false },
+                );
+                return;
+            }
+            if (!checkinId) {
+                // Upstream guard in useCheckIns returns null for a missing
+                // coordinate — treat as a failure from the user's perspective.
+                setIsSubmitting(false);
+                Alert.alert(
+                    'Check-in not saved',
+                    'Something went wrong saving your check-in. Please try again.',
+                    [{ text: 'OK', onPress: () => navigation.goBack() }],
+                    { cancelable: false },
+                );
+                return;
+            }
 
-                if (isSupportRequest) {
-                    // Re-checkin from support request flow — return to daily insight
-                    navigation.replace('DailyInsight');
-                    return;
-                }
+            // Phase 2 — the check-in is on the backend. Any failure past this
+            // point is recoverable (stale UI at worst) so we don't show an
+            // error — we just log it and carry on with navigation.
+            markCheckedInToday();
+            _setUser((prev) => prev ? { ...prev, recentStateCoordinates: coordinateId } : prev);
+            refreshUser().catch((e) => reportError('CheckIn.refreshUser', e));
+            // The new check-in invalidates the running-stats snapshot (current
+            // emotion, direction, weekly/monthly aggregates, etc.). Mark the
+            // cache key stale so the next MyPulse focus refetches fresh data
+            // instead of serving up to 45s-old values.
+            invalidate(CACHE_KEYS.RUNNING_STATS);
 
-                if (needsAttention) {
-                    const displayName = emotion.name.charAt(0).toUpperCase() + emotion.name.slice(1).toLowerCase();
-                    // Create a support request linked to this check-in
+            // Optimistic timeline seed for DailyInsight. The Xano timeline
+            // endpoint can lag by ~1s after a create (background task), so we
+            // pass the just-completed check-in inline; DailyInsight merges it
+            // into the timeline view until the server's response includes it.
+            const coordinate = coordinates.find((c) => c.id === coordinateId);
+            const justCheckedIn = {
+                emotionName: emotion.name,
+                emotionColour: emotion.emotionColour,
+                coordinateId,
+                intensity: coordinate?.intensityNumber,
+                createdAt: new Date().toISOString(),
+            };
+
+            if (isSupportRequest) {
+                navigation.replace('DailyInsight', { justCheckedIn });
+                return;
+            }
+
+            if (needsAttention) {
+                const displayName = emotion.name.charAt(0).toUpperCase() + emotion.name.slice(1).toLowerCase();
+                try {
                     const sr = await supportRequests.create(0, Number(checkinId));
                     navigation.replace('CheckinSupportRequest', {
                         coordinateId,
                         emotionName: displayName,
                         supportRequestId: sr.id,
                     });
-                } else {
-                    navigation.replace('DailyInsight');
+                } catch (e: unknown) {
+                    // Support-request create failed but the check-in itself is
+                    // saved. Send the user to DailyInsight so they still see
+                    // their logged entry; they can open a support request
+                    // manually from there.
+                    reportError('CheckIn.createSupportRequest', e);
+                    navigation.replace('DailyInsight', { justCheckedIn });
                 }
-            } catch {
-                // Non-fatal: optimistically navigate even if save fails
-                navigation.replace('DailyInsight');
+            } else if (hasCheckedInToday) {
+                navigation.navigate('Main' as any);
+            } else {
+                navigation.replace('DailyInsight', { justCheckedIn });
             }
         },
-        [navigation, createCheckIn, refreshUser, _setUser, markCheckedInToday, isSupportRequest, supportRequestId, viewMode]
+        [navigation, createCheckIn, refreshUser, _setUser, markCheckedInToday, hasCheckedInToday, isSupportRequest, viewMode, coordinates]
     );
 
     return (
@@ -83,14 +143,20 @@ export default function CheckInScreen({ route, navigation }: Props) {
                         style={styles.backButton}
                         onPress={() => navigation.goBack()}
                         activeOpacity={0.7}
+                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Back"
                     >
                         <ArrowLeft size={22} color={colors.textPrimary} />
                     </TouchableOpacity>
                 )}
-                <View style={styles.tabBar}>
+                <View style={styles.tabBar} accessibilityRole="tablist">
                     <TouchableOpacity
                         onPress={() => setViewMode('slider')}
                         style={[styles.tab, viewMode === 'slider' && styles.activeTab]}
+                        accessibilityRole="tab"
+                        accessibilityLabel="Slider view"
+                        accessibilityState={{ selected: viewMode === 'slider' }}
                     >
                         <Text style={[styles.tabText, viewMode === 'slider' && styles.activeTabText]}>
                             Slider
@@ -99,6 +165,9 @@ export default function CheckInScreen({ route, navigation }: Props) {
                     <TouchableOpacity
                         onPress={() => setViewMode('grid')}
                         style={[styles.tab, viewMode === 'grid' && styles.activeTab]}
+                        accessibilityRole="tab"
+                        accessibilityLabel="Grid view"
+                        accessibilityState={{ selected: viewMode === 'grid' }}
                     >
                         <Text style={[styles.tabText, viewMode === 'grid' && styles.activeTabText]}>
                             Grid
@@ -115,12 +184,12 @@ export default function CheckInScreen({ route, navigation }: Props) {
                             <CheckInTouchGrid
                                 coordinates={coordinates}
                                 emotions={emotionStates}
-                                selectedId={selectedCoord?.coordinateId ?? null}
-                                onSelect={(cell) => setSelectedCoord({
-                                    emotion: cell.emotion,
-                                    coordinateId: cell.coordinate.id,
-                                    needsAttention: !!cell.coordinate.needs_attention,
-                                })}
+                                selectedId={null}
+                                onSelect={(cell) => handleComplete(
+                                    cell.emotion,
+                                    cell.coordinate.id,
+                                    !!cell.coordinate.needs_attention,
+                                )}
                             />
                         </PulseGrid>
                     </View>
@@ -133,18 +202,6 @@ export default function CheckInScreen({ route, navigation }: Props) {
                         onComplete={handleComplete}
                     />
                 </View>
-            )}
-
-            {selectedCoord && (
-                <CheckInConfirmModal
-                    emotion={selectedCoord.emotion}
-                    onConfirm={() => {
-                        const { emotion, coordinateId, needsAttention } = selectedCoord;
-                        setSelectedCoord(null);
-                        handleComplete(emotion, coordinateId, needsAttention);
-                    }}
-                    onCancel={() => setSelectedCoord(null)}
-                />
             )}
 
             {isSubmitting && (

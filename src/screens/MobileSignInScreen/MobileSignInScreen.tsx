@@ -8,6 +8,7 @@ import { auth as xanoAuth } from '../../api';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
 import Button from '../../components/Button';
 import PhoneInput from '../../components/PhoneInput';
+import { errorMessage } from '../../lib/errorUtils';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'MobileSignIn'>;
 
@@ -29,8 +30,8 @@ export default function MobileSignInScreen() {
       const fullPhone = `${countryCode}${phone.replace(/^0+/, '')}`;
       const result = await xanoAuth.signInWithMobile(fullPhone, countryIso);
       navigation.navigate('MobileVerify', { userId: String(result.user_id), phone, countryIso });
-    } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'Failed to send verification code. Please try again.');
+    } catch (e: unknown) {
+      Alert.alert('Error', errorMessage(e) ?? 'Failed to send verification code. Please try again.');
     } finally {
       setLoading(false);
     }

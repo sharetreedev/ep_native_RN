@@ -44,7 +44,7 @@ function renderIcon(name: string, color: string) {
   }
 }
 
-export default function OnboardingProgress({ user, enrollment, onNavigate, onEnrollCourse }: OnboardingProgressProps) {
+function OnboardingProgress({ user, enrollment, onNavigate, onEnrollCourse }: OnboardingProgressProps) {
   const items: OnboardingItemDef[] = useMemo(() => {
     const raw: OnboardingItemDef[] = [
       {
@@ -130,7 +130,9 @@ export default function OnboardingProgress({ user, enrollment, onNavigate, onEnr
               key={item.label}
               style={[
                 styles.card,
-                { backgroundColor: item.completed ? 'rgba(145, 162, 125, 0.25)' : theme.bg, opacity: item.completed ? 0.5 : 1 },
+                item.completed
+                  ? { backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: colors.primary, opacity: 0.5 }
+                  : { backgroundColor: '#FFFFFF' },
               ]}
               onPress={item.onPress}
               activeOpacity={0.7}
@@ -140,7 +142,7 @@ export default function OnboardingProgress({ user, enrollment, onNavigate, onEnr
                   {renderIcon(item.iconName, iconColor)}
                 </View>
                 {item.completed ? (
-                  <CheckCircle2 color={colors.primary} size={18} fill={colors.primaryLight} />
+                  <CheckCircle2 color={colors.primary} size={20} fill={colors.primaryLight} />
                 ) : (
                   <ChevronRight color={iconColor} size={16} />
                 )}
@@ -226,3 +228,5 @@ const styles = StyleSheet.create({
     color: colors.darkForest,
   },
 });
+
+export default React.memo(OnboardingProgress);

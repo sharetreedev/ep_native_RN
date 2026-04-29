@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { View, Text, Animated, StyleSheet } from 'react-native';
 import EmotionBadge from '../EmotionBadge';
 import { XanoTimelineCheckIn } from '../../api';
@@ -11,7 +11,7 @@ interface TimelineViewProps {
 
 interface TimelineRow {
   dateLabel: string;
-  items: { name: string; colour: string; isPleasant: boolean }[];
+  items: { name: string; colour: string; isPleasant: boolean; intensity?: number }[];
 }
 
 /** Convert any date/datetime string to YYYY-MM-DD in the device's local timezone. */
@@ -43,12 +43,15 @@ function buildLast7Days(
     const dayStr = toLocalDateString(d.toISOString());
     const dayLabel = formatDayLabel(d, i);
 
-    const dayCheckIns = checkIns.filter((c) => toLocalDateString(c.loggedDate) === dayStr);
+    const dayCheckIns = checkIns
+      .filter((c) => toLocalDateString(c.loggedDate) === dayStr)
+      .sort((a, b) => new Date(b.loggedDate).getTime() - new Date(a.loggedDate).getTime());
 
     const items = dayCheckIns.map((c) => ({
       name: c.state.Display,
       colour: c.state.emotionColour,
       isPleasant: pleasantSet.has(c.state.Display.toLowerCase()),
+      intensity: c.coordinate?.intensityNumber,
     }));
 
     rows.push({ dateLabel: dayLabel, items });
@@ -56,7 +59,7 @@ function buildLast7Days(
   return rows;
 }
 
-export default function TimelineView({ checkIns }: TimelineViewProps) {
+function TimelineView({ checkIns }: TimelineViewProps) {
   const { emotionStates } = useEmotionStates();
 
   // Build set of pleasant emotion names from grid position (col 2-3 = right side = pleasant)
@@ -68,16 +71,32 @@ export default function TimelineView({ checkIns }: TimelineViewProps) {
     return set;
   }, [emotionStates]);
 
-  const rows = buildLast7Days(checkIns, pleasantSet);
+  // `buildLast7Days` runs 7 × (filter + sort) over check-ins. Memoise so
+  // parent re-renders (e.g. animation tick on DailyInsightScreen) don't
+  // re-scan the timeline on every frame.
+  const rows = useMemo(() => buildLast7Days(checkIns, pleasantSet), [checkIns, pleasantSet]);
+
+  // Build a flat list of all visual rows (date headers + individual check-ins) for animation
+  const flatRows = useMemo(() => {
+    const result: { type: 'date'; dateLabel: string; hasItems: boolean }[] | { type: 'checkin'; item: { name: string; colour: string; isPleasant: boolean; intensity?: number } }[] = [];
+    const out: ({ type: 'date'; dateLabel: string; hasItems: boolean } | { type: 'checkin'; item: { name: string; colour: string; isPleasant: boolean; intensity?: number } })[] = [];
+    for (const row of rows) {
+      out.push({ type: 'date', dateLabel: row.dateLabel, hasItems: row.items.length > 0 });
+      for (const item of row.items) {
+        out.push({ type: 'checkin', item });
+      }
+    }
+    return out;
+  }, [rows]);
 
   // Stagger animation
-  const animValues = useRef(rows.map(() => new Animated.Value(0))).current;
+  const animValues = useRef(flatRows.map(() => new Animated.Value(0))).current;
   const [animKey, setAnimKey] = useState(0);
 
   useEffect(() => {
     animValues.forEach((a) => a.setValue(0));
     Animated.stagger(
-      180,
+      100,
       animValues.map((a) =>
         Animated.timing(a, { toValue: 1, duration: 400, useNativeDriver: true }),
       ),
@@ -93,46 +112,55 @@ export default function TimelineView({ checkIns }: TimelineViewProps) {
         <Text style={styles.columnLabel}>Pleasant</Text>
       </View>
       <View style={styles.timeline}>
-        {rows.map((row, index) => {
+        {flatRows.map((entry, index) => {
           const opacity = animValues[index] ?? new Animated.Value(1);
+
+          if (entry.type === 'date') {
+            return (
+              <Animated.View key={`date-${index}-${animKey}`} style={[styles.dateRow, { opacity }]}>
+                <View style={styles.side} />
+                <View style={styles.dateColumn}>
+                  <View style={styles.dateDot} />
+                  <Text style={styles.dateLabel}>{entry.dateLabel}</Text>
+                </View>
+                <View style={[styles.side, styles.rightSide]}>
+                  {!entry.hasItems && <Text style={styles.noCheckIn}>No check in</Text>}
+                </View>
+              </Animated.View>
+            );
+          }
+
+          const { item } = entry;
           return (
-            <Animated.View key={`${index}-${animKey}`} style={[styles.row, { opacity }]}>
-              {/* Left side badges (unpleasant) — right-aligned toward center */}
+            <Animated.View key={`ci-${index}-${animKey}`} style={[styles.row, { opacity }]}>
+              {/* Left side — unpleasant */}
               <View style={styles.side}>
-                {row.items
-                  .filter((item) => !item.isPleasant)
-                  .map((item, i) => (
-                    <View key={i} style={styles.badgeRight}>
-                      <EmotionBadge
-                        emotionName={item.name}
-                        emotionColour={item.colour}
-                        compact
-                      />
-                    </View>
-                  ))}
+                {!item.isPleasant && (
+                  <View style={styles.badgeRight}>
+                    <EmotionBadge
+                      emotionName={item.name}
+                      emotionColour={item.colour}
+                      intensity={item.intensity}
+                      compact
+                    />
+                  </View>
+                )}
               </View>
 
-              {/* Center date */}
+              {/* Center connector */}
               <View style={styles.dateColumn}>
-                <View style={styles.dateDot} />
-                <Text style={styles.dateLabel}>{row.dateLabel}</Text>
+                <View style={styles.connectorDot} />
               </View>
 
-              {/* Right side badges (pleasant) */}
+              {/* Right side — pleasant */}
               <View style={[styles.side, styles.rightSide]}>
-                {row.items.length === 0 ? (
-                  <Text style={styles.noCheckIn}>No check in</Text>
-                ) : (
-                  row.items
-                    .filter((item) => item.isPleasant)
-                    .map((item, i) => (
-                      <EmotionBadge
-                        key={i}
-                        emotionName={item.name}
-                        emotionColour={item.colour}
-                        compact
-                      />
-                    ))
+                {item.isPleasant && (
+                  <EmotionBadge
+                    emotionName={item.name}
+                    emotionColour={item.colour}
+                    intensity={item.intensity}
+                    compact
+                  />
                 )}
               </View>
             </Animated.View>
@@ -163,11 +191,24 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
     zIndex: -1,
   },
-  row: {
+  dateRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: spacing.lg,
-    minHeight: 40,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+    minHeight: 28,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+    minHeight: 32,
+  },
+  connectorDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
   },
   side: {
     flex: 1,
@@ -223,3 +264,5 @@ const styles = StyleSheet.create({
     width: 80,
   },
 });
+
+export default React.memo(TimelineView);

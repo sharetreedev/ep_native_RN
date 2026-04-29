@@ -4,9 +4,21 @@ import { supportRequests as xanoSupportRequests, XanoSupportRequest } from '../a
 import { logger } from '../lib/logger';
 
 interface MHFRContextValue {
+  /** Support requests where the current user is acting as MHFR (responder). */
   mhfrRequests: XanoSupportRequest[];
+  /** Support requests created by the current user. */
+  ownRequests: XanoSupportRequest[];
+  /** True if any MHFR request is OPEN. */
   hasOpenMHFRRequest: boolean;
+  /** True if any of the user's own requests is OPEN. */
+  hasOpenOwnRequest: boolean;
+  /** True if either MHFR or own requests have something OPEN. Used by the
+   *  MyPulse header dot to reflect everything the user can act on. */
+  hasOpenSupportItem: boolean;
   refreshMHFRRequests: () => Promise<void>;
+  refreshOwnSupportRequests: () => Promise<void>;
+  /** Convenience: refresh both lists in parallel. */
+  refreshAllSupportRequests: () => Promise<void>;
 }
 
 const MHFRContext = createContext<MHFRContextValue | null>(null);
@@ -14,22 +26,15 @@ const MHFRContext = createContext<MHFRContextValue | null>(null);
 export function MHFRProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [mhfrRequests, setMhfrRequests] = useState<XanoSupportRequest[]>([]);
+  const [ownRequests, setOwnRequests] = useState<XanoSupportRequest[]>([]);
 
   const isMHFR = user?.isMHFR ?? false;
 
-  // Fetch MHFR requests when user is an MHFR
-  useEffect(() => {
+  const refreshMHFRRequests = useCallback(async () => {
     if (!isMHFR) {
       setMhfrRequests([]);
       return;
     }
-    xanoSupportRequests.getMHFRRequests()
-      .then(setMhfrRequests)
-      .catch((e) => logger.warn('[MHFRContext] Failed to fetch MHFR requests:', e));
-  }, [isMHFR]);
-
-  const refreshMHFRRequests = useCallback(async () => {
-    if (!isMHFR) return;
     try {
       const data = await xanoSupportRequests.getMHFRRequests();
       setMhfrRequests(data);
@@ -38,14 +43,59 @@ export function MHFRProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isMHFR]);
 
+  const refreshOwnSupportRequests = useCallback(async () => {
+    if (!user) {
+      setOwnRequests([]);
+      return;
+    }
+    try {
+      const data = await xanoSupportRequests.getAll();
+      setOwnRequests(data);
+    } catch (e) {
+      logger.warn('[MHFRContext] Failed to refresh own support requests:', e);
+    }
+  }, [user]);
+
+  const refreshAllSupportRequests = useCallback(async () => {
+    await Promise.all([refreshMHFRRequests(), refreshOwnSupportRequests()]);
+  }, [refreshMHFRRequests, refreshOwnSupportRequests]);
+
+  // Fetch both lists when the user identity changes (login, account switch).
+  useEffect(() => {
+    refreshAllSupportRequests();
+  }, [user?.id, isMHFR]);
+
   const hasOpenMHFRRequest = useMemo(
     () => mhfrRequests.some((r) => r.status === 'OPEN'),
     [mhfrRequests],
   );
+  const hasOpenOwnRequest = useMemo(
+    () => ownRequests.some((r) => r.status === 'OPEN'),
+    [ownRequests],
+  );
+  const hasOpenSupportItem = hasOpenMHFRRequest || hasOpenOwnRequest;
 
   const value = useMemo<MHFRContextValue>(
-    () => ({ mhfrRequests, hasOpenMHFRRequest, refreshMHFRRequests }),
-    [mhfrRequests, hasOpenMHFRRequest, refreshMHFRRequests],
+    () => ({
+      mhfrRequests,
+      ownRequests,
+      hasOpenMHFRRequest,
+      hasOpenOwnRequest,
+      hasOpenSupportItem,
+      refreshMHFRRequests,
+      refreshOwnSupportRequests,
+      refreshAllSupportRequests,
+    }),
+    [
+      mhfrRequests,
+      ownRequests,
+      hasOpenMHFRRequest,
+      hasOpenOwnRequest,
+      hasOpenSupportItem,
+      refreshMHFRRequests,
+      refreshOwnSupportRequests,
+      refreshAllSupportRequests,
+    ],
   );
 
   return <MHFRContext.Provider value={value}>{children}</MHFRContext.Provider>;

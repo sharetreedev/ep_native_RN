@@ -8,6 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
 import Button from '../../components/Button';
 import OTPInput from '../../components/OTPInput';
+import { errorMessage } from '../../lib/errorUtils';
 
 type RouteParams = RouteProp<RootStackParamList, 'MobileVerify'>;
 
@@ -26,8 +27,8 @@ export default function MobileVerifyScreen() {
         } else {
           Alert.alert('Invalid Code', 'The code you entered is incorrect. Please try again.');
         }
-      } catch (e: any) {
-        Alert.alert('Verification Failed', e?.message ?? 'Something went wrong. Please try again.');
+      } catch (e: unknown) {
+        Alert.alert('Verification Failed', errorMessage(e) ?? 'Something went wrong. Please try again.');
       } finally {
         setVerifying(false);
       }

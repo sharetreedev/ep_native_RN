@@ -120,6 +120,16 @@ export const fonts = {
     bodyMedium: 'Manrope_500Medium',
     bodySemiBold: 'Manrope_600SemiBold',
     bodyBold: 'Manrope_700Bold',
+
+    /** Display serif — used for the v2 emotion carousel headlines.
+     *  RN doesn't auto-derive italic glyphs from `fontStyle: 'italic'` for
+     *  custom fonts, so the italic variant is exposed as its own family.
+     *  `display`/`displayItalic` use Playfair Medium (500); the heavier
+     *  semibold variants (600) are also loaded for emphasis. */
+    display: 'PlayfairDisplay_500Medium',
+    displayItalic: 'PlayfairDisplay_500Medium_Italic',
+    displayBold: 'PlayfairDisplay_600SemiBold',
+    displayBoldItalic: 'PlayfairDisplay_600SemiBold_Italic',
 } as const;
 
 export const fontSizes = {

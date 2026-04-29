@@ -13,11 +13,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePairs } from '../../hooks/usePairs';
 import { user as xanoUser, XanoUser, runningStats as xanoRunningStats } from '../../api';
-import { ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft, MoreVertical } from 'lucide-react-native';
 import { RootStackParamList } from '../../types/navigation';
 import CheckInWithUser from '../../components/CheckInWithUser';
 import ProfileTabs from '../../components/ProfileTabs';
 import EmotionBadge from '../../components/EmotionBadge';
+import ConfirmModal from '../../components/ConfirmModal';
+import PairActionsSheet from '../MyPairsScreen/components/PairActionsSheet';
 import PulseGrid from '../../components/visualization/PulseGrid';
 import CoordinatesGrid from '../../components/visualization/CoordinatesGrid';
 import PairsAvatarOverlay, { CoordinateUsers } from '../../components/visualization/PairsAvatarOverlay';
@@ -48,13 +50,16 @@ export default function UserProfileScreen() {
 
   const { user: currentUser } = useAuth();
   const { emotionStates } = useEmotionStates();
-  const { getPairById, isLoading: pairLoading, sendCheckinReminder } = usePairs();
+  const { getPairById, isLoading: pairLoading, sendCheckinReminder, removePair } = usePairs();
   const userId = route.params?.userId;
   const pairsId = route.params?.pairsId;
 
   const [pairData, setPairData] = useState<any>(null);
   const [selfRunningStats, setSelfRunningStats] = useState<any>(null);
-  const { timeline, fetchTimeline } = useCheckIns(currentUser?.id);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmStop, setConfirmStop] = useState(false);
+  const [stopLoading, setStopLoading] = useState(false);
+  const { timeline, fetchTimeline } = useCheckIns();
   const { coordinates } = useStateCoordinates();
 
   // Note: For now we'll assume isPair if userId is provided and not the current user
@@ -77,16 +82,20 @@ export default function UserProfileScreen() {
     }
   }, [isPair, currentUser?.runningStatsId]);
 
-  // Fetch last 7 days of check-ins for the timeline tab
+  // Pull pair user data from other_user in the pairs response
+  const otherUser = pairData?.other_user;
+
+  // Fetch last 7 days of check-ins for the self timeline tab
+  // (pair timeline uses otherUser.running_stats.timeline — the /checkins/get_timeline
+  // endpoint is scoped to the auth'd user and can't fetch a pair's history)
   useEffect(() => {
+    if (isPair) return;
     const end = new Date();
     const start = new Date();
     start.setDate(start.getDate() - 6);
     fetchTimeline(start.toISOString().slice(0, 10), end.toISOString().slice(0, 10));
-  }, [fetchTimeline]);
+  }, [isPair, fetchTimeline]);
 
-  // Pull pair user data from other_user in the pairs response
-  const otherUser = pairData?.other_user;
   const pairDisplayName = otherUser?.fullName || pairData?.invite_email || 'Pair User';
   const pairFirstName = otherUser?.fullName?.split(' ')[0] || pairDisplayName;
   const pairAvatarUrl = otherUser?.profilePic_url || null;
@@ -151,6 +160,7 @@ export default function UserProfileScreen() {
             userId: String(userId),
             name: pairDisplayName,
             avatarUrl: pairAvatarUrl,
+            hexColour: otherUser?.profile_hex_colour || null,
           }],
         });
       }
@@ -168,6 +178,7 @@ export default function UserProfileScreen() {
             userId: currentUser.id,
             name: currentUser.name,
             avatarUrl: currentUser.avatarUrl || null,
+            hexColour: currentUser.profileHexColour || null,
             isCurrentUser: true,
           }],
         });
@@ -196,16 +207,33 @@ export default function UserProfileScreen() {
     // Already on this profile, no-op
   }, []);
 
+  const handleStopSharingPress = useCallback(() => {
+    setMenuOpen(false);
+    setConfirmStop(true);
+  }, []);
+
+  const handleStopSharingConfirm = useCallback(async () => {
+    if (!pairsId) return;
+    setStopLoading(true);
+    try {
+      await removePair(pairsId);
+      setConfirmStop(false);
+      navigation.goBack();
+    } finally {
+      setStopLoading(false);
+    }
+  }, [pairsId, removePair, navigation]);
+
   const { pendingCheckIn, handleCellPress, confirmCheckIn, cancelCheckIn } = useQuickCheckIn(
     () => (navigation as any).navigate('DailyInsight')
   );
 
   // Outlook tab directions array
   const outlookDirections = useMemo(() => [
-    { label: 'Daily', data: directionDaily, themeColour: currentCheckin?.colour },
-    { label: '7 Day', data: directionWeekly, themeColour: runningStats?.w1?.themeColour ?? runningStats?.w1?.emotion_states?.themeColour },
-    { label: '30 Day', data: directionMonthly, themeColour: runningStats?.m1?.themeColour ?? runningStats?.m1?.emotion_states?.themeColour },
-    { label: 'All Time', data: directionAllTime, themeColour: allTimeEmotion?.themeColour },
+    { label: 'Daily', data: directionDaily, shift: runningStats?.shift_t_p, themeColour: currentCheckin?.colour },
+    { label: '7 Day', data: directionWeekly, shift: runningStats?.shift_w1_w2, themeColour: runningStats?.w1?.themeColour ?? runningStats?.w1?.emotion_states?.themeColour },
+    { label: '30 Day', data: directionMonthly, shift: runningStats?.shift_m1_m2, themeColour: runningStats?.m1?.themeColour ?? runningStats?.m1?.emotion_states?.themeColour },
+    { label: 'All Time', data: directionAllTime, shift: runningStats?.shift_m1_at, themeColour: allTimeEmotion?.themeColour },
   ], [directionDaily, directionWeekly, directionMonthly, directionAllTime, currentCheckin, runningStats, allTimeEmotion]);
 
   const renderPulseTab = () => (
@@ -241,9 +269,37 @@ export default function UserProfileScreen() {
     </View>
   );
 
+  // Adapt pair's running_stats.timeline → XanoTimelineCheckIn shape for TimelineView.
+  // The pair response inlines a flat timeline at other_user.running_stats.timeline
+  // with shape { colour, intensity, timestamp, emotion_name }.
+  const pairTimeline = useMemo(() => {
+    if (!isPair) return [];
+    const raw = otherUser?.running_stats?.timeline ?? [];
+    return raw.map((c: any) => {
+      const emotion = emotionStates.find((e) => e.name.toLowerCase() === String(c.emotion_name ?? '').toLowerCase());
+      return {
+        user_id: otherUser?.id,
+        loggedDate: new Date(c.timestamp).toISOString(),
+        dailyInsight: '',
+        coordinate: {
+          id: c.coordinate_id ?? 0,
+          intensityNumber: c.intensity,
+        },
+        state: {
+          id: c.emotion_states_id ?? emotion?.xanoId ?? 0,
+          Display: c.emotion_name ?? emotion?.name ?? '',
+          emotionColour: c.colour ?? emotion?.emotionColour ?? '',
+          themeColour: emotion?.themeColour ?? '',
+          xQuad: 0,
+          yQuad: 0,
+        },
+      };
+    });
+  }, [isPair, otherUser, emotionStates]);
+
   const renderLast7Days = () => (
     <View style={styles.pulseContent}>
-      <TimelineView checkIns={timeline} />
+      <TimelineView checkIns={isPair ? pairTimeline : timeline} />
     </View>
   );
 
@@ -267,7 +323,19 @@ export default function UserProfileScreen() {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.navButton}>
             <ArrowLeft color={colors.textOnPrimary} size={24} />
           </TouchableOpacity>
-          <View style={{ width: 24 }} />
+          {isPair && pairData ? (
+            <TouchableOpacity
+              onPress={() => setMenuOpen(true)}
+              style={styles.navButton}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Pair actions"
+            >
+              <MoreVertical color={colors.textOnPrimary} size={24} />
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: 24 }} />
+          )}
         </View>
 
         <View style={styles.profileHeader}>
@@ -276,13 +344,14 @@ export default function UserProfileScreen() {
             <Avatar
               source={isPair ? pairAvatarUrl : currentUser?.avatarUrl}
               name={isPair ? (otherUser?.fullName || '?') : (currentUser?.name || '?')}
+              hexColour={isPair ? otherUser?.profile_hex_colour : currentUser?.profileHexColour}
               size={AVATAR_SIZE}
               borderRadius={24}
               border={{ width: 4, color: colors.background }}
               shadow="md"
             />
             {currentCheckin?.emotion_name && (
-              <View style={{ marginTop: 8 }}>
+              <View style={{ marginTop: 16 }}>
                 <EmotionBadge
                   emotionName={currentCheckin.emotion_name}
                   emotionColour={currentCheckin.colour || colors.textPlaceholder}
@@ -373,6 +442,24 @@ export default function UserProfileScreen() {
           onCancel={cancelCheckIn}
         />
       )}
+
+      <PairActionsSheet
+        pair={menuOpen ? pairData : null}
+        onClose={() => setMenuOpen(false)}
+        onStopSharing={handleStopSharingPress}
+      />
+
+      <ConfirmModal
+        visible={confirmStop}
+        onClose={() => setConfirmStop(false)}
+        onConfirm={handleStopSharingConfirm}
+        title="Stop Sharing"
+        message={`Are you sure you want to stop sharing your emotional checkins with ${pairFirstName}?`}
+        confirmText="Stop Sharing"
+        cancelText="Cancel"
+        destructive
+        loading={stopLoading}
+      />
     </View>
   );
 }
