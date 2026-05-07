@@ -52,6 +52,14 @@ export const user = {
     } as any);
     return requestMultipart<XanoUser>('POST', '/user/update_profile_pic', formData);
   },
+
+  // EP-949: in-app account deletion (App Store 5.1.1(v) / Google Play User Data).
+  // Hard-deletes identifiers, pseudonymises check-ins / support requests /
+  // AI MHFR transcripts via correlation_id, and records a salted-hash audit
+  // row so legal lookups remain possible. Endpoint defined in Xano as
+  // `query "user/account_deletion"`.
+  deleteAccount: () =>
+    request<{ success: boolean }>('DELETE', '/user/account_deletion'),
 };
 
 export const users = {

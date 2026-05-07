@@ -24,6 +24,7 @@ import InvitePairTypeScreen from '../screens/InvitePairTypeScreen/InvitePairType
 import InvitePairActionsScreen from '../screens/InvitePairActionsScreen/InvitePairActionsScreen';
 import EmotionDetailScreen from '../screens/EmotionDetailScreen/EmotionDetailScreen';
 import AccountScreen from '../screens/AccountScreen/AccountScreen';
+import AccountSettingsScreen from '../screens/AccountSettingsScreen/AccountSettingsScreen';
 import EditProfileScreen from '../screens/EditProfileScreen/EditProfileScreen';
 import RemindersScreen from '../screens/RemindersScreen/RemindersScreen';
 import GroupProfileScreen from '../screens/GroupProfileScreen/GroupProfileScreen';
@@ -37,6 +38,8 @@ import CheckinSupportRequestScreen from '../screens/CheckinSupportRequestScreen/
 import SupportRequestDetailsScreen from '../screens/SupportRequestDetailsScreen/SupportRequestDetailsScreen';
 import RiskAssessmentScreen from '../screens/RiskAssessmentScreen/RiskAssessmentScreen';
 import MHFRBanner from '../components/MHFRBanner';
+import PushPrimer from '../components/PushPrimer';
+import MyPulseV2Promo from '../components/MyPulseV2Promo';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -84,13 +87,19 @@ export default function AppNavigator() {
         >
             <View style={styles.appContainer}>
             {isAuthenticated && !needsOnboarding && <MHFRBanner />}
+            {isAuthenticated && !needsOnboarding && <PushPrimer />}
+            {isAuthenticated && !needsOnboarding && <MyPulseV2Promo />}
             <Stack.Navigator id="RootStack" screenOptions={{ headerShown: false }}>
                 {isAuthenticated ? (
                     needsOnboarding ? (
                         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
                     ) : (
                         <>
-                            <Stack.Screen name="Main" component={TabNavigator} />
+                            <Stack.Screen
+                                name="Main"
+                                component={TabNavigator}
+                                options={{ gestureEnabled: false }}
+                            />
                             <Stack.Screen name="CheckIn" component={CheckInScreen} />
                             <Stack.Screen name="CheckinSupportRequest" component={CheckinSupportRequestScreen} />
                             <Stack.Screen name="DailyInsight" component={DailyInsightScreen} />
@@ -109,6 +118,7 @@ export default function AppNavigator() {
                             <Stack.Screen name="InvitePairActions" component={InvitePairActionsScreen} />
                             <Stack.Screen name="EmotionDetail" component={EmotionDetailScreen} options={{ presentation: 'modal' }} />
                             <Stack.Screen name="Account" component={AccountScreen} />
+                            <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
                             <Stack.Screen name="EditProfile" component={EditProfileScreen} />
                             <Stack.Screen name="Reminders" component={RemindersScreen} />
                             <Stack.Screen name="GroupProfile" component={GroupProfileScreen} />

@@ -51,13 +51,36 @@ export interface XanoUser {
   reminder_min?: number;
   timezone?: string;
   country?: string;
-  profilePic_url?: string | null;
+  profilePic_url?: string | { url?: string } | null;
   profile_hex_colour?: string | null;
   app_profile_banner_url?: string | null;
   onesignal_subscription_id?: string | null;
   recent_checkin_emotion?: XanoRecentCheckInEmotion | null;
   last_7_checkins?: XanoLast7CheckIn[] | null;
-  lastCheckInDate?: string | null;
+  lastCheckInDate?: string | number | null;
+}
+
+/**
+ * The /auth/me response. Wraps XanoUser with the joined relations Xano
+ * inlines on this endpoint (groups, pairs, recent emotion derivation, etc.)
+ * — these are not present on plain XanoUser responses (e.g. /user/view_user).
+ */
+export interface XanoAuthMeResponse extends XanoUser {
+  /** Computed emotion-state shortcut (themeColour + emotionColour). */
+  _emotion_states?: {
+    themeColour?: string;
+    emotionColour?: string;
+  } | null;
+  /** Joined user_group rows; each carries the related group object. */
+  _user_group?: Array<{ groups: XanoGroup }> | null;
+  /** Joined active pair rows for this user. */
+  _pairs?: XanoPair[] | null;
+  /** Most recent state coordinate id (or `{ id }` shape on some endpoints). */
+  recentStateCoordinates?: number | { id: number } | null;
+  /** Last-used check-in entry surface preference. */
+  preferred_checkin_view?: 'slider' | 'grid' | '';
+  /** Legacy avatar shape — preferred field is profilePic_url. */
+  avatar?: { url?: string } | null;
 }
 
 export interface XanoAuthResponse {
@@ -273,6 +296,10 @@ export interface XanoCheckinLocation {
 export interface XanoRunningStatsPeriod {
   emotion_states_id?: number;
   emotion_states?: XanoRecentCheckInEmotion;
+  /** Flat emotion-name shortcut populated on group endpoints. */
+  emotion_name?: string;
+  /** Flat accent colour shortcut populated on group endpoints. */
+  colour?: string;
   [key: string]: unknown;
 }
 
@@ -347,6 +374,44 @@ export interface XanoRunningStats {
   checkInMode?: XanoCheckInModeEntry | null;
   modeCheckInArray?: XanoCheckInModeEntry[];
   recentCheckIns?: XanoRunningStatsRecentCheckIn[];
+}
+
+/**
+ * One row of a coordinate-density tally: how many check-ins landed at a given
+ * state-coordinate. Returned by group endpoints under `members_coordinates_count`,
+ * `checkins_7day`, and `checkins30day`. Both `coordinate_id` and `id` appear
+ * across endpoints — useCoordinateMapping treats either as the lookup key.
+ */
+export interface XanoCoordinateCount {
+  coordinate_id?: number;
+  id?: number;
+  count?: number;
+}
+
+/**
+ * Aggregated period summary on a group's running_stats. Mirrors the user
+ * variant (XanoRunningStatsPeriod) — a `emotion_states_id` plus optional
+ * nested emotion. Group endpoints add `todays_average` / `previous_average`
+ * which the user variant doesn't carry, plus the daily/weekly check-in rate.
+ */
+export interface XanoGroupRunningStats {
+  checkInCount?: number;
+  daily_checkin_percent?: number;
+  weekly_checkin_percent?: number;
+  todays_average?: XanoRunningStatsPeriod | null;
+  previous_average?: XanoRunningStatsPeriod | null;
+  w1?: XanoRunningStatsPeriod | null;
+  w2?: XanoRunningStatsPeriod | null;
+  m1?: XanoRunningStatsPeriod | null;
+  m2?: XanoRunningStatsPeriod | null;
+  at?: XanoRunningStatsPeriod | null;
+  direction_t_p?: XanoDirection | null;
+  direction_w1_w2?: XanoDirection | null;
+  direction_m1_m2?: XanoDirection | null;
+  direction_m1_at?: XanoDirection | null;
+  checkInMode?: XanoCheckInModeEntry | null;
+  checkins_7day?: XanoCoordinateCount[];
+  checkins30day?: XanoCoordinateCount[];
 }
 
 export interface XanoCourse {

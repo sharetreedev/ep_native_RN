@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { TriangleAlert } from 'lucide-react-native';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../theme';
+import { useModalAnnouncement } from '../hooks/useScreenAnnouncement';
 
 interface ConfirmModalProps {
   visible: boolean;
@@ -41,13 +42,18 @@ export default function ConfirmModal({
   icon,
 }: ConfirmModalProps) {
   const confirmColor = destructive ? colors.destructive : colors.primary;
+  useModalAnnouncement(message ? `${title}. ${message}` : title, visible);
 
   if (variant === 'bottom') {
     return (
       <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
         <TouchableOpacity style={styles.overlayBottom} activeOpacity={1} onPress={onClose}>
           <TouchableWithoutFeedback>
-            <View style={styles.sheetCard}>
+            <View
+              style={styles.sheetCard}
+              accessibilityViewIsModal
+              accessibilityLiveRegion="polite"
+            >
               <View style={styles.sheetHandle} />
 
               {icon && <View style={styles.sheetIcon}>{icon}</View>}
@@ -82,7 +88,11 @@ export default function ConfirmModal({
     <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
       <TouchableOpacity style={styles.overlayCenter} activeOpacity={1} onPress={onClose}>
         <TouchableWithoutFeedback>
-          <View style={styles.centerCard}>
+          <View
+            style={styles.centerCard}
+            accessibilityViewIsModal
+            accessibilityLiveRegion="polite"
+          >
             {icon ? (
               <View style={[styles.iconWrap, destructive && styles.iconWrapDestructive]}>
                 {icon}

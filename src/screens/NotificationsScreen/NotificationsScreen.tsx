@@ -9,6 +9,7 @@ import { colors, fonts, fontSizes, spacing, borderRadius } from '../../theme';
 import { XanoNotification } from '../../api';
 import { useNotifications } from '../../hooks/useNotifications';
 import { usePairs } from '../../hooks/usePairs';
+import { useScreenAnnouncement } from '../../hooks/useScreenAnnouncement';
 import { RootStackParamList } from '../../types/navigation';
 import { EMOTIONS } from '../../constants/emotions';
 import { useSafeEdges } from '../../contexts/MHFRContext';
@@ -37,6 +38,7 @@ function renderMessageWithEmotions(message: string) {
 }
 
 export default function NotificationsScreen() {
+  useScreenAnnouncement('Notifications');
   const safeEdges = useSafeEdges(['top']);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { notifications, unreadCount, isLoading: loading, refetch, markRead, markAllRead } = useNotifications();

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import {
   ChevronRight,
   User,
@@ -15,6 +15,9 @@ import Avatar from '../../../components/Avatar';
 import { colors, fonts, fontSizes, borderRadius } from '../../../theme';
 import type { ThingsToDoAction, ThingsToDoIcon } from '../../../hooks/useThingsToDo';
 
+// Temporarily hidden while we evaluate the card without the preview row.
+const SHOW_TOP_ACTION_PREVIEW = false;
+
 const ICON_FOR: Record<ThingsToDoIcon, React.ComponentType<any>> = {
   user: User,
   alert: AlertTriangle,
@@ -29,20 +32,22 @@ const ICON_FOR: Record<ThingsToDoIcon, React.ComponentType<any>> = {
 type Props = {
   count: number;
   topAction?: ThingsToDoAction;
-  onPress?: () => void;
 };
 
-export default function ThingsToDoCard({ count, topAction, onPress }: Props) {
+// The card is presentational. Tap and swipe-up are owned by the wrapping
+// PanResponder in MyPulseScreenV2 — nesting a TouchableOpacity here caused
+// the child to win the touch on press-down so the parent's swipe gesture
+// never fired.
+export default function ThingsToDoCard({ count, topAction }: Props) {
   const isEmpty = count === 0;
   const Icon = topAction ? ICON_FOR[topAction.icon] : null;
 
   return (
-    <TouchableOpacity
+    <View
       style={styles.card}
-      activeOpacity={isEmpty ? 1 : 0.85}
-      onPress={isEmpty ? undefined : onPress}
-      disabled={isEmpty}
+      accessible
       accessibilityRole="button"
+      accessibilityState={{ disabled: isEmpty }}
       accessibilityLabel={
         isEmpty
           ? "Safety Checklist, you're all caught up"
@@ -68,7 +73,7 @@ export default function ThingsToDoCard({ count, topAction, onPress }: Props) {
         </View>
       </View>
 
-      {topAction && (Icon || topAction.avatar) && (
+      {SHOW_TOP_ACTION_PREVIEW && topAction && (Icon || topAction.avatar) && (
         <View style={styles.preview}>
           {topAction.avatar ? (
             <Avatar
@@ -94,7 +99,7 @@ export default function ThingsToDoCard({ count, topAction, onPress }: Props) {
           <ChevronRight size={22} color={colors.textPrimary} strokeWidth={2.5} />
         </View>
       )}
-    </TouchableOpacity>
+    </View>
   );
 }
 

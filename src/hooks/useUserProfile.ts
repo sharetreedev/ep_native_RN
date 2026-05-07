@@ -18,6 +18,7 @@ export function useUserProfile() {
     phone_number?: string;
     country?: string;
     full_name?: string;
+    profile_hex_colour?: string;
   }) => {
     const data = await wrap(() => xanoUser.updateProfile(fields));
     if (data) setProfile(data);

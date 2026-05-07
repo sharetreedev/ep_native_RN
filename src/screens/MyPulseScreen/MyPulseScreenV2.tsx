@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, RefreshControl, StyleSheet, A
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect, useRoute, RouteProp, useIsFocused } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { MaterialTopTabNavigationProp } from '@react-navigation/material-top-tabs';
 import { Bell, TriangleAlert } from 'lucide-react-native';
 import { RootStackParamList, MainTabParamList } from '../../types/navigation';
 import Avatar from '../../components/Avatar';
@@ -23,15 +24,7 @@ import type { CarouselSlideData } from './v2/CarouselSlide';
 import ThingsToDoCard from './v2/ThingsToDoCard';
 import ThingsToDoSheet from './v2/ThingsToDoSheet';
 import { useThingsToDo } from '../../hooks/useThingsToDo';
-
-// Fallback aurora colors used until runningStats loads, and for new users
-// who don't yet have a `prev_checkin_location`. Leaving `secondary` undefined
-// tells AuroraBackground to render the moving layers transparent — a single
-// soft wash of primary instead of a two-tone aurora.
-const FALLBACK_AURORA_PRIMARY = '#6BB169';
-const FALLBACK_AURORA: AuroraColors = {
-  primary: FALLBACK_AURORA_PRIMARY,
-};
+import { useScreenAnnouncement } from '../../hooks/useScreenAnnouncement';
 
 function capitalize(s: string | undefined | null): string {
   if (!s) return '';
@@ -43,14 +36,16 @@ function buildCarouselSlides(stats: XanoRunningStats | null): CarouselSlideData[
 
   const slides: CarouselSlideData[] = [];
 
-  // Aurora is driven by the user's last check-in emotion only — both layers
-  // get the same colour so the wash reads as a single tone across all slides.
+  // Aurora is driven by the user's last check-in. The moving layers carry the
+  // raw emotion hex (primary) and the stable base layer carries the softer
+  // themeColour (secondary), giving the wash a two-tone depth instead of a
+  // flat single-colour fill. Left undefined when the user has no current
+  // check-in colour — the screen renders no aurora rather than a misleading
+  // placeholder tone.
   const current = stats.current_checkin_location;
-  const lastCheckinColor = current?.colour ?? FALLBACK_AURORA_PRIMARY;
-  const dailyAurora: AuroraColors = {
-    primary: lastCheckinColor,
-    secondary: lastCheckinColor,
-  };
+  const dailyAurora: AuroraColors | undefined = current?.colour
+    ? { primary: current.colour, secondary: current.themeColour ?? current.colour }
+    : undefined;
   const mode = stats.checkInMode;
   const modeEmotion = capitalize(mode?.emotionText);
   const modeEmotionColor =
@@ -58,10 +53,10 @@ function buildCarouselSlides(stats: XanoRunningStats | null): CarouselSlideData[
   slides.push({
     id: 'today',
     title: 'Today',
-    prefix: "I'm feeling,",
+    prefix: "I'm feeling",
     emotion: capitalize(current?.emotion_name) || 'Unknown',
     emotionColor: current?.themeColour ?? current?.colour ?? colors.primary,
-    sublinePrefix: modeEmotion ? "I'm often," : undefined,
+    sublinePrefix: modeEmotion ? "I'm often" : undefined,
     sublineEmotion: modeEmotion || undefined,
     sublineEmotionColor: modeEmotionColor,
     directionLabel: stats.direction_t_p?.directionLabel,
@@ -77,10 +72,10 @@ function buildCarouselSlides(stats: XanoRunningStats | null): CarouselSlideData[
     slides.push({
       id: '7days',
       title: 'Over the last 7 days',
-      prefix: "I've been feeling,",
+      prefix: "I've been feeling",
       emotion: capitalize(w2.emotion_states.Display) || 'Unknown',
       emotionColor: w2.emotion_states.themeColour ?? w2.emotion_states.emotionColour ?? colors.primary,
-      sublinePrefix: w1Emotion ? 'previously I was,' : undefined,
+      sublinePrefix: w1Emotion ? 'previously I was' : undefined,
       sublineEmotion: w1Emotion || undefined,
       sublineEmotionColor: w1.emotion_states.themeColour ?? w1.emotion_states.emotionColour,
       directionLabel: stats.direction_w1_w2?.directionLabel,
@@ -109,10 +104,10 @@ function buildCarouselSlides(stats: XanoRunningStats | null): CarouselSlideData[
     slides.push({
       id: '30days',
       title: 'Over the last 30 days',
-      prefix: "I've been feeling,",
+      prefix: "I've been feeling",
       emotion: capitalize(m2.emotion_states.Display) || 'Unknown',
       emotionColor: m2.emotion_states.themeColour ?? m2.emotion_states.emotionColour ?? colors.primary,
-      sublinePrefix: m1Emotion ? 'previously I was,' : undefined,
+      sublinePrefix: m1Emotion ? 'previously I was' : undefined,
       sublineEmotion: m1Emotion || undefined,
       sublineEmotionColor: m1.emotion_states.themeColour ?? m1.emotion_states.emotionColour,
       directionLabel: stats.direction_m1_m2?.directionLabel,
@@ -137,6 +132,7 @@ function buildCarouselSlides(stats: XanoRunningStats | null): CarouselSlideData[
 }
 
 export default function MyPulseScreenV2() {
+  useScreenAnnouncement('My Pulse');
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<MainTabParamList, 'MyPulse'>>();
   const { user, refreshUser } = useAuth();
@@ -229,40 +225,67 @@ export default function MyPulseScreenV2() {
   const { actions: thingsToDoActions } = useThingsToDo();
   const [thingsToDoOpen, setThingsToDoOpen] = useState(false);
 
-  // Swipe-up-to-open on the ThingsToDoCard. We keep the card's own tap handler
-  // intact by not claiming the responder on start — only once upward movement
-  // crosses a small threshold do we capture and open the sheet. The sheet's
-  // own enter animation handles the visual reveal, so the card itself doesn't
-  // need to move.
+  // Tap- and swipe-up-to-open on the ThingsToDoCard. The card itself is a
+  // plain View (no TouchableOpacity) so this PanResponder owns every touch
+  // that lands on it — the previous nested-touchable setup had the child
+  // grabbing press-down and the parent's swipe gesture never firing.
+  //
+  // We claim aggressively (start + move, both capture variants) and refuse
+  // termination requests so a misfire from an ancestor gesture handler can't
+  // strand the user mid-swipe. The thresholds below decide intent on release.
+  const cardOpacity = useRef(new RNAnimated.Value(1)).current;
   const thingsToDoPan = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => false,
-        onStartShouldSetPanResponderCapture: () => false,
-        onMoveShouldSetPanResponder: (_, gs) => gs.dy < -6 && Math.abs(gs.dy) > Math.abs(gs.dx),
-        // Capture variant is what actually wins the gesture from the
-        // TouchableOpacity inside the card — without it, the child grabs
-        // the responder on touch-down and the parent never sees the move.
-        onMoveShouldSetPanResponderCapture: (_, gs) =>
-          gs.dy < -6 && Math.abs(gs.dy) > Math.abs(gs.dx),
-        onPanResponderRelease: (_, gs) => {
+        onStartShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponderCapture: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponderCapture: () => true,
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => true,
+        onPanResponderGrant: () => {
           if (thingsToDoActions.length === 0) return;
-          if (gs.dy < -40 || gs.vy < -0.4) setThingsToDoOpen(true);
+          RNAnimated.timing(cardOpacity, {
+            toValue: 0.85,
+            duration: 80,
+            useNativeDriver: true,
+          }).start();
+        },
+        onPanResponderRelease: (_, gs) => {
+          RNAnimated.timing(cardOpacity, {
+            toValue: 1,
+            duration: 120,
+            useNativeDriver: true,
+          }).start();
+          if (thingsToDoActions.length === 0) return;
+          const moved = Math.hypot(gs.dx, gs.dy);
+          const isTap = moved < 8;
+          const isSwipeUp = gs.dy < -25 || gs.vy < -0.3;
+          if (isTap || isSwipeUp) setThingsToDoOpen(true);
+        },
+        onPanResponderTerminate: () => {
+          RNAnimated.timing(cardOpacity, {
+            toValue: 1,
+            duration: 120,
+            useNativeDriver: true,
+          }).start();
         },
       }),
-    [thingsToDoActions.length],
+    [thingsToDoActions.length, cardOpacity],
   );
 
   if (!user) return <PulseLoader />;
 
   const courseProgress = enrollment ? (enrollment.progress_percent ?? 0) / 100 : 0;
 
-  // Aurora colors follow the currently-active carousel slide.
-  const auroraColors: AuroraColors = slides[activeSlideIndex]?.auroraColors ?? FALLBACK_AURORA;
+  // Aurora colors follow the currently-active carousel slide. Undefined until
+  // running stats load (and for users without a current check-in), in which
+  // case we render no aurora rather than flash a placeholder tone.
+  const auroraColors = slides[activeSlideIndex]?.auroraColors;
 
   return (
     <View style={styles.container}>
-      <AuroraBackground colors={auroraColors} paused={!isFocused} />
+      {auroraColors && <AuroraBackground colors={auroraColors} paused={!isFocused} />}
       <SafeAreaView style={styles.safeArea} edges={safeEdges}>
         <View style={styles.header}>
         <Text style={styles.screenTitle}>My Pulse</Text>
@@ -298,7 +321,15 @@ export default function MyPulseScreenV2() {
       >
         {slides.length > 0 ? (
           <View style={styles.carouselWrap}>
-            <EmotionCarousel slides={slides} onActiveSlideChange={setActiveSlideIndex} />
+            <EmotionCarousel
+              slides={slides}
+              onActiveSlideChange={setActiveSlideIndex}
+              onSwipeBeyondLast={() =>
+                navigation
+                  .getParent<MaterialTopTabNavigationProp<MainTabParamList>>()
+                  ?.navigate('Pulse')
+              }
+            />
             <TouchableOpacity
               onPress={() => navigation.navigate('UserProfile', { userId: 'current-user', isNotPair: true })}
               style={styles.trendsLink}
@@ -328,12 +359,13 @@ export default function MyPulseScreenV2() {
           </TouchableOpacity>
         </View>
 
-        <View {...thingsToDoPan.panHandlers}>
-          <ThingsToDoCard
-            count={thingsToDoActions.length}
-            topAction={thingsToDoActions[0]}
-            onPress={() => setThingsToDoOpen(true)}
-          />
+        <View {...thingsToDoPan.panHandlers} collapsable={false}>
+          <RNAnimated.View style={{ opacity: cardOpacity }}>
+            <ThingsToDoCard
+              count={thingsToDoActions.length}
+              topAction={thingsToDoActions[0]}
+            />
+          </RNAnimated.View>
         </View>
 
         <ThingsToDoSheet
@@ -392,10 +424,12 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   scrollContent: {
-    paddingBottom: 40,
+    flexGrow: 1,
+    paddingBottom: 24,
   },
   carouselWrap: {
     marginTop: 24,
+    flex: 1,
     // Escape the scroll's 16px horizontal padding so the carousel (and the
     // frost band rendered inside each slide) can extend to the screen edges.
     marginHorizontal: -16,
@@ -404,7 +438,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    marginTop: 8,
+    marginTop: 16,
   },
   trendsLinkText: {
     fontFamily: fonts.bodyMedium,

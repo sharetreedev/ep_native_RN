@@ -34,7 +34,7 @@ export default function RiskAssessmentScreen() {
   const navigation = useNavigation<ScreenNavProp>();
   const route = useRoute<ScreenRouteProp>();
   const { supportRequest: sr } = route.params;
-  const { refreshMHFRRequests } = useMHFR();
+  const { refreshMHFRRequests, applySupportRequestUpdate } = useMHFR();
 
   const [step, setStep] = useState(1);
   const [risk, setRisk] = useState<number | null>(null);
@@ -67,7 +67,7 @@ export default function RiskAssessmentScreen() {
       if (saving || !suggestedAction) return;
       setSaving(true);
       try {
-        await xanoSupportRequests.patch(sr.id, {
+        const result = await xanoSupportRequests.patch(sr.id, {
           risk_severity: risk,
           risk_frequency: frequency,
           risk_escalation: escalation,
@@ -75,7 +75,16 @@ export default function RiskAssessmentScreen() {
           support_Action: suggestedAction,
           is_Supported: true,
           supported_Date: new Date().toISOString().split('T')[0],
+          status: 'RESOLVED',
+          resolved_Date: Date.now(),
         });
+        // Push the server's authoritative copy into the MHFR cache so any
+        // mounted screens (notably SupportRequestDetailsScreen) reflect the
+        // new Resolved status immediately, without waiting on the network
+        // round-trip below.
+        if (result?.incident_logs) {
+          applySupportRequestUpdate(result.incident_logs);
+        }
         await refreshMHFRRequests();
         setStep(5);
       } catch (e) {

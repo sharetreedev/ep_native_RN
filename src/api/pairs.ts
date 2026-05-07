@@ -33,8 +33,8 @@ export const pairs = {
   getAll: () =>
     request<XanoPairsResponse>('GET', '/pairs'),
 
-  create: (inviteEmail: string, extraFields?: Partial<XanoPair>) =>
-    request<XanoPair>('POST', '/pairs', { invite_email: inviteEmail, ...extraFields } as Record<string, unknown>),
+  create: (pairType: 'DUAL' | 'PUSH' | 'PULL', requestFromId: number) =>
+    request<XanoPair>('POST', '/pairs', { pairType, requestFromId }),
 
   getById: (pairsId: number) =>
     request<XanoPair>('GET', `/pairs/${pairsId}`),
@@ -48,6 +48,13 @@ export const pairs = {
       request_to_id: requestToId,
     }),
 
-  sendRequest: (pairsId: number, fields: Partial<XanoPair>) =>
-    request<XanoPair>('PATCH', `/pairs/${pairsId}/sendrequest_0`, fields as Record<string, unknown>),
+  sendRequest: (pairsId: number, fields: { requestToId?: number; invite_email?: string }) => {
+    if (typeof pairsId !== 'number' || !Number.isFinite(pairsId)) {
+      throw new Error(`pairs.sendRequest: invalid pairsId (${String(pairsId)})`);
+    }
+    return request<unknown>('PATCH', `/pairs/${pairsId}/sendrequest`, {
+      pairs_id: pairsId,
+      ...fields,
+    });
+  },
 };

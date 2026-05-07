@@ -19,6 +19,11 @@ interface MHFRContextValue {
   refreshOwnSupportRequests: () => Promise<void>;
   /** Convenience: refresh both lists in parallel. */
   refreshAllSupportRequests: () => Promise<void>;
+  /** Optimistically replace a cached request with a fresh server payload —
+   *  e.g. the response from PATCH /support_request/{id} after a risk
+   *  assessment so dependent screens see the new status before the next
+   *  refresh round-trip completes. */
+  applySupportRequestUpdate: (updated: XanoSupportRequest) => void;
 }
 
 const MHFRContext = createContext<MHFRContextValue | null>(null);
@@ -60,6 +65,18 @@ export function MHFRProvider({ children }: { children: React.ReactNode }) {
     await Promise.all([refreshMHFRRequests(), refreshOwnSupportRequests()]);
   }, [refreshMHFRRequests, refreshOwnSupportRequests]);
 
+  const applySupportRequestUpdate = useCallback((updated: XanoSupportRequest) => {
+    const merge = (list: XanoSupportRequest[]) => {
+      const idx = list.findIndex((r) => r.id === updated.id);
+      if (idx < 0) return list;
+      const next = list.slice();
+      next[idx] = { ...list[idx], ...updated };
+      return next;
+    };
+    setMhfrRequests((prev) => merge(prev));
+    setOwnRequests((prev) => merge(prev));
+  }, []);
+
   // Fetch both lists when the user identity changes (login, account switch).
   useEffect(() => {
     refreshAllSupportRequests();
@@ -85,6 +102,7 @@ export function MHFRProvider({ children }: { children: React.ReactNode }) {
       refreshMHFRRequests,
       refreshOwnSupportRequests,
       refreshAllSupportRequests,
+      applySupportRequestUpdate,
     }),
     [
       mhfrRequests,
@@ -95,6 +113,7 @@ export function MHFRProvider({ children }: { children: React.ReactNode }) {
       refreshMHFRRequests,
       refreshOwnSupportRequests,
       refreshAllSupportRequests,
+      applySupportRequestUpdate,
     ],
   );
 

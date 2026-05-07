@@ -1,49 +1,92 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Linking, Platform, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  Linking,
+  StyleSheet,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { ArrowLeft, Phone, Sparkles } from 'lucide-react-native';
+import { ArrowLeft, Phone, ChevronRight, Users } from 'lucide-react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { LinearGradient } from 'expo-linear-gradient';
 import { RootStackParamList } from '../../types/navigation';
 import { useSafeEdges } from '../../contexts/MHFRContext';
-import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronRight } from 'lucide-react-native';
+import { users as xanoUsers, XanoUser } from '../../api';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
 import { logger } from '../../lib/logger';
+
+const eapContacts = [
+  { name: 'Corporate Health', number: '1300 123 456', description: 'Confidential employee support' },
+];
+
+const hotlineContacts = [
+  { name: 'Lifeline', number: '13 11 14', description: '24/7 Crisis Support' },
+  { name: 'Beyond Blue', number: '1300 22 4636', description: 'Depression and anxiety support' },
+  { name: 'Kids Helpline', number: '1800 55 1800', description: 'Counseling for young people' },
+];
+
+const emergencyContacts = [
+  { name: 'Emergency Services', number: '000', description: 'For life-threatening emergencies' },
+];
+
+function makeCall(phoneNumber: string) {
+  const phoneUrl = `tel:${phoneNumber}`;
+  Linking.canOpenURL(phoneUrl)
+    .then((supported) => supported && Linking.openURL(phoneUrl))
+    .catch((err) => logger.error(err));
+}
+
+function ContactCard({
+  name,
+  description,
+  number,
+}: {
+  name: string;
+  description: string;
+  number: string;
+}) {
+  const [revealed, setRevealed] = useState(false);
+
+  return (
+    <View style={styles.card}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.cardName}>{name}</Text>
+        <Text style={styles.cardDesc}>{description}</Text>
+        {revealed && number ? <Text style={styles.cardNumber}>{number}</Text> : null}
+      </View>
+      {number ? (
+        revealed ? (
+          <TouchableOpacity onPress={() => makeCall(number)} style={styles.phoneIconWrap} activeOpacity={0.7}>
+            <Phone color={colors.primary} size={20} />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity onPress={() => setRevealed(true)} style={styles.viewNumberButton} activeOpacity={0.7}>
+            <Phone color="#FFFFFF" size={14} />
+            <Text style={styles.viewNumberText}>View Number</Text>
+          </TouchableOpacity>
+        )
+      ) : null}
+    </View>
+  );
+}
 
 export default function EmergencyServicesScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const safeEdges = useSafeEdges(['top']);
 
-  const makeCall = (phoneNumber: string) => {
-    const phoneUrl = `tel:${phoneNumber}`;
-    Linking.canOpenURL(phoneUrl)
-      .then((supported) => supported && Linking.openURL(phoneUrl))
-      .catch((err) => logger.error(err));
-  };
+  const [mhfrContacts, setMhfrContacts] = useState<XanoUser[]>([]);
+  const [loadingMhfr, setLoadingMhfr] = useState(true);
 
-  const contacts = [
-    {
-      category: 'Emergency',
-      items: [
-        { name: 'Emergency Services', number: '000', description: 'For life-threatening emergencies' },
-        { name: 'Lifeline', number: '13 11 14', description: '24/7 Crisis Support' },
-      ],
-    },
-    {
-      category: 'EAP Provider',
-      items: [
-        { name: 'Corporate Health', number: '1300 123 456', description: 'Confidential employee support' },
-      ],
-    },
-    {
-      category: 'Support Services',
-      items: [
-        { name: 'Beyond Blue', number: '1300 22 4636', description: 'Depression and anxiety support' },
-        { name: 'Kids Helpline', number: '1800 55 1800', description: 'Counseling for young people' },
-      ],
-    },
-  ];
+  useEffect(() => {
+    xanoUsers.getTop4Mhfr()
+      .then((data) => setMhfrContacts(Array.isArray(data) ? data : []))
+      .catch((e) => logger.warn('[EmergencyServices] Failed to load MHFR:', e))
+      .finally(() => setLoadingMhfr(false));
+  }, []);
 
   return (
     <SafeAreaView style={styles.container} edges={safeEdges}>
@@ -55,11 +98,12 @@ export default function EmergencyServicesScreen() {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView style={styles.scroll}>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollInner}>
         <Text style={styles.disclaimer}>
           If you or someone you know is in immediate danger, please call 000.
         </Text>
 
+        {/* AI MHFR */}
         <TouchableOpacity
           onPress={() => navigation.navigate('AIMHFR')}
           activeOpacity={0.85}
@@ -71,7 +115,6 @@ export default function EmergencyServicesScreen() {
             end={{ x: 1, y: 1 }}
             style={styles.aiCard}
           >
-            {/* Decorative rings */}
             <View style={styles.aiDecoWrap}>
               <View style={styles.aiDecoRing1} />
               <View style={styles.aiDecoRing2} />
@@ -92,27 +135,58 @@ export default function EmergencyServicesScreen() {
           </LinearGradient>
         </TouchableOpacity>
 
-        {contacts.map((section, index) => (
-          <View key={index} style={styles.section}>
-            <Text style={styles.sectionTitle}>{section.category}</Text>
-            {section.items.map((item, itemIndex) => (
-              <TouchableOpacity
-                key={itemIndex}
-                onPress={() => makeCall(item.number)}
-                style={styles.card}
-              >
-                <View>
-                  <Text style={styles.cardName}>{item.name}</Text>
-                  <Text style={styles.cardDesc}>{item.description}</Text>
-                  <Text style={styles.cardNumber}>{item.number}</Text>
-                </View>
-                <View style={styles.phoneIconWrap}>
-                  <Phone color={colors.primary} size={20} />
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        ))}
+        {/* MHFR */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>MHFR</Text>
+          {loadingMhfr ? (
+            <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.base }} />
+          ) : mhfrContacts.length > 0 ? (
+            mhfrContacts.map((c) => (
+              <ContactCard
+                key={c.id}
+                name={c.fullName || `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim() || 'Contact'}
+                description="MHFR Support"
+                number={c.phoneNumber || ''}
+              />
+            ))
+          ) : (
+            <View style={styles.placeholderCard}>
+              <View style={styles.placeholderIconWrap}>
+                <Users color={colors.textMuted} size={20} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.placeholderTitle}>No MHFR available yet</Text>
+                <Text style={styles.placeholderDesc}>
+                  Ask your group admin to set up an MHFR or support role for your group.
+                </Text>
+              </View>
+            </View>
+          )}
+        </View>
+
+        {/* EAP & Professional Services */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>EAP & Professional Services</Text>
+          {eapContacts.map((c, i) => (
+            <ContactCard key={i} name={c.name} description={c.description} number={c.number} />
+          ))}
+        </View>
+
+        {/* Hotlines */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Hotlines</Text>
+          {hotlineContacts.map((c, i) => (
+            <ContactCard key={i} name={c.name} description={c.description} number={c.number} />
+          ))}
+        </View>
+
+        {/* Emergency Services */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Emergency Services</Text>
+          {emergencyContacts.map((c, i) => (
+            <ContactCard key={i} name={c.name} description={c.description} number={c.number} />
+          ))}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -133,7 +207,12 @@ const styles = StyleSheet.create({
     fontFamily: fonts.heading,
     color: colors.textPrimary,
   },
-  scroll: { flex: 1, paddingHorizontal: spacing.xl, paddingTop: spacing.base },
+  scroll: { flex: 1 },
+  scrollInner: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.base,
+    paddingBottom: spacing['4xl'],
+  },
   disclaimer: {
     fontFamily: fonts.body,
     fontSize: fontSizes.base,
@@ -183,9 +262,55 @@ const styles = StyleSheet.create({
     padding: spacing.base,
     borderRadius: borderRadius.full,
   },
+  viewNumberButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: borderRadius.button,
+  },
+  viewNumberText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.sm,
+    color: '#FFFFFF',
+  },
+  placeholderCard: {
+    backgroundColor: colors.surface,
+    padding: spacing.base,
+    borderRadius: borderRadius.button,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.base,
+    opacity: 0.65,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+  },
+  placeholderIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  placeholderTitle: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.base,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
+  },
+  placeholderDesc: {
+    fontFamily: fonts.body,
+    fontSize: fontSizes.sm,
+    color: colors.textMuted,
+    lineHeight: 18,
+  },
   aiCardOuter: {
     borderRadius: 20,
-    marginBottom: spacing.xl,
+    marginBottom: spacing['2xl'],
     shadowColor: '#2D3A25',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.15,
@@ -223,14 +348,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.base,
     marginBottom: spacing.base,
-  },
-  aiIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   aiTextWrap: {
     flex: 1,

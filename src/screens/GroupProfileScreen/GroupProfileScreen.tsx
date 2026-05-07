@@ -24,6 +24,7 @@ import CoordinatesGrid from '../../components/visualization/CoordinatesGrid';
 import { useStateCoordinates } from '../../hooks/useStateCoordinates';
 import { useCoordinateMapping } from '../../hooks/useCoordinateMapping';
 import { useEmotionStates } from '../../hooks/useEmotionStates';
+import { useScreenAnnouncement } from '../../hooks/useScreenAnnouncement';
 import PairsAvatarOverlay from '../../components/visualization/PairsAvatarOverlay';
 import { CheckInConfirmModal } from '../../components/checkin/CheckInOverlay';
 import { useQuickCheckIn } from '../../hooks/useQuickCheckIn';
@@ -69,6 +70,7 @@ export default function GroupProfileScreen() {
 
   const groupName = localGroupName || `Group #${groupId}`;
   const isAdmin = ADMIN_ROLES.includes((groupRole || '').toLowerCase());
+  useScreenAnnouncement(`${groupName} group profile`);
 
   // Running stats derivation
   const findEmotion = (emotionStatesId: number | undefined | null) =>

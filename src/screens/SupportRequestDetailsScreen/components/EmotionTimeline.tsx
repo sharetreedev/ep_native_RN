@@ -57,7 +57,17 @@ function EmotionTimeline({ supportRequest: sr }: EmotionTimelineProps) {
 
     // Most recent first
     entries.sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
-    return entries;
+
+    // Dedupe entries that share the same emotion name + timestamp.
+    // The backend can include the original trigger emotion as the first item
+    // in updated_Emotions_List, which would otherwise render it twice.
+    const seen = new Set<string>();
+    return entries.filter((e) => {
+      const key = `${e.name}|${e.timestamp ?? ''}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }, [sr]);
 
   return (

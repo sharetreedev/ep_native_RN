@@ -10,6 +10,7 @@ import Animated, {
   Extrapolate,
 } from 'react-native-reanimated';
 import { colors } from '../theme';
+import { useReduceMotion } from '../hooks/useReduceMotion';
 
 interface PulseLoaderProps {
   /** Override the wrapper style (e.g. to use inline instead of full-screen) */
@@ -26,15 +27,19 @@ const RING_COUNT = 3;
 const DURATION = 1500;
 const STAGGER = 400;
 
-function Ring({ index, color, size }: { index: number; color: string; size: number }) {
+function Ring({ index, color, size, reduceMotion }: { index: number; color: string; size: number; reduceMotion: boolean }) {
   const progress = useSharedValue(0);
 
   React.useEffect(() => {
+    if (reduceMotion) {
+      progress.value = 0;
+      return;
+    }
     progress.value = withDelay(
       index * STAGGER,
       withRepeat(withTiming(1, { duration: DURATION }), -1, false),
     );
-  }, []);
+  }, [reduceMotion]);
 
   const animatedStyle = useAnimatedStyle(() => {
     const scale = interpolate(progress.value, [0, 1], [0.4, 1.2], Extrapolate.CLAMP);
@@ -69,6 +74,7 @@ export default function PulseLoader({
   delay = 0,
 }: PulseLoaderProps) {
   const [visible, setVisible] = useState(delay === 0);
+  const reduceMotion = useReduceMotion();
 
   useEffect(() => {
     if (delay <= 0) return;
@@ -79,9 +85,13 @@ export default function PulseLoader({
   if (!visible) return <View style={[styles.container, style]} />;
 
   return (
-    <View style={[styles.container, style]}>
+    <View
+      style={[styles.container, style]}
+      accessibilityRole="progressbar"
+      accessibilityLabel="Loading"
+    >
       {Array.from({ length: RING_COUNT }).map((_, i) => (
-        <Ring key={i} index={i} color={color} size={size} />
+        <Ring key={i} index={i} color={color} size={size} reduceMotion={reduceMotion} />
       ))}
       {/* Static centre dot */}
       <View

@@ -55,11 +55,14 @@ type BlobConfig = {
 };
 
 const BLOBS: BlobConfig[] = [
-  // 1 stable base layer (opacity-only animation, primary color).
-  { id: 'base1', layerType: 'base',   initialX: 25, initialY: 35, radius: 380, loopMs: 12000, delayMs:    0, opacityRange: [0.55, 0.75], scaleRange: [1, 1],       moveX:  0, moveY:  0 },
-  // 2 moving layers (position + scale + opacity, secondary color).
-  { id: 'mov1',  layerType: 'moving', initialX: 30, initialY: 50, radius: 360, loopMs: 14000, delayMs:    0, opacityRange: [0.65, 0.85], scaleRange: [0.95, 1.10], moveX: 25, moveY: 12 },
-  { id: 'mov2',  layerType: 'moving', initialX: 70, initialY: 60, radius: 300, loopMs: 16000, delayMs: 4000, opacityRange: [0.55, 0.80], scaleRange: [0.95, 1.15], moveX: 20, moveY: 10 },
+  // 1 stable base layer (opacity-only animation, primary color). Anchored in
+  // the top-left quadrant so it doesn't visually centre the composition.
+  { id: 'base1', layerType: 'base',   initialX: 20, initialY: 25, radius: 380, loopMs: 12000, delayMs:    0, opacityRange: [0.55, 0.75], scaleRange: [1, 1],       moveX:  0, moveY:  0 },
+  // 3 moving layers anchored across the remaining quadrants with wider travel
+  // so the aurora spreads to the screen edges instead of clustering centrally.
+  { id: 'mov1',  layerType: 'moving', initialX: 80, initialY: 30, radius: 340, loopMs: 14000, delayMs:    0, opacityRange: [0.65, 0.85], scaleRange: [0.95, 1.10], moveX: 35, moveY: 22 },
+  { id: 'mov2',  layerType: 'moving', initialX: 25, initialY: 75, radius: 320, loopMs: 16000, delayMs: 4000, opacityRange: [0.55, 0.80], scaleRange: [0.95, 1.15], moveX: 30, moveY: 20 },
+  { id: 'mov3',  layerType: 'moving', initialX: 78, initialY: 72, radius: 300, loopMs: 18000, delayMs: 2000, opacityRange: [0.55, 0.80], scaleRange: [0.95, 1.12], moveX: 32, moveY: 24 },
 ];
 
 const AuroraBlob = React.memo(function AuroraBlob({

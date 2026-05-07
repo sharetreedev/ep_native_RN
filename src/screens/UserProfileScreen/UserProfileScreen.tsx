@@ -30,6 +30,7 @@ import { useCoordinateMapping } from '../../hooks/useCoordinateMapping';
 import { useEmotionStates } from '../../hooks/useEmotionStates';
 import { CheckInConfirmModal } from '../../components/checkin/CheckInOverlay';
 import { useQuickCheckIn } from '../../hooks/useQuickCheckIn';
+import { useScreenAnnouncement } from '../../hooks/useScreenAnnouncement';
 import { colors, pillTabStyles } from '../../theme';
 import PulseLoader from '../../components/PulseLoader';
 import Avatar from '../../components/Avatar';
@@ -98,6 +99,7 @@ export default function UserProfileScreen() {
 
   const pairDisplayName = otherUser?.fullName || pairData?.invite_email || 'Pair User';
   const pairFirstName = otherUser?.fullName?.split(' ')[0] || pairDisplayName;
+  useScreenAnnouncement(isPair ? `${pairDisplayName} profile` : 'Profile');
   const pairAvatarUrl = otherUser?.profilePic_url || null;
   const pairPhone = otherUser?.phoneNumber;
   const pairTypeLabel = pairData?.pairType === 'DUAL' ? 'Trusted Pair' : pairData?.pairType === 'PULL' ? 'Support Pair' : 'Pair';

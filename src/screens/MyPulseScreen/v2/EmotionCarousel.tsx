@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { View, StyleSheet, PanResponder } from 'react-native';
 import PagerView from 'react-native-pager-view';
 import CarouselSlide, { type CarouselSlideData } from './CarouselSlide';
 import { colors } from '../../../theme';
@@ -8,6 +8,11 @@ type Props = {
   slides: CarouselSlideData[];
   /** Fired with the new active slide index whenever the user swipes. */
   onActiveSlideChange?: (index: number) => void;
+  /** Fired when the user swipes left past the last slide. The caller is
+   *  responsible for forwarding this to whatever is hosting the carousel
+   *  (e.g. jumping to the next tab). Without this, PagerView eats the
+   *  gesture and the parent tab navigator never sees it. */
+  onSwipeBeyondLast?: () => void;
 };
 
 // Initial height used until slides report their natural content height.
@@ -15,7 +20,7 @@ type Props = {
 // will grow the pager once measured.
 const INITIAL_PAGER_HEIGHT = 240;
 
-export default function EmotionCarousel({ slides, onActiveSlideChange }: Props) {
+export default function EmotionCarousel({ slides, onActiveSlideChange, onSwipeBeyondLast }: Props) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [pagerHeight, setPagerHeight] = useState(INITIAL_PAGER_HEIGHT);
 
@@ -34,10 +39,33 @@ export default function EmotionCarousel({ slides, onActiveSlideChange }: Props) 
     setPagerHeight((prev) => (height > prev ? height : prev));
   }, []);
 
+  // When on the last slide, intercept decisively-leftward swipes and hand
+  // them off to the host (the tab navigator). The capture variant is what
+  // wrests the gesture from PagerView's native pan recognizer — without it
+  // the pager swallows the swipe and the user gets stuck on the last page.
+  const isLastIndex = slides.length > 0 && activeIndex === slides.length - 1;
+  const handoffPan = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onStartShouldSetPanResponderCapture: () => false,
+        onMoveShouldSetPanResponder: (_, gs) =>
+          isLastIndex && gs.dx < -20 && Math.abs(gs.dx) > Math.abs(gs.dy),
+        onMoveShouldSetPanResponderCapture: (_, gs) =>
+          isLastIndex && gs.dx < -20 && Math.abs(gs.dx) > Math.abs(gs.dy),
+        onPanResponderRelease: (_, gs) => {
+          if (gs.dx < -50 || gs.vx < -0.4) onSwipeBeyondLast?.();
+        },
+      }),
+    [isLastIndex, onSwipeBeyondLast],
+  );
+
   if (slides.length === 0) return null;
 
   return (
-    <View style={styles.wrapper}>
+    <View style={styles.wrapper} {...handoffPan.panHandlers}>
+      <View style={styles.spacer} />
+
       <PagerView
         style={[styles.pager, { height: pagerHeight }]}
         initialPage={0}
@@ -53,6 +81,8 @@ export default function EmotionCarousel({ slides, onActiveSlideChange }: Props) 
           </View>
         ))}
       </PagerView>
+
+      <View style={styles.spacer} />
 
       <View style={styles.dotsRow}>
         {slides.map((slide, i) => (
@@ -70,11 +100,12 @@ export default function EmotionCarousel({ slides, onActiveSlideChange }: Props) 
 }
 
 const styles = StyleSheet.create({
-  wrapper: { width: '100%' },
+  wrapper: { width: '100%', flex: 1 },
   pager: {
     width: '100%',
   },
   page: { flex: 1 },
+  spacer: { flex: 1 },
   dotsRow: {
     flexDirection: 'row',
     justifyContent: 'center',

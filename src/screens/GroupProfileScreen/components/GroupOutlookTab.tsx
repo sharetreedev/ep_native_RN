@@ -5,17 +5,18 @@ import ProfileStatCard from '../../../components/ProfileStatCard';
 import EmotionBadge from '../../../components/EmotionBadge';
 import { colors } from '../../../theme';
 import { styles } from '../styles';
+import { XanoDirection, XanoRunningStatsPeriod } from '../../../api';
 
 interface DirectionItem {
   label: string;
-  data: { directionLabel?: string; [key: string]: unknown } | undefined | null;
+  data: XanoDirection | undefined | null;
   themeColour: string | undefined;
 }
 
 interface GroupOutlookTabProps {
   directions: DirectionItem[];
-  previousAverage: { emotion_name?: string; colour?: string } | undefined;
-  todaysAverage: { emotion_name?: string; colour?: string } | undefined;
+  previousAverage: XanoRunningStatsPeriod | undefined | null;
+  todaysAverage: XanoRunningStatsPeriod | undefined | null;
   dailyCheckinPercent: string;
   weeklyCheckinPercent: string;
   totalCheckins: string | number;

@@ -52,6 +52,11 @@ interface AvatarProps {
    *  (or when this user has no assigned hex), the avatar falls back to the
    *  default green gradient. Matches the WeWeb onboarding palette. */
   hexColour?: string | null;
+  /** Override the auto-derived accessibility label. */
+  accessibilityLabel?: string;
+  /** Mark the avatar as decorative — VoiceOver/TalkBack will skip it.
+   *  Use when an adjacent label already announces the same person. */
+  decorative?: boolean;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
@@ -188,6 +193,8 @@ function Avatar({
   fill,
   style,
   hexColour,
+  accessibilityLabel,
+  decorative = false,
 }: AvatarProps) {
   // Resolve size
   const token = typeof size === 'string' ? SIZE_MAP[size] : null;
@@ -268,8 +275,16 @@ function Avatar({
     );
   };
 
+  const resolvedLabel = accessibilityLabel
+    ?? (name ? `${name}'s profile photo` : undefined);
+
   return (
     <View
+      accessible={!decorative}
+      accessibilityElementsHidden={decorative}
+      importantForAccessibility={decorative ? 'no-hide-descendants' : 'yes'}
+      accessibilityRole={decorative ? undefined : 'image'}
+      accessibilityLabel={decorative ? undefined : resolvedLabel}
       style={[
         styles.outer,
         fill

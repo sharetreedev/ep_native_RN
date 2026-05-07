@@ -18,10 +18,12 @@ import { colors, fonts, fontSizes, borderRadius } from '../../theme';
 import PulseLoader from '../../components/PulseLoader';
 import OnboardingProgress from '../../components/OnboardingProgress';
 import { useCachedFetch } from '../../hooks/useCachedFetch';
+import { useScreenAnnouncement } from '../../hooks/useScreenAnnouncement';
 import { CACHE_KEYS } from '../../lib/fetchCache';
 import { getSuggestedPairs } from '../../lib/suggestedPairs';
 
 export default function MyPulseScreenV1() {
+  useScreenAnnouncement('My Pulse');
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<MainTabParamList, 'MyPulse'>>();
   const { user, refreshUser } = useAuth();

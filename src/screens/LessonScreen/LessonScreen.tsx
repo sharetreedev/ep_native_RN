@@ -3,6 +3,7 @@ import { View, Text, Image, TouchableOpacity, ScrollView, ActivityIndicator, Sty
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Play, Pause, SkipBack, SkipForward, Volume2, ArrowLeft } from 'lucide-react-native';
 import { useNavigation, useRoute, useFocusEffect, RouteProp } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import { colors, fonts, fontSizes, borderRadius, spacing, buttonStyles } from '../../theme';
 import { RootStackParamList } from '../../types/navigation';
@@ -13,7 +14,7 @@ const SKIP_SECONDS = 15;
 
 export default function LessonScreen() {
   const safeEdges = useSafeEdges(['top']);
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'Lessons'>>();
   const lesson = route.params?.lesson;
 
@@ -151,6 +152,18 @@ export default function LessonScreen() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Pop everything above Main, then jump to MyPulse with optional params.
+  // Why: navigate('Main', { screen: ... }) on v7 native-stack can leave the
+  // current screen in the stack history when its target is a nested navigator,
+  // which then re-enables the iOS edge-swipe-back gesture and lets users
+  // swipe back into Lessons from the tab views. popToTop guarantees the pop.
+  const exitToHome = useCallback((mainParams?: any) => {
+    if (navigation.canGoBack()) {
+      navigation.popToTop();
+    }
+    (navigation as any).navigate('Main', { screen: 'MyPulse', params: mainParams });
+  }, [navigation]);
+
   const handleMarkComplete = useCallback(async () => {
     if (!lesson?.id || isCompleting || isCompleted) return;
     setIsCompleting(true);
@@ -162,18 +175,16 @@ export default function LessonScreen() {
         return;
       }
       setIsCompleted(true);
-      // Navigate back to MyPulse, signaling course completion if this was the last lesson
-      (navigation as any).navigate('Main', {
-        screen: 'MyPulse',
-        params: lesson.is_last_module
+      exitToHome(
+        lesson.is_last_module
           ? { courseCompleted: true, courseName: result?.course_enrollment?.course?.name }
           : undefined,
-      });
+      );
     } catch {
       Alert.alert('Error', 'Failed to mark lesson as complete. Please try again.');
       setIsCompleting(false);
     }
-  }, [lesson?.id, isCompleting, isCompleted, markLessonComplete, navigation]);
+  }, [lesson?.id, lesson?.is_last_module, isCompleting, isCompleted, markLessonComplete, exitToHome]);
 
   const canComplete = hasReached80 && !isCompleted;
 
@@ -189,14 +200,14 @@ export default function LessonScreen() {
           if (navigation.canGoBack()) {
             navigation.goBack();
           } else {
-            (navigation as any).navigate('Main', { screen: 'MyPulse' });
+            exitToHome();
           }
         }} style={styles.backButton}>
           <ArrowLeft color={colors.textSecondary} size={24} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Lesson #{lessonIndex}</Text>
         <TouchableOpacity
-          onPress={() => (navigation as any).navigate('Main', { screen: 'MyPulse' })}
+          onPress={() => exitToHome()}
           style={styles.skipButton}
         >
           <Text style={styles.skipText}>Exit</Text>

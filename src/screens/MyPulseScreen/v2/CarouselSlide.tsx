@@ -24,7 +24,7 @@ export type CarouselSlideData = {
   sublineEmotion?: string; // italic emotion name rendered after sublinePrefix
   sublineEmotionColor?: string; // falls back to emotionColor when missing
   directionLabel?: string;
-  auroraColors: AuroraColors;
+  auroraColors?: AuroraColors;
   isEmpty?: boolean;
   /** Copy shown on a locked empty slide. Falls back to a generic message. */
   emptyMessage?: string;
@@ -38,7 +38,10 @@ export type CarouselSlideData = {
   shiftSignificance?: string;
 };
 
-const TYPE_INTERVAL_MS = 45;
+const TYPE_INTERVAL_MS = 40;
+
+// Temporarily hidden while we evaluate the slide layout without it.
+const SHOW_SHIFT_LINE = false;
 
 type Props = {
   slide: CarouselSlideData;
@@ -65,7 +68,7 @@ export default function CarouselSlide({ slide, isActive, onContentMeasured }: Pr
   const sublinePrefix = hasSubline ? slide.sublinePrefix! : '';
   const sublineEmotion = hasSubline ? `${sep}${slide.sublineEmotion!}` : '';
   const shiftText =
-    !slide.isEmpty && slide.shiftSignificance
+    SHOW_SHIFT_LINE && !slide.isEmpty && slide.shiftSignificance
       ? `this is a ${slide.shiftSignificance.toLowerCase()} shift`
       : '';
   const total =
@@ -218,7 +221,7 @@ const styles = StyleSheet.create({
   // grow to fit the tallest slide instead of clipping at a fixed height.
   contentWrap: {
     alignSelf: 'stretch',
-    gap: 8,
+    gap: 0,
   },
   eyebrow: {
     fontFamily: fonts.headingMedium,

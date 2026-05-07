@@ -180,13 +180,27 @@ function buildHeaders(contentType: string | null): Record<string, string> {
   return headers;
 }
 
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+function isAbortError(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { name?: string }).name === 'AbortError';
+}
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  externalSignal?: AbortSignal,
+): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const onExternalAbort = () => controller.abort();
+  if (externalSignal) {
+    if (externalSignal.aborted) controller.abort();
+    else externalSignal.addEventListener('abort', onExternalAbort);
+  }
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(timeoutId);
+    externalSignal?.removeEventListener('abort', onExternalAbort);
   }
 }
 
@@ -219,11 +233,18 @@ async function handleResponse<T>(res: Response, url: string, hadToken: boolean):
   throw new XanoError(errorBody?.message ?? `HTTP ${res.status}`, res.status, errorBody);
 }
 
+export interface RequestOptions {
+  baseUrl?: string;
+  /** Optional caller-provided signal for cancellation (e.g. unmount). When
+   *  this aborts the in-flight fetch is cancelled and no retries are made. */
+  signal?: AbortSignal;
+}
+
 export async function request<T>(
   method: HttpMethod,
   path: string,
   params?: Record<string, unknown>,
-  options?: { baseUrl?: string },
+  options?: RequestOptions,
 ): Promise<T> {
   const headers = buildHeaders('application/json');
   const hadToken = headers['Authorization'] !== undefined;
@@ -248,7 +269,7 @@ export async function request<T>(
   let lastError: unknown;
   for (let attempt = 0; attempt <= RETRY_MAX_ATTEMPTS; attempt++) {
     try {
-      const res = await fetchWithTimeout(url, { method, headers, body });
+      const res = await fetchWithTimeout(url, { method, headers, body }, options?.signal);
       // Retry on 5xx for GETs, otherwise return/throw through handleResponse.
       if (!res.ok && isRetryable(method, res.status) && attempt < RETRY_MAX_ATTEMPTS) {
         logger.warn(`[Xano] ${method} ${url} → ${res.status}, retrying (attempt ${attempt + 2}/${RETRY_MAX_ATTEMPTS + 1})`);
@@ -260,6 +281,8 @@ export async function request<T>(
       lastError = err;
       // XanoError from handleResponse is a final, structured error — don't retry.
       if (err instanceof XanoError) throw err;
+      // Caller-initiated abort: surface immediately, never retry.
+      if (options?.signal?.aborted || isAbortError(err)) throw err;
       if (isRetryable(method, err) && attempt < RETRY_MAX_ATTEMPTS) {
         logger.warn(`[Xano] ${method} ${url} network error, retrying (attempt ${attempt + 2}/${RETRY_MAX_ATTEMPTS + 1}):`, err);
         await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS[attempt] ?? 2000));
@@ -276,16 +299,17 @@ export async function requestMultipart<T>(
   method: HttpMethod,
   path: string,
   formData: FormData,
+  options?: RequestOptions,
 ): Promise<T> {
   // Multipart: let fetch set the Content-Type (with boundary) itself.
   const headers = buildHeaders(null);
   const hadToken = headers['Authorization'] !== undefined;
-  const url = `${BASE_URL}${path}`;
+  const url = `${options?.baseUrl ?? BASE_URL}${path}`;
   logger.log(`[Xano] ${method} ${url} (multipart)`);
 
   let res: Response;
   try {
-    res = await fetchWithTimeout(url, { method, headers, body: formData });
+    res = await fetchWithTimeout(url, { method, headers, body: formData }, options?.signal);
   } catch (err) {
     logger.error(`[Xano] Fetch Error for ${url}:`, err);
     throw err;

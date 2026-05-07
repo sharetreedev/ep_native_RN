@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Platform, AppState } from 'react-native';
-import { auth as xanoAuth, tokenStore, XanoError, XanoGroup, XanoUserGroup, XanoPair, XanoRecentCheckInEmotion, XanoLast7CheckIn, groups as xanoGroups, pairs as xanoPairs, onesignal as onesignalApi, setOnAuthExpired, user as xanoUserApi, runningStats as xanoRunningStats } from '../api';
+import { auth as xanoAuth, tokenStore, XanoError, XanoAuthMeResponse, XanoGroup, XanoUserGroup, XanoPair, XanoRecentCheckInEmotion, XanoLast7CheckIn, groups as xanoGroups, pairs as xanoPairs, onesignal as onesignalApi, setOnAuthExpired, user as xanoUserApi, runningStats as xanoRunningStats } from '../api';
 import { invalidateAll } from '../lib/fetchCache';
 import { logger } from '../lib/logger';
 import { errorStatus } from '../lib/errorUtils';
@@ -77,6 +77,7 @@ interface AuthContextValue extends AuthState {
   }) => Promise<void>;
   loginWithMobile: (authToken: string) => Promise<void>;
   logout: () => void;
+  deleteAccount: () => Promise<void>;
   isLoading: boolean;
   error: string | null;
   refreshUser: () => Promise<void>;
@@ -102,7 +103,7 @@ if (Platform.OS !== 'web') {
  * After authentication, grab the OneSignal push subscription ID and send it
  * to the backend if the user record doesn't already have one stored.
  */
-async function syncOneSignalSubscriptionId(xanoUser: any): Promise<void> {
+async function syncOneSignalSubscriptionId(xanoUser: XanoAuthMeResponse): Promise<void> {
   if (!OneSignalModule) return;
   try {
     const subId = await OneSignalModule.User.pushSubscription.getIdAsync();
@@ -116,25 +117,28 @@ async function syncOneSignalSubscriptionId(xanoUser: any): Promise<void> {
   }
 }
 
-function mapXanoUser(xano: any): User {
+function mapXanoUser(xano: XanoAuthMeResponse): User {
+  const profilePicUrl = typeof xano.profilePic_url === 'object'
+    ? xano.profilePic_url?.url
+    : xano.profilePic_url;
   return {
     id: String(xano.id),
     email: xano.email,
     name: xano.fullName || xano.firstName || 'User',
     firstName: xano.firstName || undefined,
     lastName: xano.lastName || undefined,
-    avatarUrl: (typeof xano.profilePic_url === 'object' ? xano.profilePic_url?.url : xano.profilePic_url) || xano.avatar?.url,
+    avatarUrl: profilePicUrl || xano.avatar?.url || undefined,
     profileHexColour: xano.profile_hex_colour || undefined,
     phoneNumber: xano.phoneNumber || undefined,
     country: xano.country || undefined,
     runningStatsId: xano.running_stats_id,
     emotionState: (xano._emotion_states || xano.recent_checkin_emotion) ? {
-      themeColour: xano._emotion_states?.themeColour ?? xano.recent_checkin_emotion?.themeColour,
-      emotionColour: xano._emotion_states?.emotionColour ?? xano.recent_checkin_emotion?.emotionColour,
+      themeColour: xano._emotion_states?.themeColour ?? xano.recent_checkin_emotion?.themeColour ?? '',
+      emotionColour: xano._emotion_states?.emotionColour ?? xano.recent_checkin_emotion?.emotionColour ?? '',
     } : undefined,
     recentCheckInEmotion: xano.recent_checkin_emotion ?? null,
     last7CheckIns: xano.last_7_checkins ?? null,
-    groups: xano._user_group?.map((ug: any) => ug.groups) || [],
+    groups: xano._user_group?.map((ug) => ug.groups) || [],
     isMHFR: false, // resolved after groups fetch
     pairs: xano._pairs || [],
     onboardingComplete: xano.onboarding_complete ?? false,
@@ -178,10 +182,23 @@ async function syncLastSeen(): Promise<void> {
 async function ensureProfileHexColour(user: User): Promise<User> {
   if (user.avatarUrl || user.profileHexColour) return user;
   const picked = pickRandomProfileHex();
-  try {
-    await xanoUserApi.updateProfile({ profile_hex_colour: picked });
-  } catch (e) {
-    logger.warn('[AuthContext] Failed to persist profile_hex_colour:', e);
+  // PATCH endpoint requires first_name/last_name/phone_number/country/full_name
+  // even on partial updates, so we resend existing values alongside the hex.
+  // SSO users without a complete profile fall through with an in-memory hex
+  // only — they'll re-roll until onboarding fills in the required fields.
+  if (user.firstName && user.lastName && user.phoneNumber && user.country && user.name) {
+    try {
+      await xanoUserApi.updateProfile({
+        first_name: user.firstName,
+        last_name: user.lastName,
+        phone_number: user.phoneNumber,
+        country: user.country,
+        full_name: user.name,
+        profile_hex_colour: picked,
+      });
+    } catch (e) {
+      logger.warn('[AuthContext] Failed to persist profile_hex_colour:', e);
+    }
   }
   return { ...user, profileHexColour: picked };
 }
@@ -513,6 +530,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setError(null);
   }, []);
 
+  const deleteAccount = useCallback(async () => {
+    // The API call must succeed before we tear down local state — if the
+    // server failed to anonymise the records, we don't want the user to
+    // believe their account is gone. On success we mirror the logout flow.
+    await xanoUserApi.deleteAccount();
+    if (OneSignalModule) {
+      try {
+        OneSignalModule.logout();
+      } catch (e) {
+        logger.warn('[AuthContext] OneSignal logout failed:', e);
+      }
+    }
+    await tokenStore.clear();
+    invalidateAll();
+    setState({ isAuthenticated: false, user: null });
+    setError(null);
+  }, []);
+
   const _setUser = useCallback((updater: (prev: User | null) => User | null) => {
     setState((prev) => ({ ...prev, user: updater(prev.user) }));
   }, []);
@@ -526,6 +561,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loginWithApple,
       loginWithMobile,
       logout,
+      deleteAccount,
       refreshUser,
       isLoading,
       error,
@@ -539,6 +575,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loginWithApple,
       loginWithMobile,
       logout,
+      deleteAccount,
       refreshUser,
       isLoading,
       error,

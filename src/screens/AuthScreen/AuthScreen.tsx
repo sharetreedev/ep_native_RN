@@ -9,9 +9,12 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 import { RootStackParamList } from '../../types/navigation';
 import { useAuth } from '../../contexts/AuthContext';
-import { ChevronDown } from 'lucide-react-native';
+import { auth as authApi } from '../../api';
+import { ChevronDown, Check } from 'lucide-react-native';
+import * as Sentry from '@sentry/react-native';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
 import Button from '../../components/Button';
+import BottomSheet from '../../components/BottomSheet';
 import ModalPicker from '../../components/ModalPicker';
 import { COUNTRIES } from '../../constants/countries';
 
@@ -37,11 +40,15 @@ export default function AuthScreen() {
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [country, setCountry] = useState('');
+    const [over17, setOver17] = useState(false);
     const [countryPickerVisible, setCountryPickerVisible] = useState(false);
     const selectedCountryLabel = COUNTRIES.find((c) => c.value === country)?.label || '';
 
     const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'Auth'>>();
     const { login, signup, loginWithMicrosoft, loginWithApple, isLoading, error } = useAuth();
+
+    const [forgotLoading, setForgotLoading] = useState(false);
+    const [otherSignInVisible, setOtherSignInVisible] = useState(false);
 
     const [appleAvailable, setAppleAvailable] = useState(false);
     useEffect(() => {
@@ -110,6 +117,13 @@ export default function AuthScreen() {
                     Alert.alert('Missing Fields', 'Please fill in all required fields.');
                     return;
                 }
+                if (!over17) {
+                    Alert.alert(
+                        'Age confirmation required',
+                        'Emotional Pulse is intended for people aged 17 and over. Please confirm before continuing.',
+                    );
+                    return;
+                }
                 await signup({
                     email,
                     password,
@@ -128,7 +142,8 @@ export default function AuthScreen() {
 
     async function handleMicrosoftLogin() {
         if (!MICROSOFT_CLIENT_ID) {
-            Alert.alert('Configuration Error', 'EXPO_PUBLIC_MICROSOFT_CLIENT_ID is not set in your .env file.');
+            Sentry.captureMessage('AuthScreen: Microsoft sign-in pressed but EXPO_PUBLIC_MICROSOFT_CLIENT_ID is not set');
+            Alert.alert('Sign-in unavailable', 'Microsoft sign-in is temporarily unavailable. Please try email or another method.');
             return;
         }
         await promptMsAsync();
@@ -182,9 +197,40 @@ export default function AuthScreen() {
         }
     }
 
+    async function handleForgotPassword() {
+        const trimmed = email.trim();
+        if (!trimmed || !EMAIL_REGEX.test(trimmed)) {
+            Alert.alert(
+                'Enter your email',
+                'Type the email address for your account above, then tap "Forgot password?" again.',
+            );
+            return;
+        }
+        setForgotLoading(true);
+        try {
+            await authApi.requestPasswordReset(trimmed);
+        } catch {
+            // Swallow — we always show the same generic confirmation so the
+            // response can't be used to probe which emails are registered.
+        } finally {
+            setForgotLoading(false);
+            Alert.alert(
+                'Check your inbox',
+                "If an account exists for that email, we've sent a link to reset your password. The link may take a minute to arrive.",
+            );
+        }
+    }
+
     const toggleMode = () => {
         setMode(prev => prev === 'login' ? 'signup' : 'login');
     };
+
+    const hasMicrosoft = !!MICROSOFT_CLIENT_ID;
+    const hasApple = Platform.OS === 'ios' && appleAvailable;
+    const hasMobile = mode === 'login';
+    const hasAlternativeSignIn = hasMicrosoft || hasApple || hasMobile;
+
+    const closeOtherSignIn = () => setOtherSignInVisible(false);
 
     return (
         <SafeAreaView style={styles.container}>
@@ -239,6 +285,19 @@ export default function AuthScreen() {
                                     </Text>
                                     <ChevronDown color={colors.textMuted} size={18} />
                                 </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.ageCheckRow}
+                                    onPress={() => setOver17((prev) => !prev)}
+                                    accessibilityRole="checkbox"
+                                    accessibilityState={{ checked: over17 }}
+                                    accessibilityLabel="I am 17 years of age or older"
+                                >
+                                    <View style={[styles.checkbox, over17 && styles.checkboxChecked]}>
+                                        {over17 && <Check color={colors.textOnPrimary} size={14} strokeWidth={3} />}
+                                    </View>
+                                    <Text style={styles.ageCheckText}>I am 17 years of age or older</Text>
+                                </TouchableOpacity>
                             </>
                         )}
 
@@ -252,7 +311,7 @@ export default function AuthScreen() {
                             keyboardType="email-address"
                         />
                         <TextInput
-                            style={[styles.input, styles.inputLast]}
+                            style={[styles.input, mode === 'login' ? null : styles.inputLast]}
                             onChangeText={setPassword}
                             value={password}
                             secureTextEntry
@@ -261,12 +320,46 @@ export default function AuthScreen() {
                             autoCapitalize="none"
                         />
 
+                        {mode === 'login' && (
+                            <TouchableOpacity
+                                onPress={handleForgotPassword}
+                                disabled={forgotLoading}
+                                style={styles.forgotPasswordRow}
+                                accessibilityRole="button"
+                                accessibilityLabel="Forgot password"
+                            >
+                                <Text style={styles.forgotPasswordText}>
+                                    {forgotLoading ? 'Sending…' : 'Forgot password?'}
+                                </Text>
+                            </TouchableOpacity>
+                        )}
+
                         <Button
                             title={mode === 'login' ? 'Sign in' : 'Sign up'}
                             onPress={handleAuth}
                             loading={isLoading}
                             style={styles.mainButton}
                         />
+
+                        {mode === 'signup' && (
+                            <Text style={styles.legalText}>
+                                By signing up you agree to our{' '}
+                                <Text
+                                    style={styles.legalLink}
+                                    onPress={() => WebBrowser.openBrowserAsync('https://app.emotionalpulse.ai/terms')}
+                                >
+                                    Terms
+                                </Text>
+                                {' '}and{' '}
+                                <Text
+                                    style={styles.legalLink}
+                                    onPress={() => WebBrowser.openBrowserAsync('https://app.emotionalpulse.ai/privacy')}
+                                >
+                                    Privacy Policy
+                                </Text>
+                                .
+                            </Text>
+                        )}
 
                         <TouchableOpacity
                             onPress={toggleMode}
@@ -279,39 +372,11 @@ export default function AuthScreen() {
                             </Text>
                         </TouchableOpacity>
 
-                        <View style={styles.divider}>
-                            <View style={styles.line} />
-                            <Text style={styles.dividerText}>OR</Text>
-                            <View style={styles.line} />
-                        </View>
-
-                        <Button
-                            title={mode === 'login' ? 'Sign in with Microsoft' : 'Sign up with Microsoft'}
-                            onPress={handleMicrosoftLogin}
-                            variant="secondary"
-                            style={styles.ssoButton}
-                        />
-
-                        {Platform.OS === 'ios' && appleAvailable && (
-                            <AppleAuthentication.AppleAuthenticationButton
-                                buttonType={
-                                    mode === 'login'
-                                        ? AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
-                                        : AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP
-                                }
-                                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-                                cornerRadius={borderRadius.button}
-                                style={styles.appleButton}
-                                onPress={handleAppleLogin}
-                            />
-                        )}
-
-                        {mode === 'login' && (
+                        {hasAlternativeSignIn && (
                             <Button
-                                title="Sign in via mobile"
-                                onPress={() => navigation.navigate('MobileSignIn')}
+                                title={mode === 'login' ? 'Sign in another way' : 'Sign up another way'}
+                                onPress={() => setOtherSignInVisible(true)}
                                 variant="secondary"
-                                style={styles.mobileButton}
                             />
                         )}
                     </View>
@@ -327,6 +392,61 @@ export default function AuthScreen() {
                     setCountryPickerVisible(false);
                 }}
             />
+            <BottomSheet
+                visible={otherSignInVisible}
+                onDismiss={closeOtherSignIn}
+                title={mode === 'login' ? 'More ways to sign in' : 'More ways to sign up'}
+            >
+                {hasMicrosoft && (
+                    <Button
+                        title={mode === 'login' ? 'Sign in with Microsoft' : 'Sign up with Microsoft'}
+                        onPress={() => {
+                            closeOtherSignIn();
+                            handleMicrosoftLogin();
+                        }}
+                        variant="secondary"
+                        style={styles.sheetButton}
+                    />
+                )}
+
+                {hasMobile && (
+                    <Button
+                        title="Sign in with Mobile"
+                        onPress={() => {
+                            closeOtherSignIn();
+                            navigation.navigate('MobileSignIn');
+                        }}
+                        variant="secondary"
+                        style={styles.sheetButton}
+                    />
+                )}
+
+                {hasApple && (
+                    <AppleAuthentication.AppleAuthenticationButton
+                        buttonType={
+                            mode === 'login'
+                                ? AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
+                                : AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP
+                        }
+                        buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                        cornerRadius={borderRadius.button}
+                        style={styles.sheetAppleButton}
+                        onPress={() => {
+                            closeOtherSignIn();
+                            handleAppleLogin();
+                        }}
+                    />
+                )}
+
+                <TouchableOpacity
+                    onPress={closeOtherSignIn}
+                    style={styles.sheetCancel}
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel"
+                >
+                    <Text style={styles.sheetCancelText}>Cancel</Text>
+                </TouchableOpacity>
+            </BottomSheet>
         </SafeAreaView>
     );
 }
@@ -382,6 +502,30 @@ const styles = StyleSheet.create({
     mainButton: {
         marginBottom: spacing.base,
     },
+    forgotPasswordRow: {
+        alignSelf: 'flex-end',
+        marginTop: -spacing.sm,
+        marginBottom: spacing.base,
+        paddingVertical: spacing.xs,
+    },
+    forgotPasswordText: {
+        color: colors.primary,
+        fontFamily: fonts.bodySemiBold,
+        fontSize: fontSizes.sm,
+    },
+    legalText: {
+        fontFamily: fonts.body,
+        fontSize: fontSizes.xs,
+        color: colors.textSecondary,
+        textAlign: 'center',
+        lineHeight: 18,
+        marginBottom: spacing.base,
+        paddingHorizontal: spacing.sm,
+    },
+    legalLink: {
+        color: colors.primary,
+        fontFamily: fonts.bodySemiBold,
+    },
     modeToggle: {
         alignItems: 'center',
         marginBottom: spacing.xl,
@@ -391,30 +535,22 @@ const styles = StyleSheet.create({
         fontFamily: fonts.bodySemiBold,
         fontSize: fontSizes.sm,
     },
-    divider: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: spacing.xl,
-    },
-    line: {
-        flex: 1,
-        height: 1,
-        backgroundColor: colors.border,
-    },
-    dividerText: {
-        marginHorizontal: spacing.base,
-        color: colors.textMuted,
-        fontFamily: fonts.bodyMedium,
-        fontSize: fontSizes.xs,
-    },
-    ssoButton: {
+    sheetButton: {
         marginBottom: spacing.base,
     },
-    appleButton: {
+    sheetAppleButton: {
         height: 48,
         marginBottom: spacing.base,
     },
-    mobileButton: {
+    sheetCancel: {
+        alignItems: 'center',
+        paddingVertical: spacing.sm,
+        marginTop: spacing.xs,
+    },
+    sheetCancelText: {
+        color: colors.textMuted,
+        fontFamily: fonts.bodyMedium,
+        fontSize: fontSizes.sm,
     },
     nameRow: {
         flexDirection: 'row',
@@ -443,6 +579,33 @@ const styles = StyleSheet.create({
     },
     countryPickerPlaceholder: {
         color: colors.textPlaceholder,
+    },
+    ageCheckRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: spacing.base,
+        paddingVertical: 4,
+    },
+    checkbox: {
+        width: 22,
+        height: 22,
+        borderRadius: 6,
+        borderWidth: 1.5,
+        borderColor: colors.borderLight,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 10,
+        backgroundColor: colors.background,
+    },
+    checkboxChecked: {
+        backgroundColor: colors.primary,
+        borderColor: colors.primary,
+    },
+    ageCheckText: {
+        flex: 1,
+        fontFamily: fonts.body,
+        fontSize: fontSizes.sm,
+        color: colors.textPrimary,
     },
 });
 

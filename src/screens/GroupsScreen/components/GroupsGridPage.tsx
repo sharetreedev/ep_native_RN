@@ -8,17 +8,18 @@ import Avatar from '../../../components/Avatar';
 import PulseLoader from '../../../components/PulseLoader';
 import GroupSelectorDropdown from './GroupSelectorDropdown';
 import { colors, fonts, fontSizes } from '../../../theme';
+import { XanoCoordinateCount, XanoGroupRunningStats } from '../../../api';
 
 export interface SelectedGroupInfo {
   name: string;
   imageUrl: string | undefined;
   groupId: number;
   forestId: number | undefined;
-  runningStats: any;
+  runningStats: XanoGroupRunningStats | null;
   role: string | undefined;
-  membersCoordinatesCount: any[];
-  checkins7day: any[];
-  checkins30day: any[];
+  membersCoordinatesCount: XanoCoordinateCount[];
+  checkins7day: XanoCoordinateCount[];
+  checkins30day: XanoCoordinateCount[];
 }
 
 interface GroupsGridPageProps {

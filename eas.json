@@ -24,6 +24,11 @@
   },
   "submit": {
     "production": {
+      "ios": {
+        "appleId": "dylan@calibremedia.com.au",
+        "ascAppId": "1560353741",
+        "appleTeamId": "PL8F7LAM2G"
+      },
       "android": {
         "serviceAccountKeyPath": "./emotional-pulse-f5d8b-add4482e5bf6.json",
         "track": "internal"

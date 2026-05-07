@@ -12,6 +12,7 @@ import { useSafeEdges } from '../../contexts/MHFRContext';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
 import { useCheckIns } from '../../hooks/useCheckIns';
 import { useEmotionStates, MappedEmotion } from '../../hooks/useEmotionStates';
+import { useScreenAnnouncement } from '../../hooks/useScreenAnnouncement';
 import { useStateCoordinates } from '../../hooks/useStateCoordinates';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCheckIn } from '../../contexts/CheckInContext';
@@ -24,6 +25,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'CheckIn'>;
 
 export default function CheckInScreen({ route, navigation }: Props) {
     const isSupportRequest = route.params?.isSupportRequest ?? false;
+    useScreenAnnouncement(isSupportRequest ? 'Support check in' : 'Check in');
     const { user, refreshUser, _setUser } = useAuth();
     const { markCheckedInToday, hasCheckedInToday } = useCheckIn();
     const { emotionStates } = useEmotionStates();

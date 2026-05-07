@@ -30,6 +30,7 @@ interface UseUserResult {
     phone_number?: string;
     country?: string;
     full_name?: string;
+    profile_hex_colour?: string;
   }) => Promise<XanoUser | null>;
   updateProfilePic: (profilePicUri: string) => Promise<XanoUser | null>;
 }

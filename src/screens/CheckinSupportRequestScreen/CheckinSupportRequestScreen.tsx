@@ -10,7 +10,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Phone, CircleCheck } from 'lucide-react-native';
+import { Phone, CircleCheck, ChevronRight } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { RootStackParamList } from '../../types/navigation';
 import { colors, fonts, fontSizes, spacing, borderRadius } from '../../theme';
 import { useAuth } from '../../contexts/AuthContext';
@@ -36,7 +37,6 @@ interface NumberViewed {
 }
 
 const hotlines = [
-    { name: 'Emergency Services', number: '000', description: 'For life-threatening emergencies' },
     { name: 'Lifeline', number: '13 11 14', description: '24/7 Crisis Support' },
     { name: 'Beyond Blue', number: '1300 22 4636', description: 'Depression and anxiety support' },
     { name: 'Kids Helpline', number: '1800 55 1800', description: 'Counseling for young people' },
@@ -44,6 +44,10 @@ const hotlines = [
 
 const eapContacts = [
     { name: 'Corporate Health', number: '1300 123 456', description: 'Confidential employee support' },
+];
+
+const emergencyContacts = [
+    { name: 'Emergency Services', number: '000', description: 'For life-threatening emergencies' },
 ];
 
 function makeCall(phoneNumber: string) {
@@ -213,13 +217,6 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
         });
     }, [navigation, supportRequestId]);
 
-    const pairs = (user?.pairs ?? []).filter((p: any) => {
-        const otherUser = p.other_user || p._pair_user || p._user;
-        const phone = otherUser?.phoneNumber || p.phoneNumber;
-        const status = p.reqStatus || p.pair_status;
-        return !!phone && status === 'ACCEPTED';
-    });
-
     /* ─── Step Renderers ──────────────────────────────────────────────────── */
 
     const renderInvitation = () => (
@@ -279,43 +276,57 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
                 ))}
             </View>
 
-            {/* My Pairs */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>My Pairs</Text>
-                {pairs.length === 0 ? (
-                    <Text style={styles.emptyText}>No pairs connected</Text>
-                ) : (
-                    pairs.map((p: any) => {
-                        const otherUser = p.other_user || p._pair_user || p._user || {};
-                        const otherUserId = otherUser?.id ?? null;
-                        const name = otherUser.fullName
-                            || [otherUser.firstName, otherUser.lastName].filter(Boolean).join(' ')
-                            || `Pair #${p.id}`;
-                        const phone = otherUser.phoneNumber || p.phoneNumber || '';
-                        const currentUserId = Number(user?.id);
-                        const pairLabel = p.pairType === 'DUAL'
-                            ? 'Trusted Pair'
-                            : p.pairType === 'PULL' && p.requestToId === currentUserId
-                              ? 'Supporting Me'
-                              : p.pairType ?? 'Trusted Pair';
-                        return (
-                            <ContactCard
-                                key={p.id}
-                                name={name}
-                                description={pairLabel}
-                                number={phone}
-                                onReveal={() => trackNumberViewed(otherUserId)}
-                                onCall={() => trackContactAttempt(otherUserId)}
-                            />
-                        );
-                    })
-                )}
-            </View>
+            {/* AI MHFR */}
+            <TouchableOpacity
+                onPress={() => navigation.navigate('AIMHFR')}
+                activeOpacity={0.85}
+                style={styles.aiCardOuter}
+            >
+                <LinearGradient
+                    colors={[colors.mhfrGradientFrom, colors.mhfrGradientTo]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.aiCard}
+                >
+                    <View style={styles.aiDecoWrap}>
+                        <View style={styles.aiDecoRing1} />
+                        <View style={styles.aiDecoRing2} />
+                    </View>
+
+                    <View style={styles.aiContent}>
+                        <View style={styles.aiTextWrap}>
+                            <Text style={styles.aiLabel}>AI Powered</Text>
+                            <Text style={styles.aiTitle}>Mental Health{'\n'}First Responder</Text>
+                            <Text style={styles.aiDesc}>Speak with an AI MHFR for immediate, confidential support anytime.</Text>
+                        </View>
+                    </View>
+
+                    <View style={styles.aiAction}>
+                        <Text style={styles.aiActionText}>Start a conversation</Text>
+                        <ChevronRight color="rgba(255,255,255,0.7)" size={16} />
+                    </View>
+                </LinearGradient>
+            </TouchableOpacity>
 
             {/* Hotlines */}
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Hotlines</Text>
                 {hotlines.map((c, i) => (
+                    <ContactCard
+                        key={i}
+                        name={c.name}
+                        description={c.description}
+                        number={c.number}
+                        onReveal={() => trackNumberViewed(null)}
+                        onCall={() => trackContactAttempt(null)}
+                    />
+                ))}
+            </View>
+
+            {/* Emergency Services */}
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Emergency Services</Text>
+                {emergencyContacts.map((c, i) => (
                     <ContactCard
                         key={i}
                         name={c.name}
@@ -447,14 +458,6 @@ const styles = StyleSheet.create({
         gap: spacing.sm,
         width: '100%',
     },
-    emptyText: {
-        fontFamily: fonts.body,
-        fontSize: fontSizes.sm,
-        color: colors.textMuted,
-        textAlign: 'center',
-        paddingVertical: spacing.base,
-    },
-
     /* Flat sections */
     section: {
         marginBottom: spacing['2xl'],
@@ -516,5 +519,87 @@ const styles = StyleSheet.create({
         fontFamily: fonts.bodySemiBold,
         fontSize: fontSizes.sm,
         color: '#FFFFFF',
+    },
+
+    /* AI MHFR feature card */
+    aiCardOuter: {
+        borderRadius: 20,
+        marginBottom: spacing['2xl'],
+        shadowColor: '#2D3A25',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        elevation: 6,
+    },
+    aiCard: {
+        borderRadius: 20,
+        padding: spacing.xl,
+        overflow: 'hidden',
+    },
+    aiDecoWrap: {
+        position: 'absolute',
+        right: -20,
+        top: -20,
+    },
+    aiDecoRing1: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.08)',
+    },
+    aiDecoRing2: {
+        position: 'absolute',
+        width: 70,
+        height: 70,
+        borderRadius: 35,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.05)',
+        top: 15,
+        left: 15,
+    },
+    aiContent: {
+        flexDirection: 'row',
+        gap: spacing.base,
+        marginBottom: spacing.base,
+    },
+    aiTextWrap: {
+        flex: 1,
+    },
+    aiLabel: {
+        fontFamily: fonts.bodySemiBold,
+        fontSize: fontSizes.xs,
+        color: 'rgba(255,255,255,0.5)',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+        marginBottom: 4,
+    },
+    aiTitle: {
+        fontFamily: fonts.heading,
+        fontSize: fontSizes.xl,
+        color: colors.textOnPrimary,
+        lineHeight: 26,
+    },
+    aiDesc: {
+        fontFamily: fonts.body,
+        fontSize: fontSizes.sm,
+        color: 'rgba(255,255,255,0.6)',
+        marginTop: spacing.sm,
+        lineHeight: 18,
+    },
+    aiAction: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        backgroundColor: 'rgba(255,255,255,0.12)',
+        paddingHorizontal: spacing.base,
+        paddingVertical: spacing.sm,
+        borderRadius: borderRadius.full,
+        gap: 4,
+    },
+    aiActionText: {
+        fontFamily: fonts.bodySemiBold,
+        fontSize: fontSizes.sm,
+        color: 'rgba(255,255,255,0.85)',
     },
 });

@@ -19,10 +19,11 @@ export default function InvitePairTypeScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <ArrowLeft color={colors.textSecondary} size={24} />
         </TouchableOpacity>
+        <Text style={styles.headerTitle}>Pair Type</Text>
+        <View style={styles.headerSpacer} />
       </View>
 
       <View style={styles.content}>
-        <Text style={styles.title}>Pair Type</Text>
         <Text style={styles.subtitle}>Choose how you'd like to connect with this person.</Text>
 
         <TouchableOpacity
@@ -68,14 +69,16 @@ export default function InvitePairTypeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background, paddingHorizontal: 24 },
   header: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16 },
-  backButton: { marginRight: 16 },
-  content: { flex: 1, paddingTop: 16 },
-  title: {
-    fontSize: fontSizes['3xl'],
+  backButton: { width: 40, alignItems: 'flex-start' },
+  headerSpacer: { width: 40 },
+  headerTitle: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: fontSizes.xl,
     fontFamily: fonts.heading,
     color: colors.textPrimary,
-    marginBottom: 8,
   },
+  content: { flex: 1, paddingTop: 16 },
   subtitle: {
     fontSize: fontSizes.base,
     fontFamily: fonts.body,

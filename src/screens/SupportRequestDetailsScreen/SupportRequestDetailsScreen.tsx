@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,8 @@ import { RootStackParamList } from '../../types/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { useMHFR, useSafeEdges } from '../../contexts/MHFRContext';
 import { useGroups } from '../../hooks/useGroups';
-import { supportRequests as xanoSupportRequests } from '../../api';
+import { useScreenAnnouncement } from '../../hooks/useScreenAnnouncement';
+import { supportRequests as xanoSupportRequests, XanoSupportRequest } from '../../api';
 import Avatar from '../../components/Avatar';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
 import { logger } from '../../lib/logger';
@@ -29,15 +30,29 @@ type DetailsRouteProp = RouteProp<RootStackParamList, 'SupportRequestDetails'>;
 type DetailsNavProp = NativeStackNavigationProp<RootStackParamList, 'SupportRequestDetails'>;
 
 export default function SupportRequestDetailsScreen() {
+  useScreenAnnouncement('Support request details');
   const safeEdges = useSafeEdges(['top', 'bottom']);
   const navigation = useNavigation<DetailsNavProp>();
   const route = useRoute<DetailsRouteProp>();
-  const { supportRequest: sr } = route.params;
   const { user } = useAuth();
-  const { refreshMHFRRequests } = useMHFR();
+  const { refreshMHFRRequests, mhfrRequests, ownRequests } = useMHFR();
   const { activeGroups, fetchAll } = useGroups();
+
+  // Track sr in local state so we can pick up cache updates pushed by other
+  // screens (e.g. RiskAssessment marking the request Resolved). Initial value
+  // comes from route params; subsequent updates come from MHFRContext.
+  const [sr, setSr] = useState<XanoSupportRequest>(route.params.supportRequest);
   const [contactCount, setContactCount] = useState(sr.contact_attempts_count);
   const [loggingContact, setLoggingContact] = useState(false);
+
+  // Re-sync sr whenever the cached lists change — covers both the optimistic
+  // patch-response merge and any background refresh.
+  useEffect(() => {
+    const fresh =
+      mhfrRequests.find((r) => r.id === sr.id) ??
+      ownRequests.find((r) => r.id === sr.id);
+    if (fresh && fresh !== sr) setSr(fresh);
+  }, [mhfrRequests, ownRequests, sr]);
 
   useFocusEffect(
     useCallback(() => {
@@ -305,8 +320,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     backgroundColor: colors.primary,
-    borderRadius: borderRadius.lg,
-    paddingVertical: spacing.md,
+    borderRadius: 16,
+    paddingVertical: spacing.md + 2,
     marginBottom: spacing.sm,
   },
   callBtnLabel: {

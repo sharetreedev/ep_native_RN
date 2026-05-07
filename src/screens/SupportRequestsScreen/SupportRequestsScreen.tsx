@@ -18,6 +18,7 @@ import { XanoSupportRequest } from '../../api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useMHFR, useSafeEdges } from '../../contexts/MHFRContext';
 import { useEmotionStates } from '../../hooks/useEmotionStates';
+import { useScreenAnnouncement } from '../../hooks/useScreenAnnouncement';
 import { RootStackParamList } from '../../types/navigation';
 import EmotionBadge from '../../components/EmotionBadge';
 import Avatar from '../../components/Avatar';
@@ -27,6 +28,7 @@ type MainTab = 'myRequests' | 'mhfr';
 type StatusFilter = 'OPEN' | 'RESOLVED';
 
 export default function SupportRequestsScreen() {
+  useScreenAnnouncement('Support requests');
   const safeEdges = useSafeEdges(['top']);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'SupportRequests'>>();

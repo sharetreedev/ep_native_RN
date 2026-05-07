@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { XanoAuthResponse, XanoUser } from './types';
+import type { XanoAuthMeResponse, XanoAuthResponse, XanoUser } from './types';
 
 export const auth = {
   login: (email: string, password: string) =>
@@ -20,7 +20,7 @@ export const auth = {
     request<XanoAuthResponse>('POST', '/auth/signup', fields as Record<string, unknown>),
 
   me: () =>
-    request<XanoUser>('GET', '/auth/me'),
+    request<XanoAuthMeResponse>('GET', '/auth/me'),
 
   mergeAccounts: (existingUserId: number) =>
     request<{ result1: Pick<XanoUser, 'id' | 'email' | 'phoneNumber' | 'fullName' | 'phoneVerified'> }>(
@@ -52,6 +52,12 @@ export const auth = {
     request<{ authToken: string }>(
       'POST', '/auth/microsoft/callback', params as Record<string, unknown>,
     ),
+
+  // EP-963: in-app password reset trigger. Backend sends an email with a
+  // reset link; SSO-only accounts are no-oped server-side. Update the path
+  // here when the Xano endpoint is confirmed.
+  requestPasswordReset: (email: string) =>
+    request<{ success: boolean }>('POST', '/auth/request_password_reset', { email }),
 
   appleCallback: (params: {
     identity_token: string;

@@ -10,12 +10,14 @@ import { CheckInConfirmModal } from '../../components/checkin/CheckInOverlay';
 import { useQuickCheckIn } from '../../hooks/useQuickCheckIn';
 import { colors } from '../../theme';
 import { useCachedFetch } from '../../hooks/useCachedFetch';
+import { useScreenAnnouncement } from '../../hooks/useScreenAnnouncement';
 import { CACHE_KEYS } from '../../lib/fetchCache';
 import GroupsEmptyState from './components/GroupsEmptyState';
 import GroupsGridPage, { SelectedGroupInfo } from './components/GroupsGridPage';
 import GroupsListPage, { GroupListItemPayload } from './components/GroupsListPage';
 
 export default function GroupsScreen() {
+  useScreenAnnouncement('Groups');
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [containerHeight, setContainerHeight] = useState(0);
   const { activeGroups, isLoading, fetchAll } = useGroups();

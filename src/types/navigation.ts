@@ -1,5 +1,5 @@
 import { Emotion } from '../constants/emotions';
-import { XanoNextLesson, XanoEnrollment, XanoSupportRequest } from '../api';
+import { XanoNextLesson, XanoEnrollment, XanoSupportRequest, XanoGroupRunningStats, XanoCoordinateCount } from '../api';
 
 export type RootStackParamList = {
     Auth: undefined;
@@ -18,7 +18,17 @@ export type RootStackParamList = {
     InvitePairType: undefined;
     InvitePairActions: { pairType: 'DUAL' | 'PULL' };
     EmotionDetail: { emotion: Emotion };
-    GroupProfile: { groupId: number; groupName?: string; forestId?: number; runningStats?: any; imageUrl?: string; role?: string; membersCoordinatesCount?: any[]; checkins7day?: any[]; checkins30day?: any[] };
+    GroupProfile: {
+        groupId: number;
+        groupName?: string;
+        forestId?: number;
+        runningStats?: XanoGroupRunningStats | null;
+        imageUrl?: string;
+        role?: string;
+        membersCoordinatesCount?: XanoCoordinateCount[];
+        checkins7day?: XanoCoordinateCount[];
+        checkins30day?: XanoCoordinateCount[];
+    };
     GroupInvite: { groupId: number; groupName?: string };
     CreateGroup: undefined;
     CheckinSupportRequest: { coordinateId: number; emotionName: string; supportRequestId: number };
@@ -40,6 +50,7 @@ export type RootStackParamList = {
     CourseDetails: { enrollment?: XanoEnrollment } | undefined;
     Enrollments: { enrollments: XanoEnrollment[] };
     Account: undefined;
+    AccountSettings: undefined;
     EditProfile: undefined;
     Reminders: undefined;
     AIMHFR: undefined;

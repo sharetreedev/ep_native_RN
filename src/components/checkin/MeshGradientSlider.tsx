@@ -9,6 +9,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import EmotionDetailSheet from '../EmotionDetailSheet';
 import { MappedEmotion } from '../../hooks/useEmotionStates';
+import { useReduceMotion } from '../../hooks/useReduceMotion';
 import { XanoStateCoordinate } from '../../api';
 import { colors, fonts, fontSizes, buttonStyles } from '../../theme';
 import MeshGradientPalette from './meshGradient/MeshGradientPalette';
@@ -30,17 +31,23 @@ interface MeshGradientSliderProps {
 }
 
 export default function MeshGradientSlider({ emotions, coordinates, onComplete }: MeshGradientSliderProps) {
+  const reduceMotion = useReduceMotion();
   const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [matchedEmotion, setMatchedEmotion] = useState<MappedEmotion | null>(null);
   const [matchedCoord, setMatchedCoord] = useState<XanoStateCoordinate | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const lastHapticRef = useRef<number>(0);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const fadeAnim = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
+  const scaleAnim = useRef(new Animated.Value(reduceMotion ? 1 : 0.9)).current;
   const contentShiftAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (reduceMotion) {
+      fadeAnim.setValue(1);
+      scaleAnim.setValue(1);
+      return;
+    }
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -54,18 +61,21 @@ export default function MeshGradientSlider({ emotions, coordinates, onComplete }
         friction: 8,
       }),
     ]).start();
-  }, []);
+  }, [reduceMotion]);
 
   useEffect(() => {
-    if (matchedEmotion) {
-      Animated.spring(contentShiftAnim, {
-        toValue: -60,
-        useNativeDriver: true,
-        tension: 50,
-        friction: 10,
-      }).start();
+    if (!matchedEmotion) return;
+    if (reduceMotion) {
+      contentShiftAnim.setValue(-60);
+      return;
     }
-  }, [matchedEmotion]);
+    Animated.spring(contentShiftAnim, {
+      toValue: -60,
+      useNativeDriver: true,
+      tension: 50,
+      friction: 10,
+    }).start();
+  }, [matchedEmotion, reduceMotion]);
 
   const quadrantColors = useMemo(() => buildQuadrantColors(emotions), [emotions]);
   const emotionGrid = useMemo(() => buildEmotionGrid(emotions), [emotions]);
@@ -115,12 +125,16 @@ export default function MeshGradientSlider({ emotions, coordinates, onComplete }
   };
 
   const handleReset = () => {
-    Animated.spring(contentShiftAnim, {
-      toValue: 0,
-      useNativeDriver: true,
-      tension: 50,
-      friction: 10,
-    }).start();
+    if (reduceMotion) {
+      contentShiftAnim.setValue(0);
+    } else {
+      Animated.spring(contentShiftAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 50,
+        friction: 10,
+      }).start();
+    }
     setCursorPos(null);
     setMatchedEmotion(null);
     setMatchedCoord(null);

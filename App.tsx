@@ -11,6 +11,7 @@ import { CheckInProvider } from './src/contexts/CheckInContext';
 import { CourseProvider } from './src/contexts/CourseContext';
 import { MHFRProvider } from './src/contexts/MHFRContext';
 import { NotificationsProvider } from './src/contexts/NotificationsContext';
+import { ToastProvider } from './src/contexts/ToastContext';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { fontAssets } from './src/theme/fonts';
 import { colors } from './src/theme';
@@ -18,34 +19,44 @@ import * as Sentry from '@sentry/react-native';
 
 Sentry.init({
   dsn: 'https://2660ada112620cc2162f58a8c1472cce@o4511233478819840.ingest.us.sentry.io/4511233481768960',
+  environment: 'production',
+  enabled: !__DEV__,
 
-  // Adds more context data to events (IP address, cookies, user, etc.)
-  // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
+  // PII is required for grouping users to crashes; disclosed in privacy policy.
+  // See https://docs.sentry.io/platforms/react-native/data-management/data-collected/
   sendDefaultPii: true,
 
-  // Enable Logs
   enableLogs: true,
 
-  // Configure Session Replay
-  replaysSessionSampleRate: 0.1,
+  // Replay sampling kept low because Pulse handles sensitive emotional content.
+  // Errors are always replayed; routine sessions are sampled at 1%.
+  replaysSessionSampleRate: 0.01,
   replaysOnErrorSampleRate: 1,
-  integrations: [Sentry.mobileReplayIntegration(), Sentry.feedbackIntegration()],
-
-  // uncomment the line below to enable Spotlight (https://spotlightjs.com)
-  // spotlight: __DEV__,
+  integrations: [
+    // Explicit masking config — defaults already mask text/images, declared
+    // here so the privacy posture is visible at the call site for any
+    // Sharetree contributor reviewing this file.
+    Sentry.mobileReplayIntegration({
+      maskAllText: true,
+      maskAllImages: true,
+      maskAllVectors: true,
+    }),
+    Sentry.feedbackIntegration(),
+  ],
 });
 
 // Keep splash screen visible while we load fonts
 SplashScreen.preventAutoHideAsync();
 
-// Initialise OneSignal (native-only — guarded so Expo Go doesn't crash)
+// Initialise OneSignal (native-only — guarded so Expo Go doesn't crash).
+// Permission is NOT requested here — see PushPrimer for the context-first
+// prompt that runs inside the authenticated app shell.
 if (Platform.OS !== 'web') {
   try {
     const { OneSignal } = require('react-native-onesignal');
     const appId = process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID;
     if (appId) {
       OneSignal.initialize(appId);
-      OneSignal.Notifications.requestPermission(false);
     }
   } catch (e) {
     console.warn('[OneSignal] Native module not available (Expo Go?):', e);
@@ -88,17 +99,19 @@ export default Sentry.wrap(function App() {
   return (
     <ErrorBoundary>
       <SafeAreaProvider>
-        <AuthProvider>
-          <CourseProvider>
-            <CheckInProvider>
-              <MHFRProvider>
-                <NotificationsProvider>
-                  <AppNavigator />
-                </NotificationsProvider>
-              </MHFRProvider>
-            </CheckInProvider>
-          </CourseProvider>
-        </AuthProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <CourseProvider>
+              <CheckInProvider>
+                <MHFRProvider>
+                  <NotificationsProvider>
+                    <AppNavigator />
+                  </NotificationsProvider>
+                </MHFRProvider>
+              </CheckInProvider>
+            </CourseProvider>
+          </AuthProvider>
+        </ToastProvider>
       </SafeAreaProvider>
     </ErrorBoundary>
   );

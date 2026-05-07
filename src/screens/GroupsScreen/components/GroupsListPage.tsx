@@ -3,17 +3,18 @@ import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-nati
 import { ChevronUp } from 'lucide-react-native';
 import Avatar from '../../../components/Avatar';
 import { colors, fonts, fontSizes } from '../../../theme';
+import { XanoCoordinateCount, XanoGroupRunningStats } from '../../../api';
 
 export interface GroupListItemPayload {
   groupId: number;
   groupName: string;
   forestId: number | undefined;
-  runningStats: any;
+  runningStats: XanoGroupRunningStats | null;
   imageUrl: string | undefined;
   role: string | undefined;
-  membersCoordinatesCount: any[];
-  checkins7day: any[];
-  checkins30day: any[];
+  membersCoordinatesCount: XanoCoordinateCount[];
+  checkins7day: XanoCoordinateCount[];
+  checkins30day: XanoCoordinateCount[];
 }
 
 interface GroupsListPageProps {

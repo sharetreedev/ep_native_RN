@@ -16,6 +16,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { RootStackParamList } from '../../types/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUser } from '../../hooks/useUser';
+import { useScreenAnnouncement } from '../../hooks/useScreenAnnouncement';
 import { colors, fonts, fontSizes, spacing, borderRadius } from '../../theme';
 import ModalPicker from '../../components/ModalPicker';
 import Avatar from '../../components/Avatar';
@@ -26,6 +27,7 @@ import { useSafeEdges } from '../../contexts/MHFRContext';
 const appLogo = require('../../../assets/Logo.png');
 
 export default function EditProfileScreen() {
+  useScreenAnnouncement('Edit profile');
   const safeEdges = useSafeEdges(['top']);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user, refreshUser } = useAuth();
@@ -69,6 +71,11 @@ export default function EditProfileScreen() {
         full_name: fullName,
         phone_number: phone.trim(),
         country: country,
+        // Required-on-PATCH by Xano even though we're not changing it here.
+        // Falls back to empty string for users who somehow have no hex yet,
+        // which the server will accept (the field is required-present, not
+        // required-non-empty).
+        profile_hex_colour: user?.profileHexColour || '',
       });
       if (avatarFileUri) {
         await updateProfilePic(avatarFileUri);

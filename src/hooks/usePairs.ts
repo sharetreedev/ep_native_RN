@@ -23,7 +23,7 @@ interface UsePairsResult {
   fetchAll: () => Promise<void>;
   fetchSentRequests: () => Promise<void>;
   getPairById: (pairsId: number) => Promise<XanoPair | null>;
-  invitePair: (inviteEmail: string, extraFields?: Partial<XanoPair>) => Promise<XanoPair | null>;
+  invitePair: (pairType: 'DUAL' | 'PUSH' | 'PULL', requestFromId: number) => Promise<XanoPair | null>;
   respond: (pairsId: number, status: 'ACCEPTED' | 'REJECTED', requestToId: number) => Promise<void>;
   cancelRequest: (pairId: number) => Promise<void>;
   removePair: (pairId: number) => Promise<void>;
@@ -66,8 +66,8 @@ export function usePairs(): UsePairsResult {
   const getPairById = useCallback((pairsId: number) =>
     wrap(() => xanoPairs.getById(pairsId)), [wrap]);
 
-  const invitePair = useCallback(async (inviteEmail: string, extraFields?: Partial<XanoPair>) => {
-    const result = await wrap(() => xanoPairs.create(inviteEmail, extraFields));
+  const invitePair = useCallback(async (pairType: 'DUAL' | 'PUSH' | 'PULL', requestFromId: number) => {
+    const result = await wrap(() => xanoPairs.create(pairType, requestFromId));
     if (result) {
       invalidate(CACHE_KEYS.PAIRS);
       setState(prev => ({ ...prev, active: [...prev.active, result] }));
