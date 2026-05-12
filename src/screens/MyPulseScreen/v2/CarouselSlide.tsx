@@ -36,6 +36,16 @@ export type CarouselSlideData = {
    *  a "this is a {significance} shift" line types out below the subline as
    *  the final segment of the typewriter stream. */
   shiftSignificance?: string;
+  /** When true the subline emotion is rendered as a tappable affordance
+   *  (underlined) instead of a static emotion word, and `onSublineEmotionPress`
+   *  is invoked when the user taps it. Used by the today slide before the
+   *  backend has enough check-ins to establish an "I'm often" mode. */
+  sublineEmotionIsPlaceholder?: boolean;
+  onSublineEmotionPress?: () => void;
+  /** When true the trend arrow box is not rendered at all (vs. just an empty
+   *  arrow). Used on placeholder states where showing an empty box would
+   *  read as a layout bug. */
+  hideArrow?: boolean;
 };
 
 const TYPE_INTERVAL_MS = 40;
@@ -168,13 +178,15 @@ export default function CarouselSlide({ slide, isActive, onContentMeasured }: Pr
   return (
     <View style={styles.slide}>
       <View style={styles.contentWrap} onLayout={handleContentLayout}>
-        <View style={styles.arrowSlot}>
-          {showArrow && (
-            <View style={[styles.arrowBox, { borderColor: ARROW_BORDER }]}>
-              {getDirectionIcon(slide.directionLabel, 33)}
-            </View>
-          )}
-        </View>
+        {!slide.hideArrow && (
+          <View style={styles.arrowSlot}>
+            {showArrow && (
+              <View style={[styles.arrowBox, { borderColor: ARROW_BORDER }]}>
+                {getDirectionIcon(slide.directionLabel, 33)}
+              </View>
+            )}
+          </View>
+        )}
 
         <View style={styles.textBlock}>
           <Text style={styles.eyebrow} allowFontScaling={false}>
@@ -194,7 +206,19 @@ export default function CarouselSlide({ slide, isActive, onContentMeasured }: Pr
             <Text style={styles.subline} allowFontScaling={false}>
               {displayedSublinePrefix}
               {displayedSublineEmotion.length > 0 && (
-                <Text style={styles.sublineEmotion}>{displayedSublineEmotion}</Text>
+                slide.sublineEmotionIsPlaceholder ? (
+                  <Text
+                    style={[styles.sublineEmotion, styles.sublineEmotionPlaceholder]}
+                    onPress={slide.onSublineEmotionPress}
+                    suppressHighlighting={false}
+                    accessibilityRole="button"
+                    accessibilityLabel="Learn about your emotional home"
+                  >
+                    {displayedSublineEmotion}
+                  </Text>
+                ) : (
+                  <Text style={styles.sublineEmotion}>{displayedSublineEmotion}</Text>
+                )
               )}
             </Text>
           )}
@@ -277,6 +301,13 @@ const styles = StyleSheet.create({
     fontFamily: fonts.heading,
     fontStyle: 'normal',
     color: colors.textPrimary,
+  },
+  // Placeholder variant: subtle underline + slightly dimmed colour signals
+  // this isn't a real emotion yet but is tappable to learn more.
+  sublineEmotionPlaceholder: {
+    color: colors.textSecondary,
+    textDecorationLine: 'underline',
+    textDecorationStyle: 'solid',
   },
   shiftLine: {
     fontFamily: fonts.headingMedium,

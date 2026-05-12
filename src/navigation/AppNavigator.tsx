@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -6,7 +6,7 @@ import { RootStackParamList } from '../types/navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { useCheckIn } from '../contexts/CheckInContext';
 import { colors } from '../theme';
-import { consumePendingLesson } from './pendingLesson';
+import { consumePendingLesson, peekPendingLesson } from './pendingLesson';
 import TabNavigator from './TabNavigator';
 import AuthScreen from '../screens/AuthScreen/AuthScreen';
 import MobileSignInScreen from '../screens/MobileSignInScreen/MobileSignInScreen';
@@ -53,18 +53,31 @@ export default function AppNavigator() {
     const needsOnboarding = isAuthenticated && !user?.onboardingComplete;
     const needsCheckIn = isAuthenticated && user?.onboardingComplete && !hasCheckedInToday;
 
-    // Navigate to lesson if user enrolled during onboarding
-    useEffect(() => {
-        if (!needsOnboarding && !isLoading) {
-            const lesson = consumePendingLesson();
-            if (lesson) {
-                // Small delay to let the Main stack mount
-                setTimeout(() => {
-                    navRef.current?.navigate('Lessons', { lesson });
-                }, 100);
-            }
-        }
+    // Hand off a pending lesson (set during onboarding's course-enroll step)
+    // to the Lessons screen as soon as the authed stack is mounted and ready.
+    // We trigger from both onReady and onStateChange because:
+    //   - onReady covers the cold-launch case (user closed the app between
+    //     enroll and re-open; lesson is rehydrated from SecureStore)
+    //   - onStateChange covers the hot case (Stack swaps from Onboarding-only
+    //     to the full authed tree when `needsOnboarding` flips false)
+    // The lesson is durably stored in SecureStore (see pendingLesson.ts), so
+    // missing one trigger doesn't lose the handoff — the next state change,
+    // or the next launch, will still pick it up.
+    const tryConsumePendingLesson = useCallback(() => {
+        if (needsOnboarding || isLoading) return;
+        if (!peekPendingLesson()) return;
+        const ref = navRef.current;
+        if (!ref?.isReady()) return;
+        const routes = ref.getRootState()?.routeNames as string[] | undefined;
+        if (!routes?.includes('Lessons')) return;
+        consumePendingLesson().then((lesson) => {
+            if (lesson) ref.navigate('Lessons', { lesson });
+        });
     }, [needsOnboarding, isLoading]);
+
+    useEffect(() => {
+        tryConsumePendingLesson();
+    }, [tryConsumePendingLesson]);
 
     if (isLoading) {
         return (
@@ -83,7 +96,9 @@ export default function AppNavigator() {
                     checkinPushed.current = true;
                     navRef.current?.navigate('CheckIn');
                 }
+                tryConsumePendingLesson();
             }}
+            onStateChange={tryConsumePendingLesson}
         >
             <View style={styles.appContainer}>
             {isAuthenticated && !needsOnboarding && <MHFRBanner />}

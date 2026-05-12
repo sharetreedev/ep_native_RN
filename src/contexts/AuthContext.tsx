@@ -2,19 +2,11 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { Platform, AppState } from 'react-native';
 import { auth as xanoAuth, tokenStore, XanoError, XanoAuthMeResponse, XanoGroup, XanoUserGroup, XanoPair, XanoRecentCheckInEmotion, XanoLast7CheckIn, groups as xanoGroups, pairs as xanoPairs, onesignal as onesignalApi, setOnAuthExpired, user as xanoUserApi, runningStats as xanoRunningStats } from '../api';
 import { invalidateAll } from '../lib/fetchCache';
+import { resetAndReload } from '../lib/resetRuntime';
 import { logger } from '../lib/logger';
 import { errorStatus } from '../lib/errorUtils';
 import { pickRandomProfileHex } from '../lib/profileColours';
-
-/** Convert any date string (ISO/UTC or YYYY-MM-DD) to YYYY-MM-DD in the device's local timezone. */
-function toLocalDateString(iso: string): string {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso.slice(0, 10);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
+import { userDateOf } from '../lib/userDate';
 
 export interface User {
   id: string;
@@ -44,6 +36,10 @@ export interface User {
   phoneVerified?: boolean;
   recentStateCoordinates?: number | { id: number } | null;
   lastCheckInDate?: string | null;
+  /** IANA timezone (e.g. "Australia/Sydney") synced from the user's Xano row.
+   *  Used by `userDate` helpers so date bucketing is consistent across the
+   *  app even when the device's timezone differs from the user's. */
+  timezone?: string | null;
   isMHFR?: boolean;
   reminderFrequency?: string;
   reminderHour?: number;
@@ -147,14 +143,13 @@ function mapXanoUser(xano: XanoAuthMeResponse): User {
     phoneVerified: xano.phoneVerified ?? false,
     recentStateCoordinates: xano.recentStateCoordinates ?? null,
     lastCheckInDate: xano.lastCheckInDate
-      ? toLocalDateString(typeof xano.lastCheckInDate === 'number'
-          ? new Date(xano.lastCheckInDate).toISOString()
-          : xano.lastCheckInDate)
+      ? userDateOf(xano.lastCheckInDate, xano.timezone)
       : null,
     reminderFrequency: xano.reminder_frequency ?? undefined,
     reminderHour: xano.reminder_hour ?? undefined,
     reminderMin: xano.reminder_min ?? undefined,
     preferredCheckinView: xano.preferred_checkin_view || '',
+    timezone: xano.timezone || null,
   };
 }
 
@@ -516,7 +511,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const logout = useCallback(async () => {
+  // Manual tear-down used as a fallback when the runtime reload isn't
+  // available (Expo Go on older SDKs etc). The bulletproof path is
+  // `resetAndReload`, which restarts the JS runtime and makes every form of
+  // cross-account leakage impossible by construction; this is only a backup.
+  const manualLocalLogout = useCallback(async () => {
     if (OneSignalModule) {
       try {
         OneSignalModule.logout();
@@ -530,23 +529,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setError(null);
   }, []);
 
+  const logout = useCallback(async () => {
+    try {
+      await resetAndReload({
+        message: 'Signing you out…',
+        clearAuthToken: true,
+        onesignalLogout: true,
+      });
+    } catch {
+      // Reload unavailable (Expo Go / dev fallback already attempted). Tear
+      // down what we can locally so the user at least lands back on Auth.
+      await manualLocalLogout();
+    }
+  }, [manualLocalLogout]);
+
   const deleteAccount = useCallback(async () => {
     // The API call must succeed before we tear down local state — if the
     // server failed to anonymise the records, we don't want the user to
     // believe their account is gone. On success we mirror the logout flow.
     await xanoUserApi.deleteAccount();
-    if (OneSignalModule) {
-      try {
-        OneSignalModule.logout();
-      } catch (e) {
-        logger.warn('[AuthContext] OneSignal logout failed:', e);
-      }
+    try {
+      await resetAndReload({
+        message: 'Closing your account…',
+        clearAuthToken: true,
+        onesignalLogout: true,
+      });
+    } catch {
+      await manualLocalLogout();
     }
-    await tokenStore.clear();
-    invalidateAll();
-    setState({ isAuthenticated: false, user: null });
-    setError(null);
-  }, []);
+  }, [manualLocalLogout]);
 
   const _setUser = useCallback((updater: (prev: User | null) => User | null) => {
     setState((prev) => ({ ...prev, user: updater(prev.user) }));

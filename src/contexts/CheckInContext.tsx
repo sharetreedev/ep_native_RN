@@ -1,24 +1,6 @@
 import React, { createContext, useContext, useMemo, useCallback } from 'react';
 import { useAuth } from './AuthContext';
-
-/** Return today's date as YYYY-MM-DD in the device's local timezone. */
-function getLocalDateString(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-/** Convert any date string (ISO/UTC or YYYY-MM-DD) to YYYY-MM-DD in the device's local timezone. */
-function toLocalDateString(iso: string): string {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso.slice(0, 10);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
+import { userDateOf, userToday } from '../lib/userDate';
 
 interface CheckInContextValue {
   hasCheckedInToday: boolean;
@@ -29,29 +11,35 @@ const CheckInContext = createContext<CheckInContextValue | null>(null);
 
 export function CheckInProvider({ children }: { children: React.ReactNode }) {
   const { user, _setUser } = useAuth();
+  const timezone = user?.timezone;
 
   const hasCheckedInToday = useMemo(() => {
-    const today = getLocalDateString();
+    const today = userToday(timezone);
 
     // Primary: check lastCheckInDate from /auth/me
     const dateStr = user?.lastCheckInDate;
-    if (dateStr && typeof dateStr === 'string' && toLocalDateString(dateStr) === today) {
+    if (dateStr && typeof dateStr === 'string' && userDateOf(dateStr, timezone) === today) {
       return true;
     }
 
-    // Fallback: check last_7_checkins for a check-in logged today
+    // Fallback: check last_7_checkins for a check-in logged today. Prefer
+    // `loggedDateTime` (epoch ms) so a near-midnight check-in lands on the
+    // correct calendar day in the user's timezone.
     const recent = user?.last7CheckIns;
     if (recent && recent.length > 0) {
-      return recent.some((c) => c.loggedDate && toLocalDateString(c.loggedDate) === today);
+      return recent.some((c) => {
+        const moment = typeof c.loggedDateTime === 'number' ? c.loggedDateTime : c.loggedDate;
+        return moment ? userDateOf(moment, timezone) === today : false;
+      });
     }
 
     return false;
-  }, [user]);
+  }, [user, timezone]);
 
   const markCheckedInToday = useCallback(() => {
-    const today = getLocalDateString();
+    const today = userToday(timezone);
     _setUser((prev) => prev ? { ...prev, lastCheckInDate: today } : prev);
-  }, [_setUser]);
+  }, [_setUser, timezone]);
 
   const value = useMemo<CheckInContextValue>(
     () => ({ hasCheckedInToday, markCheckedInToday }),

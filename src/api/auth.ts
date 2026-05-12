@@ -53,11 +53,8 @@ export const auth = {
       'POST', '/auth/microsoft/callback', params as Record<string, unknown>,
     ),
 
-  // EP-963: in-app password reset trigger. Backend sends an email with a
-  // reset link; SSO-only accounts are no-oped server-side. Update the path
-  // here when the Xano endpoint is confirmed.
   requestPasswordReset: (email: string) =>
-    request<{ success: boolean }>('POST', '/auth/request_password_reset', { email }),
+    request<{ message: string }>('POST', '/auth/request_password_reset', { email }),
 
   appleCallback: (params: {
     identity_token: string;

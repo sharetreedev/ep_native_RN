@@ -23,15 +23,25 @@ import EmotionCarousel from './v2/EmotionCarousel';
 import type { CarouselSlideData } from './v2/CarouselSlide';
 import ThingsToDoCard from './v2/ThingsToDoCard';
 import ThingsToDoSheet from './v2/ThingsToDoSheet';
+import BottomSheet from '../../components/BottomSheet';
 import { useThingsToDo } from '../../hooks/useThingsToDo';
 import { useScreenAnnouncement } from '../../hooks/useScreenAnnouncement';
+
+// Minimum check-ins required before the backend can establish a reliable
+// "I'm often" mode. Below this we show a tappable placeholder that opens the
+// Emotional Home explainer sheet.
+const EMOTIONAL_HOME_MIN_CHECKINS = 3;
+const EMOTIONAL_HOME_PLACEHOLDER = '...';
 
 function capitalize(s: string | undefined | null): string {
   if (!s) return '';
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-function buildCarouselSlides(stats: XanoRunningStats | null): CarouselSlideData[] {
+function buildCarouselSlides(
+  stats: XanoRunningStats | null,
+  onEmotionalHomePress: () => void,
+): CarouselSlideData[] {
   if (!stats) return [];
 
   const slides: CarouselSlideData[] = [];
@@ -50,16 +60,37 @@ function buildCarouselSlides(stats: XanoRunningStats | null): CarouselSlideData[
   const modeEmotion = capitalize(mode?.emotionText);
   const modeEmotionColor =
     mode?.themeColour ?? mode?.emotion_states?.themeColour ?? mode?.emotionColour;
+
+  // Mode requires a minimum number of check-ins to be statistically
+  // meaningful. Below that, the backend can still echo a placeholder
+  // emotionText — gate on the count, not on the presence of the string,
+  // so we render the "reveal your emotional home" affordance instead of
+  // a misleading "I'm often <something>" line.
+  const checkInCount = stats.checkInCount ?? 0;
+  const hasEnoughForMode = checkInCount >= EMOTIONAL_HOME_MIN_CHECKINS;
+  const todayHasModePlaceholder = !hasEnoughForMode;
+
   slides.push({
     id: 'today',
     title: 'Today',
     prefix: "I'm feeling",
     emotion: capitalize(current?.emotion_name) || 'Unknown',
     emotionColor: current?.themeColour ?? current?.colour ?? colors.primary,
-    sublinePrefix: modeEmotion ? "I'm often" : undefined,
-    sublineEmotion: modeEmotion || undefined,
+    sublinePrefix: todayHasModePlaceholder
+      ? "I'm often"
+      : modeEmotion
+        ? "I'm often"
+        : undefined,
+    sublineEmotion: todayHasModePlaceholder
+      ? EMOTIONAL_HOME_PLACEHOLDER
+      : modeEmotion || undefined,
     sublineEmotionColor: modeEmotionColor,
-    directionLabel: stats.direction_t_p?.directionLabel,
+    sublineEmotionIsPlaceholder: todayHasModePlaceholder,
+    onSublineEmotionPress: todayHasModePlaceholder ? onEmotionalHomePress : undefined,
+    // Trend arrow is meaningless until there's enough history to compare
+    // against — collapse the slot entirely rather than show an empty box.
+    directionLabel: todayHasModePlaceholder ? undefined : stats.direction_t_p?.directionLabel,
+    hideArrow: todayHasModePlaceholder,
     auroraColors: dailyAurora,
     shiftSignificance: stats.shift_t_at?.significance,
   });
@@ -219,8 +250,20 @@ export default function MyPulseScreenV2() {
     return () => loop.stop();
   }, [pulseAnim, isFocused]);
 
-  const slides = useMemo(() => buildCarouselSlides(stats), [stats]);
+  const [emotionalHomeOpen, setEmotionalHomeOpen] = useState(false);
+  const openEmotionalHome = useCallback(() => setEmotionalHomeOpen(true), []);
+
+  const slides = useMemo(
+    () => buildCarouselSlides(stats, openEmotionalHome),
+    [stats, openEmotionalHome],
+  );
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
+
+  const emotionalHomeRemaining = Math.max(
+    0,
+    EMOTIONAL_HOME_MIN_CHECKINS - (stats?.checkInCount ?? 0),
+  );
+  const emotionalHomeCopy = `Your emotional home is the feeling you keep coming back to, the baseline of who you are. Check in ${emotionalHomeRemaining} more ${emotionalHomeRemaining === 1 ? 'time' : 'times'} and we'll show you yours.`;
 
   const { actions: thingsToDoActions } = useThingsToDo();
   const [thingsToDoOpen, setThingsToDoOpen] = useState(false);
@@ -374,6 +417,14 @@ export default function MyPulseScreenV2() {
           onClose={() => setThingsToDoOpen(false)}
         />
 
+        <BottomSheet
+          visible={emotionalHomeOpen}
+          onDismiss={() => setEmotionalHomeOpen(false)}
+          title="Your Emotional Home"
+        >
+          <Text style={styles.emotionalHomeBody}>{emotionalHomeCopy}</Text>
+        </BottomSheet>
+
         <ConfettiCelebration
           visible={showConfetti}
           courseName={completedCourseName}
@@ -475,5 +526,13 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.base,
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  emotionalHomeBody: {
+    fontFamily: fonts.body,
+    fontSize: fontSizes.base,
+    color: colors.textSecondary,
+    lineHeight: 22,
+    paddingHorizontal: 4,
+    paddingBottom: 8,
   },
 });

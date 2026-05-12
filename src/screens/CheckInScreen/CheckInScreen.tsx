@@ -105,8 +105,24 @@ export default function CheckInScreen({ route, navigation }: Props) {
                 createdAt: new Date().toISOString(),
             };
 
+            // If this CheckIn entry was launched from inside the support flow,
+            // it inherits the "first of day" status from the originating
+            // check-in via route params. Otherwise compute it from
+            // `hasCheckedInToday` — which the closure captured *before*
+            // markCheckedInToday() flipped it, so it reflects the state from
+            // before this check-in.
+            const wasFirstCheckinToday = route.params?.wasFirstCheckinToday ?? !hasCheckedInToday;
+
+            const exitFinal = () => {
+                if (wasFirstCheckinToday) {
+                    navigation.replace('DailyInsight', { justCheckedIn });
+                } else {
+                    navigation.navigate('Main' as any);
+                }
+            };
+
             if (isSupportRequest) {
-                navigation.replace('DailyInsight', { justCheckedIn });
+                exitFinal();
                 return;
             }
 
@@ -118,22 +134,22 @@ export default function CheckInScreen({ route, navigation }: Props) {
                         coordinateId,
                         emotionName: displayName,
                         supportRequestId: sr.id,
+                        wasFirstCheckinToday,
+                        justCheckedIn,
                     });
                 } catch (e: unknown) {
                     // Support-request create failed but the check-in itself is
-                    // saved. Send the user to DailyInsight so they still see
-                    // their logged entry; they can open a support request
-                    // manually from there.
+                    // saved. Send the user to DailyInsight (or Main) so they
+                    // still see their logged entry; they can open a support
+                    // request manually from there.
                     reportError('CheckIn.createSupportRequest', e);
-                    navigation.replace('DailyInsight', { justCheckedIn });
+                    exitFinal();
                 }
-            } else if (hasCheckedInToday) {
-                navigation.navigate('Main' as any);
             } else {
-                navigation.replace('DailyInsight', { justCheckedIn });
+                exitFinal();
             }
         },
-        [navigation, createCheckIn, refreshUser, _setUser, markCheckedInToday, hasCheckedInToday, isSupportRequest, viewMode, coordinates]
+        [navigation, createCheckIn, refreshUser, _setUser, markCheckedInToday, hasCheckedInToday, isSupportRequest, viewMode, coordinates, route.params?.wasFirstCheckinToday]
     );
 
     return (

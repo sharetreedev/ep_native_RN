@@ -13,6 +13,7 @@ import { MHFRProvider } from './src/contexts/MHFRContext';
 import { NotificationsProvider } from './src/contexts/NotificationsContext';
 import { ToastProvider } from './src/contexts/ToastContext';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
+import RuntimeResetSplash from './src/components/RuntimeResetSplash';
 import { fontAssets } from './src/theme/fonts';
 import { colors } from './src/theme';
 import * as Sentry from '@sentry/react-native';
@@ -112,6 +113,10 @@ export default Sentry.wrap(function App() {
             </CourseProvider>
           </AuthProvider>
         </ToastProvider>
+        {/* Rendered outside the auth-gated tree so it overlays everything
+            during the runtime reset (logout / delete / merge). See
+            src/lib/resetRuntime.ts for the trigger flow. */}
+        <RuntimeResetSplash />
       </SafeAreaProvider>
     </ErrorBoundary>
   );

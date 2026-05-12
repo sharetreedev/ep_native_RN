@@ -3,6 +3,8 @@ import { View, Text, Animated, StyleSheet } from 'react-native';
 import EmotionBadge from '../EmotionBadge';
 import { XanoTimelineCheckIn } from '../../api';
 import { useEmotionStates } from '../../hooks/useEmotionStates';
+import { useAuth } from '../../contexts/AuthContext';
+import { userDateOf, userDaysAgo } from '../../lib/userDate';
 import { colors, fonts, fontSizes, spacing } from '../../theme';
 
 interface TimelineViewProps {
@@ -14,38 +16,47 @@ interface TimelineRow {
   items: { name: string; colour: string; isPleasant: boolean; intensity?: number }[];
 }
 
-/** Convert any date/datetime string to YYYY-MM-DD in the device's local timezone. */
-function toLocalDateString(value: string): string {
-  const d = new Date(value);
-  if (isNaN(d.getTime())) return value.slice(0, 10);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+/** Best timestamp for a check-in. `loggedDateTime` is unambiguous epoch ms;
+ *  if absent fall back to the date string (which may bucket off-by-one for
+ *  near-midnight check-ins, hence the preference). */
+function checkInMoment(c: XanoTimelineCheckIn): number | string {
+  if (typeof c.loggedDateTime === 'number') return c.loggedDateTime;
+  if (typeof c.loggedDateUnix === 'number') return c.loggedDateUnix * 1000;
+  if (typeof c.created_at === 'number') return c.created_at;
+  return c.loggedDate;
 }
 
-/** Format a date relative to today in the user's local timezone. */
-function formatDayLabel(d: Date, daysAgo: number): string {
+/** "Today" / "Yesterday" / "Wed, 13 May" for a YYYY-MM-DD in the user's TZ. */
+function formatDayLabel(dayStr: string, daysAgo: number): string {
   if (daysAgo === 0) return 'Today';
   if (daysAgo === 1) return 'Yesterday';
-  const weekday = d.toLocaleString('default', { weekday: 'short' });
-  const day = d.getDate();
-  const month = d.toLocaleString('default', { month: 'short' });
-  return `${weekday}, ${day} ${month}`;
+  const [y, m, d] = dayStr.split('-').map(Number);
+  // Construct in UTC and read components back in UTC so the weekday/month
+  // reflect the YYYY-MM-DD itself, not whatever timezone the device is in.
+  const date = new Date(Date.UTC(y, m - 1, d));
+  const weekday = date.toLocaleString('default', { weekday: 'short', timeZone: 'UTC' });
+  const month = date.toLocaleString('default', { month: 'short', timeZone: 'UTC' });
+  return `${weekday}, ${d} ${month}`;
 }
 
 function buildLast7Days(
   checkIns: XanoTimelineCheckIn[],
   pleasantSet: Set<string>,
+  timezone: string | null | undefined,
 ): TimelineRow[] {
   const rows: TimelineRow[] = [];
-  const now = new Date();
   for (let i = 0; i < 7; i++) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    const dayStr = toLocalDateString(d.toISOString());
-    const dayLabel = formatDayLabel(d, i);
+    const dayStr = userDaysAgo(i, timezone);
+    const dayLabel = formatDayLabel(dayStr, i);
 
     const dayCheckIns = checkIns
-      .filter((c) => toLocalDateString(c.loggedDate) === dayStr)
-      .sort((a, b) => new Date(b.loggedDate).getTime() - new Date(a.loggedDate).getTime());
+      .filter((c) => userDateOf(checkInMoment(c), timezone) === dayStr)
+      .sort((a, b) => {
+        const am = checkInMoment(a);
+        const bm = checkInMoment(b);
+        return (typeof bm === 'number' ? bm : new Date(bm).getTime())
+          - (typeof am === 'number' ? am : new Date(am).getTime());
+      });
 
     const items = dayCheckIns.map((c) => ({
       name: c.state.Display,
@@ -61,6 +72,8 @@ function buildLast7Days(
 
 function TimelineView({ checkIns }: TimelineViewProps) {
   const { emotionStates } = useEmotionStates();
+  const { user } = useAuth();
+  const timezone = user?.timezone;
 
   // Build set of pleasant emotion names from grid position (col 2-3 = right side = pleasant)
   const pleasantSet = React.useMemo(() => {
@@ -74,7 +87,10 @@ function TimelineView({ checkIns }: TimelineViewProps) {
   // `buildLast7Days` runs 7 × (filter + sort) over check-ins. Memoise so
   // parent re-renders (e.g. animation tick on DailyInsightScreen) don't
   // re-scan the timeline on every frame.
-  const rows = useMemo(() => buildLast7Days(checkIns, pleasantSet), [checkIns, pleasantSet]);
+  const rows = useMemo(
+    () => buildLast7Days(checkIns, pleasantSet, timezone),
+    [checkIns, pleasantSet, timezone],
+  );
 
   // Build a flat list of all visual rows (date headers + individual check-ins) for animation
   const flatRows = useMemo(() => {

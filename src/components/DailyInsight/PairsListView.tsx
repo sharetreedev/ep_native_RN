@@ -82,13 +82,17 @@ function PairsListView({
             : null);
         const lastCheckInLabel = formatLastCheckIn(lastCheckInDate);
 
-        const runningStats = otherUser?.running_stats;
-        const directionLabel = runningStats?.direction_t_p?.directionLabel;
+        // Trend arrow uses today-vs-all-time direction from the pair's
+        // `user_stats` payload (matches MyPulse v2 carousel data source).
+        // Fall back to `running_stats` and the legacy `_t_p` paths so older
+        // server responses still render an arrow.
+        const directionLabel =
+          otherUser?.user_stats?.direction_t_at?.directionLabel ??
+          otherUser?.running_stats?.direction_t_at?.directionLabel ??
+          otherUser?.direction_t_p?.directionLabel ??
+          otherUser?.running_stats?.direction_t_p?.directionLabel;
 
-        const metaText =
-          hasRecentCheckIn && lastCheckInLabel
-            ? `Trusted Pair · ${lastCheckInLabel}`
-            : 'Trusted Pair';
+        const metaText = hasRecentCheckIn && lastCheckInLabel ? lastCheckInLabel : null;
 
         return (
           <TouchableOpacity
@@ -100,21 +104,21 @@ function PairsListView({
               <Avatar source={avatarUrl} name={name} hexColour={otherUser?.profile_hex_colour} style={{ marginRight: 12 }} />
               <View style={styles.nameContainer}>
                 <Text style={styles.name} numberOfLines={1}>{name}</Text>
-                <Text style={styles.meta}>{metaText}</Text>
+                {metaText ? <Text style={styles.meta}>{metaText}</Text> : null}
               </View>
             </View>
             {hasRecentCheckIn && lastEmotion ? (
               <View style={styles.rightGroup}>
+                {directionLabel ? (
+                  <View style={styles.trendIcon}>
+                    {getDirectionIcon(directionLabel, 22, colors.textPlaceholder)}
+                  </View>
+                ) : null}
                 <EmotionBadge
                   emotionName={lastEmotion.Display}
                   emotionColour={lastEmotion.emotionColour}
                   size="small"
                 />
-                {directionLabel ? (
-                  <View style={styles.trendIcon}>
-                    {getDirectionIcon(directionLabel, 22)}
-                  </View>
-                ) : null}
               </View>
             ) : (
               <CheckInWithUser
@@ -178,12 +182,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   trendIcon: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     borderRadius: 12,
-    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.textPlaceholder,
     alignItems: 'center',
     justifyContent: 'center',
   },

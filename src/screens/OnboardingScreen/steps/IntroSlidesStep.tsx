@@ -64,7 +64,17 @@ export default function IntroSlidesStep({ onComplete }: IntroSlidesStepProps) {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {renderHeader()}
         <View style={styles.slideImageContainer}>
-          <Image source={slide.image} style={styles.slideImage} resizeMode="cover" />
+          {INTRO_SLIDES.map((s, i) => (
+            <Image
+              key={i}
+              source={s.image}
+              style={[
+                styles.slideImage,
+                { position: 'absolute', opacity: i === slideIndex ? 1 : 0 },
+              ]}
+              resizeMode="cover"
+            />
+          ))}
         </View>
         <Text style={styles.slideTitle}>{slide.title}</Text>
         <Text style={styles.slideDescription}>{slide.description}</Text>

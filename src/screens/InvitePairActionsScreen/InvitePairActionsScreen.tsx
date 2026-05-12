@@ -6,11 +6,11 @@ import {
   TextInput,
   StyleSheet,
   ActivityIndicator,
+  Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp, CommonActions } from '@react-navigation/native';
-import * as Clipboard from 'expo-clipboard';
-import { ArrowLeft, Link, Copy, Mail } from 'lucide-react-native';
+import { ArrowLeft, Link, Share2, Mail } from 'lucide-react-native';
 import { RootStackParamList } from '../../types/navigation';
 import { colors, fonts, fontSizes, buttonStyles } from '../../theme';
 import { logger } from '../../lib/logger';
@@ -20,7 +20,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 
 const PROD_INVITE_BASE = 'https://app.emotionalpulse.ai/pair-invite';
-const STAGING_INVITE_BASE = 'https://d40d63f2-ae0c-4e43-afd2-4047cb3a7a9c-staging.weweb-preview.io/pair-invite';
+const STAGING_INVITE_BASE = 'https://d40d63f2-ae0c-4e43-afd2-4047cb3a7a9c-staging.weweb.io/pair-invite';
 
 function buildInviteUrl(token: string): string {
   const base = DATA_SOURCE === 'live' ? PROD_INVITE_BASE : STAGING_INVITE_BASE;
@@ -42,7 +42,7 @@ export default function InvitePairActionsScreen() {
   const [pairsId, setPairsId] = useState<number | null>(null);
   const [email, setEmail] = useState('');
   const [sending, setSending] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [shared, setShared] = useState(false);
 
   const goHome = () => {
     navigation.dispatch(
@@ -93,15 +93,26 @@ export default function InvitePairActionsScreen() {
     };
   }, [pairType, user?.id]);
 
-  const handleCopyLink = async () => {
+  const buildInviteMessage = (url: string) =>
+    `Hey,\n\n` +
+    `I'm using Emotional Pulse to check in with how I'm feeling each day.\n\n` +
+    `I'd love to share some of that with you, just as someone I trust. You don't need to do anything but be there.\n\n` +
+    `I've set it up so you'll see my Daily Check Ins and Emotional Trends, and you can choose how much to share too.\n\n` +
+    `To accept the pair request and create an account you can click here:\n ${url}\n\n` +
+    `Thanks for being in my corner.`;
+
+  const handleShareLink = async () => {
     if (!inviteUrl) return;
     try {
-      await Clipboard.setStringAsync(inviteUrl);
-      setCopied(true);
-      showToast('Copied to clipboard. Invite links are one-time use only.');
+      const result = await Share.share({
+        message: buildInviteMessage(inviteUrl),
+      });
+      if (result.action === Share.sharedAction) {
+        setShared(true);
+      }
     } catch (e) {
-      logger.error('[InvitePairActions] clipboard copy failed', e);
-      showToast('Could not copy. Please copy the link manually.', { variant: 'error' });
+      logger.error('[InvitePairActions] share invite link failed', e);
+      showToast('Could not open the share sheet. Please try again.', { variant: 'error' });
     }
   };
 
@@ -156,17 +167,17 @@ export default function InvitePairActionsScreen() {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Link color={colors.primary} size={24} />
-            <Text style={styles.cardTitle}>Copy invite link</Text>
+            <Text style={styles.cardTitle}>Share invite link</Text>
           </View>
 
           {creating ? renderLoading()
             : error ? renderError()
             : (
-              <TouchableOpacity style={styles.linkRow} onPress={handleCopyLink}>
+              <TouchableOpacity style={styles.linkRow} onPress={handleShareLink}>
                 <Text style={styles.linkText} numberOfLines={1}>
                   {inviteUrl}
                 </Text>
-                <Copy color={colors.textSecondary} size={20} />
+                <Share2 color={colors.textSecondary} size={20} />
               </TouchableOpacity>
             )}
         </View>
@@ -206,7 +217,7 @@ export default function InvitePairActionsScreen() {
         </View>
       </View>
 
-      {copied ? (
+      {shared ? (
         <View style={styles.footer}>
           <TouchableOpacity
             style={[buttonStyles.primary.container, styles.completeButton]}

@@ -110,7 +110,7 @@ function ContactCard({
 /* ─── Main Screen ─────────────────────────────────────────────────────────── */
 
 export default function CheckinSupportRequestScreen({ route, navigation }: Props) {
-    const { emotionName, supportRequestId } = route.params;
+    const { emotionName, supportRequestId, wasFirstCheckinToday, justCheckedIn } = route.params;
     const { user, refreshUser } = useAuth();
     const firstName = user?.firstName || 'there';
 
@@ -191,6 +191,20 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
         try { await refreshUser(); } catch {}
     }, [refreshUser]);
 
+    // Route the user out of the support flow. If this support flow was
+    // triggered by their first check-in of the day, send them to DailyInsight
+    // (with the optimistic timeline seed so the just-logged emotion appears
+    // even before the timeline endpoint catches up). Otherwise send them
+    // straight to Main — they've already seen today's insight.
+    const exitSupportFlow = useCallback(async () => {
+        await refreshBeforeExit();
+        if (wasFirstCheckinToday) {
+            navigation.replace('DailyInsight', justCheckedIn ? { justCheckedIn } : undefined);
+        } else {
+            navigation.navigate('Main' as any);
+        }
+    }, [navigation, refreshBeforeExit, wasFirstCheckinToday, justCheckedIn]);
+
     const handleScheduleCircleBack = useCallback(async () => {
         const checkbackTime = Date.now() + 30 * 60 * 1000;
         try {
@@ -201,21 +215,16 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
         } catch (e) {
             logger.error('Failed to schedule circle-back:', e);
         }
-        await refreshBeforeExit();
-        navigation.replace('DailyInsight');
-    }, [supportRequestId, navigation, refreshBeforeExit]);
-
-    const exitToDailyInsight = useCallback(async () => {
-        await refreshBeforeExit();
-        navigation.replace('DailyInsight');
-    }, [navigation, refreshBeforeExit]);
+        await exitSupportFlow();
+    }, [supportRequestId, exitSupportFlow]);
 
     const navigateToSupportCheckIn = useCallback(() => {
         navigation.navigate('CheckIn', {
             isSupportRequest: true,
             supportRequestId,
+            wasFirstCheckinToday,
         });
-    }, [navigation, supportRequestId]);
+    }, [navigation, supportRequestId, wasFirstCheckinToday]);
 
     /* ─── Step Renderers ──────────────────────────────────────────────────── */
 
@@ -359,7 +368,7 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
             </Text>
             <View style={styles.actions}>
                 <Button title="Yes" onPress={navigateToSupportCheckIn} />
-                <Button title="No" variant="secondary" onPress={exitToDailyInsight} />
+                <Button title="No" variant="secondary" onPress={exitSupportFlow} />
             </View>
         </View>
     );
@@ -385,7 +394,7 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
                 Your MHFR network has been notified. Someone will be in touch with you soon.
             </Text>
             <View style={styles.actions}>
-                <Button title="Ok" onPress={exitToDailyInsight} />
+                <Button title="Ok" onPress={exitSupportFlow} />
             </View>
         </View>
     );
@@ -398,7 +407,7 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
             </Text>
             <View style={styles.actions}>
                 <Button title="Yes" onPress={handleScheduleCircleBack} />
-                <Button title="No" variant="secondary" onPress={exitToDailyInsight} />
+                <Button title="No" variant="secondary" onPress={exitSupportFlow} />
             </View>
         </View>
     );
