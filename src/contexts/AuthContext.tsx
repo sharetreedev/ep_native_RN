@@ -621,11 +621,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setState({ isAuthenticated: true, user });
       syncOneSignalSubscriptionId(raw);
       syncLastSeen();
-      // NOTE: Login Completed intentionally NOT fired here — the spec's
-      // login_method enum is email/microsoft_auth/microsoft_sso/mobile and has
-      // no `apple` value. Firing an out-of-spec value would pollute the funnel.
-      // Apple-login coverage is an open question flagged to Maurice (EP-1023).
+      // Identify before the event (brief). Apple returns name/email ONLY on
+      // the user's first authorization for this app — the standard signal for
+      // signup vs returning login (the Xano callback returns no is-new flag).
+      // Edge case: a revoke + re-authorize resends them; acceptable for
+      // analytics. Flagged to Maurice (EP-1023).
       identifyAnalyticsUser(toAnalyticsIdentity(user));
+      const isFirstAppleAuth = !!(params.email || params.firstName || params.lastName);
+      if (isFirstAppleAuth) {
+        trackSignUpCompleted({ signup_method: 'apple' });
+      } else {
+        trackLoginCompleted({ login_method: 'apple' });
+      }
     } catch (e) {
       const msg = e instanceof XanoError ? e.message : 'Apple login failed. Please try again.';
       setError(msg);

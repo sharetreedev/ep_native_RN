@@ -14,7 +14,13 @@
  * pass content — emotion ids, note text, message bodies, full emails, free
  * text. Properties are booleans / ids / categoricals only.
  *
- * Divergences flagged to Maurice (EP-1023):
+ * Resolved by Maurice (EP-1023):
+ *   • module_index = course progress tracker (just-completed module id).
+ *   • `apple` added to login_method; Apple sign-in/up now tracked.
+ *   • signup_method = email | apple. Apple first-authorization (name/email
+ *     present) → Sign Up Completed; returning Apple → Login Completed.
+ *
+ * Still flagged to Maurice (EP-1023):
  *   • Pair Removed: spec lists NO properties, but the brief says pair_id must
  *     flow through the whole invite→accept/reject→remove lifecycle. Following
  *     the spec (no props) — the lifecycle is still traceable via the other
@@ -33,7 +39,10 @@ export function trackCheckInCompleted(props: { check_in_type: 'grid' | 'slider' 
   trackAnalyticsEvent('Check-In Completed', props);
 }
 
-/** Spec: `module_index` only (no `course_id` until a 2nd course launches). */
+/** Spec: `module_index` only (no `course_id` until a 2nd course launches).
+ *  Per Maurice: module_index is the course progress tracker — the id of the
+ *  just-completed module (module ids are sequential and used app-wide as the
+ *  course-progress marker, e.g. "next lesson = first module id > this"). */
 export function trackModuleCompleted(props: { module_index: number }): void {
   trackAnalyticsEvent('Module Completed', props);
 }
@@ -41,15 +50,15 @@ export function trackModuleCompleted(props: { module_index: number }): void {
 /* ───────────── Lifecycle ───────────── */
 
 /** Spec: `signup_method`. Fire after signup auth returns success, AFTER
- *  identify. See divergence note re: non-email methods. */
-export function trackSignUpCompleted(props: { signup_method: string }): void {
+ *  identify. Per Maurice: includes `apple` (Apple first-time authorization). */
+export function trackSignUpCompleted(props: { signup_method: 'email' | 'apple' }): void {
   trackAnalyticsEvent('Sign Up Completed', props);
 }
 
 /** Spec: `login_method`. MUST fire only on user-initiated login — never
  *  session rehydration / token refresh / app resume. Fire AFTER identify. */
 export function trackLoginCompleted(props: {
-  login_method: 'email' | 'microsoft_auth' | 'microsoft_sso' | 'mobile';
+  login_method: 'email' | 'microsoft_auth' | 'microsoft_sso' | 'mobile' | 'apple';
 }): void {
   trackAnalyticsEvent('Login Completed', props);
 }

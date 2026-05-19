@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { useAuth } from './AuthContext';
 import { useAsyncHandler } from '../hooks/useAsyncHandler';
 import { invalidate, CACHE_KEYS } from '../lib/fetchCache';
+import { trackModuleCompleted } from '../lib/analyticsEvents';
 import {
   courses as xanoCourses,
   user as xanoUser,
@@ -143,6 +144,10 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
 
       if (result) {
         invalidate(CACHE_KEYS.ENROLLMENT);
+        // module_index = course progress tracker (the just-completed module
+        // id; module ids are sequential and used app-wide as the progress
+        // marker). Fires only after the Xano mark-complete succeeds.
+        trackModuleCompleted({ module_index: moduleId });
         setCourseModulesRaw((prev) => {
           if (!prev) return prev;
           const rawModules: XanoCourseModule[] = Array.isArray(prev.my_modules)
