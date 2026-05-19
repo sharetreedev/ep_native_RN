@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
     View,
     Text,
@@ -19,6 +19,7 @@ import { users, XanoUser, supportRequests as xanoSupportRequests } from '../../a
 import { invalidate, CACHE_KEYS } from '../../lib/fetchCache';
 import Button from '../../components/Button';
 import { logger } from '../../lib/logger';
+import { extractCustomSupportServices } from '../../lib/customSupportServices';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CheckinSupportRequest'>;
 
@@ -40,10 +41,6 @@ const hotlines = [
     { name: 'Lifeline', number: '13 11 14', description: '24/7 Crisis Support' },
     { name: 'Beyond Blue', number: '1300 22 4636', description: 'Depression and anxiety support' },
     { name: 'Kids Helpline', number: '1800 55 1800', description: 'Counseling for young people' },
-];
-
-const eapContacts = [
-    { name: 'Corporate Health', number: '1300 123 456', description: 'Confidential employee support' },
 ];
 
 const emergencyContacts = [
@@ -117,6 +114,15 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
     const [step, setStep] = useState<Step>('invitation');
     const [mhfrContacts, setMhfrContacts] = useState<XanoUser[]>([]);
     const [loadingMhfr, setLoadingMhfr] = useState(true);
+    const [notifying, setNotifying] = useState(false);
+    // Synchronous guard — state updates don't land until after render, so a
+    // second tap landing in the same frame would slip past `notifying`.
+    const notifyInFlightRef = useRef(false);
+
+    const { eap: eapServices } = useMemo(
+        () => extractCustomSupportServices(user?.groups as any),
+        [user?.groups],
+    );
 
     // Track numbers viewed during this session
     const numbersViewedRef = useRef<NumberViewed[]>([]);
@@ -164,14 +170,19 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
     }, []);
 
     const handleNotifyMhfr = useCallback(async () => {
+        if (notifyInFlightRef.current) return;
+        notifyInFlightRef.current = true;
+        setNotifying(true);
         await flushTracking();
         try {
             await xanoSupportRequests.patch(supportRequestId, {
-                is_support_requested: true,
+                is_Support_Requested: true,
             });
         } catch (e) {
             logger.error('Failed to notify MHFR:', e);
         }
+        setNotifying(false);
+        notifyInFlightRef.current = false;
         setStep('mhfr_confirmed');
     }, [supportRequestId, flushTracking]);
 
@@ -247,6 +258,9 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
             <Text style={styles.body}>
                 Reach out to someone who can help.
             </Text>
+            <Text style={styles.introNote}>
+                If you can't reach anyone, "Have someone reach out" will notify trained people in your team who are bound by confidentiality. They usually reach out within a day.
+            </Text>
 
             {/* MHFR Network — hidden when no contacts */}
             {loadingMhfr ? (
@@ -270,20 +284,22 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
                 </View>
             ) : null}
 
-            {/* EAP Provider */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>EAP Provider</Text>
-                {eapContacts.map((c, i) => (
-                    <ContactCard
-                        key={i}
-                        name={c.name}
-                        description={c.description}
-                        number={c.number}
-                        onReveal={() => trackNumberViewed(null)}
-                        onCall={() => trackContactAttempt(null)}
-                    />
-                ))}
-            </View>
+            {/* EAP & Professional Services */}
+            {eapServices.length > 0 && (
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>EAP & Professional Services</Text>
+                    {eapServices.map((s, i) => (
+                        <ContactCard
+                            key={`eap-${i}`}
+                            name={s.name}
+                            description={s.website_link || 'Provided by your group'}
+                            number={s.contact_number}
+                            onReveal={() => trackNumberViewed(null)}
+                            onCall={() => trackContactAttempt(null)}
+                        />
+                    ))}
+                </View>
+            )}
 
             {/* AI MHFR */}
             <TouchableOpacity
@@ -349,12 +365,19 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
 
             <View style={styles.actions}>
                 {hasMhfr && (
-                    <Button title="Notify MHFR Network" onPress={handleNotifyMhfr} />
+                    <Button
+                        title="Have someone reach out"
+                        onPress={handleNotifyMhfr}
+                        loading={notifying}
+                        disabled={notifying}
+                        style={{ backgroundColor: colors.terracotta }}
+                    />
                 )}
                 <Button
                     title="I've been supported"
                     variant="secondary"
                     onPress={handleIveBeenSupported}
+                    disabled={notifying}
                 />
             </View>
         </ScrollView>
@@ -377,11 +400,23 @@ export default function CheckinSupportRequestScreen({ route, navigation }: Props
         <View style={styles.stepContainer}>
             <Text style={styles.heading}>Would you like someone to get in touch with you?</Text>
             <Text style={styles.body}>
-                We can notify your support network so someone can reach out.
+                Your support network will be notified and asked to reach out to you within a day.
+                {'\n\n'}
+                They're trained people in your team, here to support you. Conversations are confidential and nothing is shared with management.
             </Text>
             <View style={styles.actions}>
-                <Button title="Yes" onPress={handleNotifyMhfr} />
-                <Button title="No" variant="secondary" onPress={() => setStep('follow_up')} />
+                <Button
+                    title="Yes"
+                    onPress={handleNotifyMhfr}
+                    loading={notifying}
+                    disabled={notifying}
+                />
+                <Button
+                    title="No"
+                    variant="secondary"
+                    onPress={() => setStep('follow_up')}
+                    disabled={notifying}
+                />
             </View>
         </View>
     );
@@ -462,6 +497,14 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         lineHeight: 22,
         marginBottom: spacing['2xl'],
+    },
+    introNote: {
+        fontFamily: fonts.body,
+        fontSize: fontSizes.sm,
+        color: colors.textMuted,
+        lineHeight: 20,
+        marginTop: -spacing.base,
+        marginBottom: spacing.xl,
     },
     actions: {
         gap: spacing.sm,

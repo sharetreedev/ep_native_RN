@@ -128,9 +128,15 @@ function buildCarouselSlides(
   }
 
   // Slide 3 — Last 30 Days
+  // Gate on the 7-day slide having data too: the backend currently echoes
+  // a seeded m2/m1 even when the user hasn't been around 30 days, which
+  // previously made 30-day light up while 7-day was still locked. If we
+  // don't yet have a real 7-day picture, we definitely don't have 30.
   const m2 = stats.m2;
   const m1 = stats.m1;
-  if (m2?.emotion_states && m1?.emotion_states) {
+  const has7DayData = !!(w2?.emotion_states && w1?.emotion_states);
+  const has30DayData = !!(m2?.emotion_states && m1?.emotion_states);
+  if (has7DayData && has30DayData) {
     const m1Emotion = capitalize(m1.emotion_states.Display);
     slides.push({
       id: '30days',

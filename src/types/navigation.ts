@@ -5,6 +5,12 @@ export type RootStackParamList = {
     Auth: undefined;
     MobileSignIn: undefined;
     MobileVerify: { userId: string; phone: string; countryIso: string };
+    // Migration sign-in flow (pre-auth):
+    AccountNotFound: { email: string };
+    MigrationVerify: { email: string; userId: string };
+    // Migration set-password flow (post-auth, gated by pendingPasswordSetup):
+    MigrationWelcome: undefined;
+    SetPassword: undefined;
     Onboarding: undefined;
     Main: undefined;
     CheckIn: {

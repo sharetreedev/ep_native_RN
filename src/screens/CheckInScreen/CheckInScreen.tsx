@@ -19,6 +19,7 @@ import { useCheckIn } from '../../contexts/CheckInContext';
 import { supportRequests } from '../../api';
 import PulseLoader from '../../components/PulseLoader';
 import { reportError } from '../../lib/logger';
+import { trackSupportRequestCreated } from '../../lib/analyticsEvents';
 import { invalidate, CACHE_KEYS } from '../../lib/fetchCache';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CheckIn'>;
@@ -127,9 +128,30 @@ export default function CheckInScreen({ route, navigation }: Props) {
             }
 
             if (needsAttention) {
+                // Don't re-trigger the support flow if the user already has an
+                // open support request — the new check-in is linked to it
+                // server-side. On lookup failure we fall through and let the
+                // original create-SR path run; a duplicate SR is recoverable,
+                // blocking support for someone who needs it is not.
+                try {
+                    const existing = await supportRequests.getAll();
+                    if (existing.some((r) => r.status === 'OPEN')) {
+                        exitFinal();
+                        return;
+                    }
+                } catch (e: unknown) {
+                    reportError('CheckIn.checkExistingSupportRequest', e);
+                }
+
                 const displayName = emotion.name.charAt(0).toUpperCase() + emotion.name.slice(1).toLowerCase();
                 try {
-                    const sr = await supportRequests.create(0, Number(checkinId));
+                    // Pass the authenticated user's id so the backend can wire
+                    // the support request to the requesting user (and run
+                    // notification / MHFR-assignment logic that depends on
+                    // `users_id`). Previously hardcoded to 0, which left the
+                    // row orphaned — no MHFR notification, empty groups_notified.
+                    const sr = await supportRequests.create(Number(user?.id ?? 0), Number(checkinId));
+                    trackSupportRequestCreated({ support_request_id: sr.id });
                     navigation.replace('CheckinSupportRequest', {
                         coordinateId,
                         emotionName: displayName,
@@ -149,7 +171,7 @@ export default function CheckInScreen({ route, navigation }: Props) {
                 exitFinal();
             }
         },
-        [navigation, createCheckIn, refreshUser, _setUser, markCheckedInToday, hasCheckedInToday, isSupportRequest, viewMode, coordinates, route.params?.wasFirstCheckinToday]
+        [navigation, createCheckIn, refreshUser, _setUser, markCheckedInToday, hasCheckedInToday, isSupportRequest, viewMode, coordinates, route.params?.wasFirstCheckinToday, user?.id]
     );
 
     return (

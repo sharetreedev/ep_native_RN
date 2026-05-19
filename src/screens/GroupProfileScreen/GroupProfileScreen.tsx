@@ -114,9 +114,16 @@ export default function GroupProfileScreen() {
 
   const { densityData } = useCoordinateMapping(coordinates, rawCheckinData);
 
-  const { pendingCheckIn, handleCellPress, confirmCheckIn, cancelCheckIn } = useQuickCheckIn(
-    () => (navigation as any).navigate('DailyInsight')
-  );
+  const { pendingCheckIn, isSubmitting, handleCellPress, confirmCheckIn, cancelCheckIn } = useQuickCheckIn({
+    onSupportRequestNeeded: ({ supportRequestId, coordinateId, emotionName }) => {
+      (navigation as any).navigate('CheckinSupportRequest', {
+        supportRequestId,
+        coordinateId,
+        emotionName,
+        wasFirstCheckinToday: false,
+      });
+    },
+  });
 
   // Admin actions
   const handleSaveGroupName = async () => {
@@ -328,6 +335,7 @@ export default function GroupProfileScreen() {
           emotion={pendingCheckIn.emotion}
           onConfirm={confirmCheckIn}
           onCancel={cancelCheckIn}
+          isSubmitting={isSubmitting}
         />
       )}
     </View>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -15,13 +15,11 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { RootStackParamList } from '../../types/navigation';
 import { useSafeEdges } from '../../contexts/MHFRContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { users as xanoUsers, XanoUser } from '../../api';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
 import { logger } from '../../lib/logger';
-
-const eapContacts = [
-  { name: 'Corporate Health', number: '1300 123 456', description: 'Confidential employee support' },
-];
+import { extractCustomSupportServices } from '../../lib/customSupportServices';
 
 const hotlineContacts = [
   { name: 'Lifeline', number: '13 11 14', description: '24/7 Crisis Support' },
@@ -77,9 +75,15 @@ function ContactCard({
 export default function EmergencyServicesScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const safeEdges = useSafeEdges(['top']);
+  const { user } = useAuth();
 
   const [mhfrContacts, setMhfrContacts] = useState<XanoUser[]>([]);
   const [loadingMhfr, setLoadingMhfr] = useState(true);
+
+  const { eap: eapServices, emergency: customEmergency } = useMemo(
+    () => extractCustomSupportServices(user?.groups as any),
+    [user?.groups],
+  );
 
   useEffect(() => {
     xanoUsers.getTop4Mhfr()
@@ -165,12 +169,19 @@ export default function EmergencyServicesScreen() {
         </View>
 
         {/* EAP & Professional Services */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>EAP & Professional Services</Text>
-          {eapContacts.map((c, i) => (
-            <ContactCard key={i} name={c.name} description={c.description} number={c.number} />
-          ))}
-        </View>
+        {eapServices.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>EAP & Professional Services</Text>
+            {eapServices.map((s, i) => (
+              <ContactCard
+                key={`eap-${i}`}
+                name={s.name}
+                description={s.website_link || 'Provided by your group'}
+                number={s.contact_number}
+              />
+            ))}
+          </View>
+        )}
 
         {/* Hotlines */}
         <View style={styles.section}>
@@ -185,6 +196,14 @@ export default function EmergencyServicesScreen() {
           <Text style={styles.sectionTitle}>Emergency Services</Text>
           {emergencyContacts.map((c, i) => (
             <ContactCard key={i} name={c.name} description={c.description} number={c.number} />
+          ))}
+          {customEmergency.map((s, i) => (
+            <ContactCard
+              key={`emergency-${i}`}
+              name={s.name}
+              description={s.website_link || 'Provided by your group'}
+              number={s.contact_number}
+            />
           ))}
         </View>
       </ScrollView>

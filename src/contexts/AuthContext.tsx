@@ -2,7 +2,15 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { Platform, AppState } from 'react-native';
 import { auth as xanoAuth, tokenStore, XanoError, XanoAuthMeResponse, XanoGroup, XanoUserGroup, XanoPair, XanoRecentCheckInEmotion, XanoLast7CheckIn, groups as xanoGroups, pairs as xanoPairs, onesignal as onesignalApi, setOnAuthExpired, user as xanoUserApi, runningStats as xanoRunningStats } from '../api';
 import { invalidateAll } from '../lib/fetchCache';
+import {
+  hydratePendingPasswordSetup,
+  peekPendingPasswordSetup,
+  setPendingPasswordSetup as persistPendingPasswordSetup,
+} from '../navigation/pendingPasswordSetup';
 import { resetAndReload } from '../lib/resetRuntime';
+import { identifyIntercomUser, logoutIntercomUser } from '../lib/intercom';
+import { identifyAnalyticsUser, resetAnalytics, type AnalyticsIdentity } from '../lib/analytics';
+import { trackLoginCompleted, trackSignUpCompleted } from '../lib/analyticsEvents';
 import { logger } from '../lib/logger';
 import { errorStatus } from '../lib/errorUtils';
 import { pickRandomProfileHex } from '../lib/profileColours';
@@ -29,11 +37,20 @@ export interface User {
   last7CheckIns?: XanoLast7CheckIn[] | null;
   runningStatsId?: number | null;
   groups?: Array<XanoGroup | XanoUserGroup>;
+  /** Forest-map rows where the user is still PENDING — sourced from
+   *  `/groups/get_all` (`data.invites` plus PENDING entries that the backend
+   *  currently leaks into `active_groups`). Shape is heterogeneous, see
+   *  `PendingGroupInviteSheet` for the defensive accessors. */
+  pendingGroupInvites?: any[];
   pairs?: XanoPair[];
   onboardingComplete?: boolean;
   introSlidesSeen?: boolean;
   emailVerified?: boolean;
   phoneVerified?: boolean;
+  /** Xano `created_at` (epoch ms). Used as the analytics `signup_date`. */
+  createdAt?: number;
+  /** Xano `access` tier. Used as the analytics `plan_type`. */
+  accessTier?: 'Free' | 'Activator' | 'Workplace';
   recentStateCoordinates?: number | { id: number } | null;
   lastCheckInDate?: string | null;
   /** IANA timezone (e.g. "Australia/Sydney") synced from the user's Xano row.
@@ -71,11 +88,15 @@ interface AuthContextValue extends AuthState {
     email?: string | null;
     appleUserId?: string | null;
   }) => Promise<void>;
-  loginWithMobile: (authToken: string) => Promise<void>;
+  loginWithMobile: (authToken: string, opts?: { pendingPasswordSetup?: boolean }) => Promise<void>;
   logout: () => void;
   deleteAccount: () => Promise<void>;
   isLoading: boolean;
   error: string | null;
+  /** True when a freshly-migrated user is authenticated but still has to set a
+   *  new password. Gates the app on the Migration → Set-password screens. */
+  pendingPasswordSetup: boolean;
+  clearPendingPasswordSetup: () => void;
   refreshUser: () => Promise<void>;
   /** @internal Used by CheckInContext to update user state. Do not use directly. */
   _setUser: (updater: (prev: User | null) => User | null) => void;
@@ -141,6 +162,8 @@ function mapXanoUser(xano: XanoAuthMeResponse): User {
     introSlidesSeen: xano.intro_slides_seen ?? false,
     emailVerified: xano.emailVerified ?? false,
     phoneVerified: xano.phoneVerified ?? false,
+    createdAt: xano.created_at,
+    accessTier: xano.access,
     recentStateCoordinates: xano.recentStateCoordinates ?? null,
     lastCheckInDate: xano.lastCheckInDate
       ? userDateOf(xano.lastCheckInDate, xano.timezone)
@@ -150,6 +173,20 @@ function mapXanoUser(xano: XanoAuthMeResponse): User {
     reminderMin: xano.reminder_min ?? undefined,
     preferredCheckinView: xano.preferred_checkin_view || '',
     timezone: xano.timezone || null,
+  };
+}
+
+/** Map the app's `User` to the minimal shape Amplitude identification needs.
+ *  Lives here (not in analytics.ts) so that module stays a leaf with no
+ *  dependency on the auth/contexts layer. */
+function toAnalyticsIdentity(u: User): AnalyticsIdentity {
+  return {
+    xanoUserId: Number(u.id),
+    email: u.email,
+    signupDate: u.createdAt ?? null,
+    planType: u.accessTier ?? 'unknown',
+    pairCount: u.pairs?.length ?? 0,
+    groupIds: (u.groups ?? []).map((g) => g.id),
   };
 }
 
@@ -229,14 +266,38 @@ async function resolveGroupsPairsAndMHFR(user: User): Promise<User> {
   // Fetch groups
   try {
     const data = await xanoGroups.getAll();
-    const activeGroups = Array.isArray(data.active_groups) ? data.active_groups : [];
-    logger.log('[AuthContext] Groups response:', JSON.stringify({ active: activeGroups.length, isMHFR: activeGroups.some((g: any) => g.forest?.role === 'mhfr support') }));
+    const rawActive = Array.isArray(data.active_groups) ? data.active_groups : [];
+    const rawInvites = Array.isArray((data as any).invites) ? (data as any).invites : [];
+    // Backend can return PENDING forest_map entries in active_groups; filter
+    // them out so downstream (MyPulse, OnboardingProgress, support screens
+    // pulling custom_support_services) only sees groups the user has actually
+    // joined. The PENDING ones get folded into pendingGroupInvites alongside
+    // the explicit `invites` array so the app can surface them in the
+    // PendingGroupInviteSheet on launch.
+    const isAccepted = (g: any) => {
+      const status = g?.forest?.reqStatus ?? g?.reqStatus;
+      return !status || status === 'ACCEPTED';
+    };
+    const activeGroups = rawActive.filter(isAccepted);
+    const inviteId = (i: any): number | undefined => i?.forest?.id ?? i?.id;
+    const seenInviteIds = new Set<number>();
+    const pendingGroupInvites: any[] = [];
+    for (const i of [...rawInvites, ...rawActive.filter((g: any) => !isAccepted(g))]) {
+      const id = inviteId(i);
+      if (id == null || !seenInviteIds.has(id)) {
+        if (id != null) seenInviteIds.add(id);
+        pendingGroupInvites.push(i);
+      }
+    }
+    logger.log('[AuthContext] Groups response:', JSON.stringify({ active: activeGroups.length, invites: pendingGroupInvites.length, isMHFR: activeGroups.some((g: any) => g.forest?.role === 'mhfr support') }));
     updates.groups = activeGroups;
+    updates.pendingGroupInvites = pendingGroupInvites;
     updates.isMHFR = activeGroups.some((g: any) => g.forest?.role === 'mhfr support');
   } catch (e) {
     logger.warn('[AuthContext] Failed to fetch groups, keeping existing:', e);
     // Preserve existing data
     if (user.groups) updates.groups = user.groups;
+    if (user.pendingGroupInvites) updates.pendingGroupInvites = user.pendingGroupInvites;
     if (user.isMHFR !== undefined) updates.isMHFR = user.isMHFR;
   }
 
@@ -264,6 +325,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
   const [isLoading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pendingPasswordSetup, setPendingPasswordSetupState] = useState(false);
 
   // On mount, try to restore session via check_status if a token is already
   // present in persistent storage.
@@ -301,7 +363,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async function initAuth() {
       setLoading(true);
       try {
-        const token = await tokenStore.load();
+        // Hydrate the durable migration flag and the token in parallel, then
+        // commit the flag BEFORE the session restore flips isAuthenticated.
+        // Doing it inside the loading gate means the first authed render of
+        // AppNavigator is already correct — a migrated user who killed the
+        // app on the Set-password screen never flashes Main/Onboarding.
+        const [token] = await Promise.all([
+          tokenStore.load(),
+          hydratePendingPasswordSetup(),
+        ]);
+        setPendingPasswordSetupState(peekPendingPasswordSetup());
         if (token) {
           for (let attempt = 0; attempt < 3; attempt++) {
             const done = await tryRestore(token, attempt);
@@ -357,6 +428,60 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.remove();
   }, []);
 
+  // Mirror the signed-in user into Intercom so support agents see who they're
+  // talking to. Centralised here as one effect rather than at each auth call
+  // site (login / signup / Microsoft / Apple / mobile / session restore) so
+  // every path is covered by construction. Keyed on the user id — the user
+  // object is re-created frequently as groups/pairs/MHFR resolve, but the
+  // Intercom identity only changes when the id does, and its native loginUser
+  // call is expensive, so we don't re-login on every refresh.
+  //
+  // The logout branch here covers the teardown paths that flip state to
+  // unauthenticated WITHOUT a runtime reload: the auth-expired (401/403)
+  // handler and the manualLocalLogout fallback. The normal logout/delete/merge
+  // path goes through resetAndReload, which logs Intercom out (and resets
+  // Amplitude) at the native layer before reloading (see tryIntercomLogout /
+  // tryAnalyticsReset in resetRuntime.ts).
+  const lastIntercomUserId = useRef<string | null>(null);
+  useEffect(() => {
+    const u = state.isAuthenticated ? state.user : null;
+    if (u && u.id !== lastIntercomUserId.current) {
+      lastIntercomUserId.current = u.id;
+      void identifyIntercomUser({ id: u.id, email: u.email });
+    } else if (!u && lastIntercomUserId.current !== null) {
+      lastIntercomUserId.current = null;
+      void logoutIntercomUser();
+    }
+  }, [state.isAuthenticated, state.user]);
+
+  // Amplitude identity — kept SEPARATE from the Intercom effect above on
+  // purpose: Amplitude's identify() is a cheap, idempotent local op (no native
+  // round-trip), so unlike Intercom we refresh it whenever the user object
+  // changes — e.g. pairs/groups resolving after login — not only on id change,
+  // so pair_count / group_ids never go stale. reset() on logout so the next
+  // user on this device doesn't inherit this identity (covers the no-reload
+  // teardown paths; the reload path resets via resetRuntime.ts).
+  useEffect(() => {
+    if (state.isAuthenticated && state.user) {
+      identifyAnalyticsUser(toAnalyticsIdentity(state.user));
+    } else {
+      resetAnalytics();
+    }
+  }, [state.isAuthenticated, state.user]);
+
+  // Brief: re-identify on every app foreground so pair_count / group_ids stay
+  // reasonably current — a server-side change (e.g. accepting a pair invite
+  // from a deep link) won't update the in-memory user until a refetch, but
+  // re-sending identify keeps the stable props fresh and is effectively free.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active' && state.isAuthenticated && state.user) {
+        identifyAnalyticsUser(toAnalyticsIdentity(state.user));
+      }
+    });
+    return () => sub.remove();
+  }, [state.isAuthenticated, state.user]);
+
   const refreshUser = useCallback(async () => {
     try {
       const raw = await xanoAuth.me();
@@ -379,6 +504,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setState({ isAuthenticated: true, user });
       syncOneSignalSubscriptionId(raw);
       syncLastSeen();
+      // Identify BEFORE the event — the identify effect is async (post-render)
+      // so an event fired here would otherwise be anonymous (brief trap).
+      identifyAnalyticsUser(toAnalyticsIdentity(user));
+      trackLoginCompleted({ login_method: 'email' });
     } catch (e) {
       const msg = e instanceof XanoError ? e.message : 'Login failed. Please try again.';
       setError(msg);
@@ -406,6 +535,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setState({ isAuthenticated: true, user });
       syncOneSignalSubscriptionId(raw);
       syncLastSeen();
+      // Identify before the event (brief). Mobile signup is email-only;
+      // signup_method value parity flagged to Maurice (EP-1023).
+      identifyAnalyticsUser(toAnalyticsIdentity(user));
+      trackSignUpCompleted({ signup_method: 'email' });
     } catch (e) {
       const msg = e instanceof XanoError ? e.message : 'Sign up failed. Please try again.';
       setError(msg);
@@ -439,6 +572,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setState({ isAuthenticated: true, user });
       syncOneSignalSubscriptionId(raw);
       syncLastSeen();
+      // Identify before the event (brief). This is the PKCE OAuth code flow →
+      // microsoft_auth. If a distinct Microsoft SSO entry exists it must map to
+      // microsoft_sso — auth-vs-sso split flagged to Maurice (EP-1023).
+      identifyAnalyticsUser(toAnalyticsIdentity(user));
+      trackLoginCompleted({ login_method: 'microsoft_auth' });
     } catch (e) {
       const msg = e instanceof XanoError ? e.message : 'Microsoft login failed. Please try again.';
       setError(msg);
@@ -483,6 +621,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setState({ isAuthenticated: true, user });
       syncOneSignalSubscriptionId(raw);
       syncLastSeen();
+      // NOTE: Login Completed intentionally NOT fired here — the spec's
+      // login_method enum is email/microsoft_auth/microsoft_sso/mobile and has
+      // no `apple` value. Firing an out-of-spec value would pollute the funnel.
+      // Apple-login coverage is an open question flagged to Maurice (EP-1023).
+      identifyAnalyticsUser(toAnalyticsIdentity(user));
     } catch (e) {
       const msg = e instanceof XanoError ? e.message : 'Apple login failed. Please try again.';
       setError(msg);
@@ -492,23 +635,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const loginWithMobile = useCallback(async (authToken: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      await tokenStore.set(authToken);
-      const raw = await xanoAuth.me();
-      const user = await resolveGroupsPairsAndMHFR(mapXanoUser(raw));
-      setState({ isAuthenticated: true, user });
-      syncOneSignalSubscriptionId(raw);
-      syncLastSeen();
-    } catch (e) {
-      const msg = e instanceof XanoError ? e.message : 'Mobile login failed. Please try again.';
-      setError(msg);
-      throw e;
-    } finally {
-      setLoading(false);
-    }
+  const loginWithMobile = useCallback(
+    async (authToken: string, opts?: { pendingPasswordSetup?: boolean }) => {
+      setLoading(true);
+      setError(null);
+      try {
+        // Set the durable migration flag before flipping auth state so the
+        // navigator gates on the very first authed render (no flash of Main).
+        if (opts?.pendingPasswordSetup) {
+          await persistPendingPasswordSetup(true);
+          setPendingPasswordSetupState(true);
+        }
+        await tokenStore.set(authToken);
+        const raw = await xanoAuth.me();
+        const user = await resolveGroupsPairsAndMHFR(mapXanoUser(raw));
+        setState({ isAuthenticated: true, user });
+        syncOneSignalSubscriptionId(raw);
+        syncLastSeen();
+        // Identify before the event (brief).
+        identifyAnalyticsUser(toAnalyticsIdentity(user));
+        trackLoginCompleted({ login_method: 'mobile' });
+      } catch (e) {
+        const msg = e instanceof XanoError ? e.message : 'Mobile login failed. Please try again.';
+        setError(msg);
+        throw e;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
+
+  const clearPendingPasswordSetup = useCallback(() => {
+    setPendingPasswordSetupState(false);
+    persistPendingPasswordSetup(false);
   }, []);
 
   // Manual tear-down used as a fallback when the runtime reload isn't
@@ -576,6 +736,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       refreshUser,
       isLoading,
       error,
+      pendingPasswordSetup,
+      clearPendingPasswordSetup,
       _setUser,
     }),
     [
@@ -590,6 +752,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       refreshUser,
       isLoading,
       error,
+      pendingPasswordSetup,
+      clearPendingPasswordSetup,
       _setUser,
     ],
   );

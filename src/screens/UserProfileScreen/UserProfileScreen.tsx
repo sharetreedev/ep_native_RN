@@ -224,9 +224,16 @@ export default function UserProfileScreen() {
     }
   }, [pairsId, removePair, navigation]);
 
-  const { pendingCheckIn, handleCellPress, confirmCheckIn, cancelCheckIn } = useQuickCheckIn(
-    () => (navigation as any).navigate('DailyInsight')
-  );
+  const { pendingCheckIn, isSubmitting, handleCellPress, confirmCheckIn, cancelCheckIn } = useQuickCheckIn({
+    onSupportRequestNeeded: ({ supportRequestId, coordinateId, emotionName }) => {
+      (navigation as any).navigate('CheckinSupportRequest', {
+        supportRequestId,
+        coordinateId,
+        emotionName,
+        wasFirstCheckinToday: false,
+      });
+    },
+  });
 
   // Outlook tab directions array
   const outlookDirections = useMemo(() => [
@@ -441,6 +448,7 @@ export default function UserProfileScreen() {
           emotion={pendingCheckIn.emotion}
           onConfirm={confirmCheckIn}
           onCancel={cancelCheckIn}
+          isSubmitting={isSubmitting}
         />
       )}
 

@@ -8,6 +8,11 @@ import {
 } from '../api';
 import { useAsyncHandler } from './useAsyncHandler';
 import { invalidate, CACHE_KEYS } from '../lib/fetchCache';
+import {
+  trackPairCreated,
+  trackPairInviteRejected,
+  trackPairRemoved,
+} from '../lib/analyticsEvents';
 
 interface PairsState {
   active: XanoPair[];
@@ -80,7 +85,12 @@ export function usePairs(): UsePairsResult {
     status: 'ACCEPTED' | 'REJECTED',
     requestToId: number,
   ) => {
-    await wrap(() => xanoPairs.respond(pairsId, status, requestToId));
+    const res = await wrap(() => xanoPairs.respond(pairsId, status, requestToId));
+    if (res) {
+      // pair_id is the same XanoPair.id across the whole lifecycle.
+      if (status === 'ACCEPTED') trackPairCreated({ pair_id: pairsId });
+      else trackPairInviteRejected({ pair_id: pairsId });
+    }
     invalidate(CACHE_KEYS.PAIRS);
     await fetchAll();
   }, [wrap, fetchAll]);
@@ -95,7 +105,8 @@ export function usePairs(): UsePairsResult {
   }, [wrap]);
 
   const removePair = useCallback(async (pairId: number) => {
-    await wrap(() => xanoPair.remove(pairId));
+    const res = await wrap(() => xanoPair.remove(pairId));
+    if (res) trackPairRemoved(); // spec: no properties
     invalidate(CACHE_KEYS.PAIRS);
     setState(prev => ({
       active: prev.active.filter(p => p.id !== pairId),

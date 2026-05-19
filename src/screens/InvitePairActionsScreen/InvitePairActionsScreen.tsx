@@ -15,6 +15,7 @@ import { RootStackParamList } from '../../types/navigation';
 import { colors, fonts, fontSizes, buttonStyles } from '../../theme';
 import { logger } from '../../lib/logger';
 import { pairs } from '../../api/pairs';
+import { trackPairInviteSent } from '../../lib/analyticsEvents';
 import { DATA_SOURCE, XanoError } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -109,6 +110,10 @@ export default function InvitePairActionsScreen() {
       });
       if (result.action === Share.sharedAction) {
         setShared(true);
+        // Invite delivered via the OS share sheet → link method.
+        if (pairsId != null) {
+          trackPairInviteSent({ pair_type: pairType, invite_method: 'link', pair_id: pairsId });
+        }
       }
     } catch (e) {
       logger.error('[InvitePairActions] share invite link failed', e);
@@ -130,6 +135,7 @@ export default function InvitePairActionsScreen() {
         { pairsId, invite_email: trimmed },
       );
       await pairs.sendRequest(pairsId, { invite_email: trimmed });
+      trackPairInviteSent({ pair_type: pairType, invite_method: 'email', pair_id: pairsId });
       showToast('Pair invite has been sent', { variant: 'success' });
       goHome();
     } catch (e) {

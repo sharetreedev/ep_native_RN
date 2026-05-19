@@ -11,6 +11,10 @@ import TabNavigator from './TabNavigator';
 import AuthScreen from '../screens/AuthScreen/AuthScreen';
 import MobileSignInScreen from '../screens/MobileSignInScreen/MobileSignInScreen';
 import MobileVerifyScreen from '../screens/MobileVerifyScreen/MobileVerifyScreen';
+import AccountNotFoundScreen from '../screens/AccountNotFoundScreen/AccountNotFoundScreen';
+import MigrationVerifyScreen from '../screens/MigrationVerifyScreen/MigrationVerifyScreen';
+import MigrationWelcomeScreen from '../screens/MigrationWelcomeScreen/MigrationWelcomeScreen';
+import SetPasswordScreen from '../screens/SetPasswordScreen/SetPasswordScreen';
 import OnboardingScreen from '../screens/OnboardingScreen/OnboardingScreen';
 import CheckInScreen from '../screens/CheckInScreen/CheckInScreen';
 import DailyInsightScreen from '../screens/DailyInsightScreen/DailyInsightScreen';
@@ -40,18 +44,21 @@ import RiskAssessmentScreen from '../screens/RiskAssessmentScreen/RiskAssessment
 import MHFRBanner from '../components/MHFRBanner';
 import PushPrimer from '../components/PushPrimer';
 import MyPulseV2Promo from '../components/MyPulseV2Promo';
+import PendingGroupInviteSheet from '../components/PendingGroupInviteSheet';
+import NewMHFRSupportRequestSheet from '../components/NewMHFRSupportRequestSheet';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function AppNavigator() {
-    const { isAuthenticated, isLoading, user } = useAuth();
+    const { isAuthenticated, isLoading, user, pendingPasswordSetup } = useAuth();
     const { hasCheckedInToday } = useCheckIn();
     const navRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
     const checkinPushed = useRef(false);
 
     // Determine the initial route for authenticated users
-    const needsOnboarding = isAuthenticated && !user?.onboardingComplete;
-    const needsCheckIn = isAuthenticated && user?.onboardingComplete && !hasCheckedInToday;
+    const needsOnboarding = isAuthenticated && !pendingPasswordSetup && !user?.onboardingComplete;
+    const needsCheckIn =
+        isAuthenticated && !pendingPasswordSetup && user?.onboardingComplete && !hasCheckedInToday;
 
     // Hand off a pending lesson (set during onboarding's course-enroll step)
     // to the Lessons screen as soon as the authed stack is mounted and ready.
@@ -101,12 +108,27 @@ export default function AppNavigator() {
             onStateChange={tryConsumePendingLesson}
         >
             <View style={styles.appContainer}>
-            {isAuthenticated && !needsOnboarding && <MHFRBanner />}
-            {isAuthenticated && !needsOnboarding && <PushPrimer />}
-            {isAuthenticated && !needsOnboarding && <MyPulseV2Promo />}
+            {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && <MHFRBanner />}
+            {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && <PushPrimer />}
+            {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && <MyPulseV2Promo />}
+            {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && <PendingGroupInviteSheet sessionKey={user?.id} />}
+            {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && <NewMHFRSupportRequestSheet />}
             <Stack.Navigator id="RootStack" screenOptions={{ headerShown: false }}>
                 {isAuthenticated ? (
-                    needsOnboarding ? (
+                    pendingPasswordSetup ? (
+                        <>
+                            <Stack.Screen
+                                name="MigrationWelcome"
+                                component={MigrationWelcomeScreen}
+                                options={{ gestureEnabled: false }}
+                            />
+                            <Stack.Screen
+                                name="SetPassword"
+                                component={SetPasswordScreen}
+                                options={{ gestureEnabled: false }}
+                            />
+                        </>
+                    ) : needsOnboarding ? (
                         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
                     ) : (
                         <>
@@ -147,6 +169,8 @@ export default function AppNavigator() {
                         <Stack.Screen name="Auth" component={AuthScreen} />
                         <Stack.Screen name="MobileSignIn" component={MobileSignInScreen} />
                         <Stack.Screen name="MobileVerify" component={MobileVerifyScreen} />
+                        <Stack.Screen name="AccountNotFound" component={AccountNotFoundScreen} />
+                        <Stack.Screen name="MigrationVerify" component={MigrationVerifyScreen} />
                     </>
                 )}
             </Stack.Navigator>

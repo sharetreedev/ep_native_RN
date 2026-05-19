@@ -1,5 +1,10 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Alert } from 'react-native';
+import { Alert, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { HelpCircle } from 'lucide-react-native';
+import { presentIntercom } from '../../lib/intercom';
+import { trackOnboardingCompleted } from '../../lib/analyticsEvents';
+import { colors, fonts, fontSizes, spacing } from '../../theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCheckIn } from '../../contexts/CheckInContext';
 import { useOnboarding } from '../../hooks/useOnboarding';
@@ -36,6 +41,7 @@ export default function OnboardingScreen() {
   const { createCheckIn } = useCheckIns();
   const coursesHook = useCourses();
   const { showToast } = useToast();
+  const insets = useSafeAreaInsets();
 
   // Determine starting step based on user state
   const getInitialStep = (): OnboardingStep => {
@@ -216,6 +222,7 @@ export default function OnboardingScreen() {
       }
       await onboarding.markCourseEnrollmentSeen(Number(user?.id));
       await onboarding.markComplete();
+      trackOnboardingCompleted(); // spec: no properties
       await refreshUser();
     } catch {
       Alert.alert('Error', 'Failed to complete enrollment.');
@@ -229,6 +236,7 @@ export default function OnboardingScreen() {
     try {
       await onboarding.markCourseEnrollmentSeen(Number(user?.id));
       await onboarding.markComplete();
+      trackOnboardingCompleted(); // spec: no properties
       await refreshUser();
     } catch {
       Alert.alert('Error', 'Failed to complete onboarding.');
@@ -239,69 +247,108 @@ export default function OnboardingScreen() {
 
   // ── Render ──────────────────────────────────────────────────────────
 
-  if (step === 'email_verification') {
-    return (
-      <EmailVerificationStep
-        email={user?.email ?? ''}
-        onComplete={handleEmailVerified}
-        onBack={logout}
-        isSubmitting={isSubmitting}
-      />
-    );
-  }
+  // The signed-in-but-not-yet-onboarded user still needs a way to reach
+  // support if they get stuck mid-onboarding (e.g. the SMS code never
+  // arrives). Render the active step with a floating Help affordance overlaid
+  // on top, so every step has it without each step needing to know about it.
+  const renderStep = () => {
+    if (step === 'email_verification') {
+      return (
+        <EmailVerificationStep
+          email={user?.email ?? ''}
+          onComplete={handleEmailVerified}
+          onBack={logout}
+          isSubmitting={isSubmitting}
+        />
+      );
+    }
 
-  if (step === 'phone_entry') {
-    return (
-      <PhoneEntryStep
-        onSubmit={handlePhoneSubmit}
-        isSubmitting={isSubmitting}
-      />
-    );
-  }
+    if (step === 'phone_entry') {
+      return (
+        <PhoneEntryStep
+          onSubmit={handlePhoneSubmit}
+          isSubmitting={isSubmitting}
+        />
+      );
+    }
 
-  if (step === 'phone_verification') {
-    return (
-      <PhoneVerificationStep
-        onComplete={handlePhoneVerified}
-        isSubmitting={isSubmitting}
-      />
-    );
-  }
+    if (step === 'phone_verification') {
+      return (
+        <PhoneVerificationStep
+          onComplete={handlePhoneVerified}
+          isSubmitting={isSubmitting}
+        />
+      );
+    }
 
-  if (step === 'merge_accounts') {
-    return (
-      <MergeAccountsStep
-        onMerge={handleMergeAccounts}
-        onUseDifferentPhone={handleUseDifferentPhone}
-        isSubmitting={isSubmitting}
-      />
-    );
-  }
+    if (step === 'merge_accounts') {
+      return (
+        <MergeAccountsStep
+          onMerge={handleMergeAccounts}
+          onUseDifferentPhone={handleUseDifferentPhone}
+          isSubmitting={isSubmitting}
+        />
+      );
+    }
 
-  if (step === 'intro_slides') {
-    return <IntroSlidesStep onComplete={handleIntroComplete} />;
-  }
+    if (step === 'intro_slides') {
+      return <IntroSlidesStep onComplete={handleIntroComplete} />;
+    }
 
-  if (step === 'first_checkin') {
-    return (
-      <FirstCheckInStep
-        onComplete={handleCheckInComplete}
-        emotionStates={emotionStates}
-      />
-    );
-  }
+    if (step === 'first_checkin') {
+      return (
+        <FirstCheckInStep
+          onComplete={handleCheckInComplete}
+          emotionStates={emotionStates}
+        />
+      );
+    }
 
-  if (step === 'course_enrollment') {
-    return (
-      <CourseEnrollmentStep
-        nextCourse={coursesHook.nextCourse}
-        onEnroll={handleEnroll}
-        onSkip={handleSkipCourse}
-        isSubmitting={isSubmitting}
-        isLoading={coursesHook.isLoading}
-      />
-    );
-  }
+    if (step === 'course_enrollment') {
+      return (
+        <CourseEnrollmentStep
+          nextCourse={coursesHook.nextCourse}
+          onEnroll={handleEnroll}
+          onSkip={handleSkipCourse}
+          isSubmitting={isSubmitting}
+          isLoading={coursesHook.isLoading}
+        />
+      );
+    }
 
-  return null;
+    return null;
+  };
+
+  return (
+    <View style={{ flex: 1 }}>
+      {renderStep()}
+      <TouchableOpacity
+        style={[styles.helpButton, { top: insets.top + spacing.xs }]}
+        onPress={presentIntercom}
+        accessibilityRole="button"
+        accessibilityLabel="Get help"
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <HelpCircle size={18} color={colors.textSecondary} />
+        <Text style={styles.helpButtonText}>Help</Text>
+      </TouchableOpacity>
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  helpButton: {
+    position: 'absolute',
+    right: spacing.base,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  helpButtonText: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: fontSizes.sm,
+    color: colors.textSecondary,
+  },
+});

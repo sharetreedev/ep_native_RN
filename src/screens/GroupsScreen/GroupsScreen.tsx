@@ -20,7 +20,7 @@ export default function GroupsScreen() {
   useScreenAnnouncement('Groups');
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [containerHeight, setContainerHeight] = useState(0);
-  const { activeGroups, isLoading, fetchAll } = useGroups();
+  const { activeGroups, invites, isLoading, fetchAll, acceptInvite, declineInvite } = useGroups();
   const { coordinates } = useStateCoordinates();
   const [refreshing, setRefreshing] = useState(false);
   const hasLoadedOnce = useRef(false);
@@ -73,9 +73,16 @@ export default function GroupsScreen() {
 
   const { densityData } = useCoordinateMapping(coordinates, membersCoordinatesCount);
 
-  const { pendingCheckIn, handleCellPress, confirmCheckIn, cancelCheckIn } = useQuickCheckIn(
-    () => navigation.navigate('DailyInsight' as any)
-  );
+  const { pendingCheckIn, isSubmitting, handleCellPress, confirmCheckIn, cancelCheckIn } = useQuickCheckIn({
+    onSupportRequestNeeded: ({ supportRequestId, coordinateId, emotionName }) => {
+      navigation.navigate('CheckinSupportRequest', {
+        supportRequestId,
+        coordinateId,
+        emotionName,
+        wasFirstCheckinToday: false,
+      });
+    },
+  });
 
   // Build grid overlay data from active groups
   const groupGridData: Record<string, { count: number }> = {};
@@ -174,8 +181,11 @@ export default function GroupsScreen() {
       <GroupsListPage
         containerHeight={containerHeight}
         activeGroups={activeGroups}
+        invites={invites}
         isLoading={isLoading}
         onGroupPress={handleListItemPress}
+        onAcceptInvite={acceptInvite}
+        onDeclineInvite={declineInvite}
       />
     );
   };
@@ -204,6 +214,7 @@ export default function GroupsScreen() {
           emotion={pendingCheckIn.emotion}
           onConfirm={confirmCheckIn}
           onCancel={cancelCheckIn}
+          isSubmitting={isSubmitting}
         />
       )}
     </View>

@@ -70,6 +70,40 @@ function tryOneSignalLogout(): void {
   }
 }
 
+// Intercom keeps its logged-in user at the NATIVE layer, which survives the JS
+// runtime reload below. Without an explicit logout the next person to use this
+// device would inherit the previous user's Intercom conversation history —
+// exactly the cross-account leakage this whole reset exists to prevent. Gated
+// on the same `onesignalLogout` flag: true for logout/delete (disassociate the
+// device), false for merge (same device, new identity — the re-identify on the
+// next boot rebinds the native session to the merged-into user).
+function tryIntercomLogout(): void {
+  try {
+    // Required at runtime — Intercom native module isn't available in Expo Go.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const Intercom = require('@intercom/intercom-react-native').default;
+    Intercom.logout();
+  } catch (e) {
+    logger.warn('[resetRuntime] Intercom logout failed:', e);
+  }
+}
+
+// Amplitude keeps the user id + device id in its own store, which survives the
+// JS runtime reload. reset() clears both so the next session starts as a fresh
+// anonymous user — same cross-account-leakage concern as Intercom above, and
+// gated on the same flag (skip on merge: same device, the next-boot re-identify
+// rebinds events to the merged-into user).
+function tryAnalyticsReset(): void {
+  try {
+    // Required at runtime — Amplitude native module isn't available in Expo Go.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { resetAnalytics } = require('./analytics');
+    resetAnalytics();
+  } catch (e) {
+    logger.warn('[resetRuntime] Amplitude reset failed:', e);
+  }
+}
+
 /**
  * Tear down all per-user state and restart the JS runtime so no module-scope
  * singletons, in-flight fetches, context state, or third-party caches can
@@ -79,8 +113,8 @@ function tryOneSignalLogout(): void {
  * Flow:
  *  1. Show the splash overlay with the caller's message.
  *  2. Brief pause so the splash actually paints before we tear down.
- *  3. OneSignal logout (if requested), invalidate in-memory cache, wipe
- *     user-scoped SecureStore keys, clear the auth token (if requested).
+ *  3. OneSignal + Intercom logout + Amplitude reset (if requested), invalidate in-memory cache,
+ *     wipe user-scoped SecureStore keys, clear the auth token (if requested).
  *  4. Reload the JS runtime (`Updates.reloadAsync` in production, `DevSettings.reload`
  *     in dev). The JS bundle re-boots; all module/context state is fresh.
  *
@@ -95,7 +129,11 @@ export async function resetAndReload(opts: ResetOptions): Promise<void> {
   // the fade-in to be visible but short enough not to feel laggy.
   await new Promise((r) => setTimeout(r, 200));
 
-  if (opts.onesignalLogout) tryOneSignalLogout();
+  if (opts.onesignalLogout) {
+    tryOneSignalLogout();
+    tryIntercomLogout();
+    tryAnalyticsReset();
+  }
   invalidateAll();
   await clearUserScopedSecureStore();
   if (opts.clearAuthToken) await tokenStore.clear();

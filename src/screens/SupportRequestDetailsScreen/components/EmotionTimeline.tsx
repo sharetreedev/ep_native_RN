@@ -21,54 +21,30 @@ function formatTimeAgo(ts: number | null): string {
 }
 
 function EmotionTimeline({ supportRequest: sr }: EmotionTimelineProps) {
+  // updated_Emotions_List is the authoritative timeline: the backend writes
+  // the trigger check-in as the first entry and the resolved check-in as the
+  // last entry, so trigger_Emotion / resolved_Emotion would just duplicate
+  // rows here. The list also occasionally contains blank entries or two rows
+  // with the same emotion + identical timestamp, which we filter out.
   const emotionTimeline = useMemo<TimelineEntry[]>(() => {
-    const entries: TimelineEntry[] = [];
+    const entries: TimelineEntry[] = (sr.updated_Emotions_List ?? [])
+      .filter((e) => e.Display && e.timestamp != null)
+      .map((e) => ({
+        name: e.Display,
+        colour: e.emotionColour || colors.textPlaceholder,
+        timestamp: e.timestamp,
+      }));
 
-    const triggerName =
-      sr.trigger_Emotion?.emotion_item?.Display ?? sr.trigger_Emotion?.emotion_name ?? '';
-    const triggerColour =
-      sr.trigger_Emotion?.emotion_item?.emotionColour ?? colors.textPlaceholder;
-
-    if (triggerName) {
-      entries.push({
-        name: triggerName,
-        colour: triggerColour,
-        timestamp: sr.logged_Date,
-      });
-    }
-
-    (sr.updated_Emotions_List ?? []).forEach((e) => {
-      if (e.Display) {
-        entries.push({
-          name: e.Display,
-          colour: e.emotionColour ?? colors.textPlaceholder,
-          timestamp: e.timestamp,
-        });
-      }
-    });
-
-    if (sr.resolved_Emotion?.Display) {
-      entries.push({
-        name: sr.resolved_Emotion.Display,
-        colour: sr.resolved_Emotion.emotionColour ?? colors.textPlaceholder,
-        timestamp: sr.resolved_Date,
-      });
-    }
-
-    // Most recent first
     entries.sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
 
-    // Dedupe entries that share the same emotion name + timestamp.
-    // The backend can include the original trigger emotion as the first item
-    // in updated_Emotions_List, which would otherwise render it twice.
     const seen = new Set<string>();
     return entries.filter((e) => {
-      const key = `${e.name}|${e.timestamp ?? ''}`;
+      const key = `${e.name}|${e.timestamp}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
-  }, [sr]);
+  }, [sr.updated_Emotions_List]);
 
   return (
     <View style={styles.section}>
