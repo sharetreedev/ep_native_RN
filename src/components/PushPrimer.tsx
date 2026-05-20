@@ -35,10 +35,16 @@ export default function PushPrimer() {
     if (!OneSignalModule) return;
     (async () => {
       try {
+        // If the OS has already granted push permission there is nothing to
+        // prime — skip even if the "shown" flag is missing (e.g. fresh install
+        // where permission was granted under a previous OneSignal identity).
+        const granted = await OneSignalModule?.Notifications?.getPermissionAsync?.();
+        if (granted) return;
+
         const seen = await SecureStore.getItemAsync(STORAGE_KEY);
         if (!seen) setVisible(true);
       } catch (e) {
-        logger.warn('[PushPrimer] SecureStore read failed:', e);
+        logger.warn('[PushPrimer] permission check failed:', e);
       }
     })();
   }, []);

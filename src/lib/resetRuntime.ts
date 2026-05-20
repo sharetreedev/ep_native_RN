@@ -4,16 +4,18 @@ import { tokenStore } from '../api/client';
 import { invalidateAll } from './fetchCache';
 import { logger } from './logger';
 
-// SecureStore keys that hold per-user UI state ("have you seen this primer?",
-// "have you dismissed this promo?") and should be cleared whenever the user
-// identity changes. Token key is handled separately via tokenStore.clear()
-// because we sometimes want to preserve the token (e.g. account merge —
-// same session, new identity bound server-side).
+// SecureStore keys that hold per-user UI state ("have you dismissed this
+// promo?") and should be cleared whenever the user identity changes. Token
+// key is handled separately via tokenStore.clear() because we sometimes want
+// to preserve the token (e.g. account merge — same session, new identity
+// bound server-side).
 //
-// Intentionally excluded: `mypulse_version` is a per-device preference
-// (the device has been opted into v2), not a per-user one, so it survives.
+// Intentionally excluded:
+//  - `mypulse_version` — per-device preference (opted into v2), not per-user.
+//  - `push_primer_shown_v1` — push permission is per-device at the OS layer,
+//    not per-user. Once a user on this device has seen the soft primer they
+//    don't need re-priming when a different user signs in.
 const USER_SCOPED_SECURE_KEYS: readonly string[] = [
-  'push_primer_shown_v1',
   'mypulse_v2_promo_dismissed_v1',
 ];
 

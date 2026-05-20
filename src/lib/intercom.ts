@@ -12,7 +12,7 @@
  * NOTE: Intercom ships native code — changes here that depend on a new SDK
  * version cannot be delivered via OTA; they need a fresh EAS build.
  */
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 import { logger } from './logger';
 
 type IntercomModule = typeof import('@intercom/intercom-react-native').default;
@@ -49,8 +49,21 @@ export async function logoutIntercomUser(): Promise<void> {
 
 /** Open the Intercom messenger (e.g. from a "Help & Support" button). */
 export async function presentIntercom(): Promise<void> {
+  if (!Intercom) {
+    // Native module absent — almost always Expo Go, or a dev client built
+    // before the Intercom config plugin was added. Surface it loudly in dev
+    // so a tester doesn't mistake it for a dead button; silent no-op in prod
+    // (where this branch should never be reached on a correctly-built app).
+    if (__DEV__) {
+      Alert.alert(
+        'Intercom not in this build',
+        'The Intercom native module is missing. It cannot run in Expo Go — rebuild the dev client so the config plugin is included:\n\n• eas build --profile development\n  (then expo start --dev-client)\n• or npx expo prebuild --clean && npx expo run:ios / run:android',
+      );
+    }
+    return;
+  }
   try {
-    await Intercom?.present();
+    await Intercom.present();
   } catch (e) {
     logger.warn('[Intercom] present failed:', e);
   }
