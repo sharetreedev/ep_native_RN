@@ -13,10 +13,15 @@
 ```bash
 curl -X POST "https://hook.eu2.make.com/kk8btnn8wjnnuwpdup0wle6a08wulr2y" \
   -H "Content-Type: application/json" \
-  -d '{"message": "<p>HTML message here</p>"}'
+  -d '{"message": "<p>HTML message here</p>", "user": "Dylan"}'
 ```
 
-The `message` field is **HTML** (`<p>`, `<ul>`, `<li>`, line breaks all render). Make posts it to the Teams channel.
+Two fields:
+
+- **`message`** — the post body as **HTML** (`<p>`, `<ul>`, `<li>`, line breaks all render). Make posts this to the Teams channel.
+- **`user`** — who the message is from. Only **`Dylan`** and **`Maurice`** are configured in the Make scenario. Anything else will fall back, so don't make up a name.
+
+> **Before sending, always confirm who the post is from.** If someone other than Dylan or Maurice is mentioned, send it as **Maurice** and tell the requester that the named user isn't set up in the Make workflow.
 
 ---
 
@@ -112,7 +117,7 @@ Notice:
 ```bash
 curl -X POST "https://hook.eu2.make.com/kk8btnn8wjnnuwpdup0wle6a08wulr2y" \
   -H "Content-Type: application/json" \
-  -d '{"message": "<p>Pulse update just went out ✨</p><p>A few quality-of-life improvements:</p><ul><li>Sign up is faster — first and last name now sit on a single row</li><li>Cleaner check-in grid — fixed a brief colour flicker</li></ul><p>Close and reopen Pulse to get the update.</p>"}'
+  -d '{"message": "<p>Pulse update just went out ✨</p><p>A few quality-of-life improvements:</p><ul><li>Sign up is faster — first and last name now sit on a single row</li><li>Cleaner check-in grid — fixed a brief colour flicker</li></ul><p>Close and reopen Pulse to get the update.</p>", "user": "Dylan"}'
 ```
 
 The webhook returns `Accepted` on success.
