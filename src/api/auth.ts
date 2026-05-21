@@ -60,7 +60,7 @@ export const auth = {
     request<{ status: string; message: string }>('POST', '/auth/2fa/generateCode', { type }),
 
   verifyCode: (verificationCode: number) =>
-    request<{ verified: boolean | string }>('POST', '/auth/2fa/verifyCode', { verificationCode }),
+    request<boolean>('POST', '/auth/2fa/verifyCode', { verificationCode }),
 
   signInWithMobile: (phone: string, country_iso: string) =>
     request<{ status: string; message: string; user_id: string }>(
