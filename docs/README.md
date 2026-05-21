@@ -25,6 +25,7 @@ If you only read three pages, read these in order:
 | 04 | [Services](./04-services.md) | Xano, Amplitude, OneSignal, Intercom, Sentry, OAuth |
 | 05 | [Releases](./05-releases.md) | OTA vs native build, version policy |
 | 06 | [AI Handoff](./06-ai-handoff.md) | What the AI was handling that you now own |
+| 07 | [Prompting Claude Code](./07-prompting-agents.md) | Project-specific shorthand for getting things done with the AI |
 
 ### Runbooks
 
