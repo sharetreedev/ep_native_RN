@@ -1,0 +1,216 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import 'highlight.js/styles/github.css';
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #FAF8F4;
+  color: theme('colors.ink.DEFAULT');
+  font-family: theme('fontFamily.body');
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Prose styling — matches the markdown the docs are written in              */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+.prose-pulse {
+  @apply text-ink leading-relaxed;
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.prose-pulse > * + * {
+  @apply mt-5;
+}
+
+.prose-pulse h1,
+.prose-pulse h2,
+.prose-pulse h3,
+.prose-pulse h4 {
+  @apply font-heading text-ink;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.prose-pulse h1 {
+  @apply text-4xl mt-0 mb-4;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.prose-pulse h2 {
+  @apply text-2xl mt-12 mb-3 pb-2 border-b border-sand-dark/40;
+}
+
+.prose-pulse h3 {
+  @apply text-xl mt-8 mb-2;
+}
+
+.prose-pulse h4 {
+  @apply text-base mt-6 mb-1 uppercase tracking-wide text-ink-muted;
+  font-size: 0.825rem;
+  font-weight: 600;
+}
+
+.prose-pulse p {
+  @apply text-ink;
+}
+
+.prose-pulse a {
+  @apply text-meadow-darker underline underline-offset-2 decoration-meadow/40 hover:decoration-meadow-darker transition-colors;
+}
+
+.prose-pulse strong {
+  @apply font-semibold text-ink;
+}
+
+.prose-pulse em {
+  @apply italic;
+}
+
+.prose-pulse ul,
+.prose-pulse ol {
+  @apply pl-6 space-y-1.5;
+}
+
+.prose-pulse ul {
+  list-style: disc;
+}
+
+.prose-pulse ol {
+  list-style: decimal;
+}
+
+.prose-pulse li {
+  @apply text-ink;
+}
+
+.prose-pulse li::marker {
+  @apply text-meadow-dark;
+}
+
+.prose-pulse li > p {
+  @apply mt-0;
+}
+
+.prose-pulse li > ul,
+.prose-pulse li > ol {
+  @apply mt-2 mb-2;
+}
+
+.prose-pulse blockquote {
+  @apply border-l-4 border-meadow bg-meadow-tint pl-4 pr-3 py-2 my-4 rounded-r;
+  font-style: normal;
+}
+
+.prose-pulse blockquote > * {
+  @apply text-ink-muted;
+}
+
+.prose-pulse blockquote strong {
+  @apply text-meadow-darker;
+}
+
+.prose-pulse code {
+  @apply bg-sand-light text-meadow-darker px-1.5 py-0.5 rounded text-[0.875em] font-mono;
+  border: 1px solid theme('colors.sand.dark / 50%');
+}
+
+.prose-pulse pre {
+  @apply bg-[#1B1F23] text-sand-light p-4 rounded-lg overflow-x-auto my-4;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.prose-pulse pre code {
+  @apply bg-transparent text-inherit p-0 rounded-none border-0;
+  font-size: inherit;
+}
+
+.prose-pulse table {
+  @apply w-full my-4 text-sm border-collapse;
+}
+
+.prose-pulse thead {
+  @apply border-b-2 border-sand-dark;
+}
+
+.prose-pulse th {
+  @apply text-left font-heading font-semibold py-2 px-3 text-ink;
+}
+
+.prose-pulse td {
+  @apply py-2 px-3 border-b border-sand-dark/40 align-top;
+}
+
+.prose-pulse tr:last-child td {
+  @apply border-b-0;
+}
+
+.prose-pulse hr {
+  @apply my-8 border-0 border-t border-sand-dark/60;
+}
+
+.prose-pulse img {
+  @apply rounded-lg max-w-full;
+}
+
+/* Headings have an autolink anchor injected via rehype-autolink-headings */
+.prose-pulse h1 a.heading-anchor,
+.prose-pulse h2 a.heading-anchor,
+.prose-pulse h3 a.heading-anchor,
+.prose-pulse h4 a.heading-anchor {
+  @apply text-meadow opacity-0 ml-2 no-underline transition-opacity;
+}
+
+.prose-pulse h1:hover a.heading-anchor,
+.prose-pulse h2:hover a.heading-anchor,
+.prose-pulse h3:hover a.heading-anchor,
+.prose-pulse h4:hover a.heading-anchor {
+  @apply opacity-100;
+}
+
+/* highlight.js override — soften the github theme to fit the dark pre bg */
+.prose-pulse pre code.hljs {
+  background: transparent;
+  color: #E5E7EB;
+}
+
+.prose-pulse .hljs-keyword,
+.prose-pulse .hljs-built_in,
+.prose-pulse .hljs-tag,
+.prose-pulse .hljs-name {
+  color: #C8D2BD;
+}
+
+.prose-pulse .hljs-string,
+.prose-pulse .hljs-attr {
+  color: #E8C29C;
+}
+
+.prose-pulse .hljs-comment {
+  color: #7C8B72;
+  font-style: italic;
+}
+
+.prose-pulse .hljs-number,
+.prose-pulse .hljs-literal {
+  color: #D08A6E;
+}
+
+.prose-pulse .hljs-function,
+.prose-pulse .hljs-title {
+  color: #A8B797;
+}
