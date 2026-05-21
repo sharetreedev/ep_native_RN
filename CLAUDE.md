@@ -34,11 +34,16 @@ npm run ota:production -- --message "<brief summary of changes>"
 **The Teams audience is END USERS, not developers.** Every message must be written for someone who has never seen the codebase, doesn't know what an "OTA" or a "refactor" is, and only cares about what they will notice when they open the app.
 
 - **Webhook URL:** `https://hook.eu2.make.com/kk8btnn8wjnnuwpdup0wle6a08wulr2y`
-- Send a POST request with an **HTML** `message` field:
+- **Always ask the user first: "Who is this from — Dylan or Maurice?"** Pass the answer as the `user` field in the JSON body. The Make scenario uses this field to render the sender; only `Dylan` and `Maurice` are set up.
+  - If the user says **Dylan** → `"user": "Dylan"`
+  - If the user says **Maurice** → `"user": "Maurice"`
+  - If the user names **anyone else** (e.g. "post it from Sarah") → respond: *"This user is not set up in the make.com workflow, message will be sent as Maurice."* Then send with `"user": "Maurice"`.
+  - Never assume — ask before sending.
+- Send a POST request with an **HTML** `message` field and the `user` field:
   ```bash
   curl -X POST "https://hook.eu2.make.com/kk8btnn8wjnnuwpdup0wle6a08wulr2y" \
     -H "Content-Type: application/json" \
-    -d '{"message": "<p>HTML message here</p>"}'
+    -d '{"message": "<p>HTML message here</p>", "user": "Dylan"}'
   ```
 
 #### Writing rules — apply to every Teams message
