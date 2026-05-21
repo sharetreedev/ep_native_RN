@@ -4,6 +4,7 @@ import { MappedEmotion } from './useEmotionStates';
 import { useAsyncHandler } from './useAsyncHandler';
 import { invalidate, CACHE_KEYS } from '../lib/fetchCache';
 import { logger } from '../lib/logger';
+import { trackCheckInCompleted } from '../lib/analyticsEvents';
 export type { XanoTimelineCheckIn };
 
 /**
@@ -27,6 +28,10 @@ export function useCheckIns() {
     const result = await wrap(() => xanoCheckIns.create(emotion.xanoId, coordinateId, checkinView));
     if (result) {
       invalidate(CACHE_KEYS.USER, CACHE_KEYS.GLOBAL_PULSE);
+      // Single chokepoint for every check-in path — fires only after the
+      // Xano write succeeds (brief: never on button press). Spec: the only
+      // property is check_in_type (the brief's needs_attention is not in spec).
+      trackCheckInCompleted({ check_in_type: checkinView ?? 'slider' });
       return result.checkin_id;
     }
     return null;

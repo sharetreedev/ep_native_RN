@@ -37,6 +37,7 @@ import Avatar from '../../components/Avatar';
 import UserOutlookTab from './components/UserOutlookTab';
 import { styles, AVATAR_SIZE, HEADER_HEIGHT } from './styles';
 import { logger } from '../../lib/logger';
+import { userDaysAgo } from '../../lib/userDate';
 
 // Local banner image
 const bannerImage = require('../../../assets/ep-app-imagery.webp');
@@ -86,16 +87,13 @@ export default function UserProfileScreen() {
   // Pull pair user data from other_user in the pairs response
   const otherUser = pairData?.other_user;
 
-  // Fetch last 7 days of check-ins for the self timeline tab
-  // (pair timeline uses otherUser.running_stats.timeline — the /checkins/get_timeline
-  // endpoint is scoped to the auth'd user and can't fetch a pair's history)
+  // Fetch last 7 days of check-ins for the self timeline tab in the user's
+  // timezone (pair timeline uses otherUser.running_stats.timeline — the
+  // /checkins/get_timeline endpoint is scoped to the auth'd user).
   useEffect(() => {
     if (isPair) return;
-    const end = new Date();
-    const start = new Date();
-    start.setDate(start.getDate() - 6);
-    fetchTimeline(start.toISOString().slice(0, 10), end.toISOString().slice(0, 10));
-  }, [isPair, fetchTimeline]);
+    fetchTimeline(userDaysAgo(6, currentUser?.timezone), userDaysAgo(0, currentUser?.timezone));
+  }, [isPair, fetchTimeline, currentUser?.timezone]);
 
   const pairDisplayName = otherUser?.fullName || pairData?.invite_email || 'Pair User';
   const pairFirstName = otherUser?.fullName?.split(' ')[0] || pairDisplayName;
@@ -226,9 +224,16 @@ export default function UserProfileScreen() {
     }
   }, [pairsId, removePair, navigation]);
 
-  const { pendingCheckIn, handleCellPress, confirmCheckIn, cancelCheckIn } = useQuickCheckIn(
-    () => (navigation as any).navigate('DailyInsight')
-  );
+  const { pendingCheckIn, isSubmitting, handleCellPress, confirmCheckIn, cancelCheckIn } = useQuickCheckIn({
+    onSupportRequestNeeded: ({ supportRequestId, coordinateId, emotionName }) => {
+      (navigation as any).navigate('CheckinSupportRequest', {
+        supportRequestId,
+        coordinateId,
+        emotionName,
+        wasFirstCheckinToday: false,
+      });
+    },
+  });
 
   // Outlook tab directions array
   const outlookDirections = useMemo(() => [
@@ -282,6 +287,7 @@ export default function UserProfileScreen() {
       return {
         user_id: otherUser?.id,
         loggedDate: new Date(c.timestamp).toISOString(),
+        loggedDateTime: typeof c.timestamp === 'number' ? c.timestamp : new Date(c.timestamp).getTime(),
         dailyInsight: '',
         coordinate: {
           id: c.coordinate_id ?? 0,
@@ -442,6 +448,7 @@ export default function UserProfileScreen() {
           emotion={pendingCheckIn.emotion}
           onConfirm={confirmCheckIn}
           onCancel={cancelCheckIn}
+          isSubmitting={isSubmitting}
         />
       )}
 

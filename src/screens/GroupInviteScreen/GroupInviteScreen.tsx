@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { ArrowLeft } from 'lucide-react-native';
 import { RootStackParamList } from '../../types/navigation';
-import { useGroups } from '../../hooks/useGroups';
+import { useGroupInvites } from '../../hooks/useGroupInvites';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
 
 type GroupInviteRouteProp = RouteProp<RootStackParamList, 'GroupInvite'>;
@@ -23,7 +23,7 @@ export default function GroupInviteScreen() {
   const navigation = useNavigation();
   const route = useRoute<GroupInviteRouteProp>();
   const { groupId, groupName } = route.params;
-  const { inviteViaEmail, isLoading } = useGroups();
+  const { inviteViaEmail, isLoading } = useGroupInvites();
   const [email, setEmail] = useState('');
 
   const handleInvite = async () => {

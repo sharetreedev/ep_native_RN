@@ -51,7 +51,7 @@ export default function CheckInWithUser({ firstName, fullName, currentUserFirstN
     <>
       <TouchableOpacity style={styles.badge} onPress={() => setModalVisible(true)}>
         <MessageCircleMore color={colors.primary} size={14} />
-        <Text style={styles.badgeText}>Check in</Text>
+        <Text style={styles.badgeText}>Reach Out</Text>
       </TouchableOpacity>
 
       <Modal
@@ -71,7 +71,7 @@ export default function CheckInWithUser({ firstName, fullName, currentUserFirstN
                 <View style={styles.cardHeaderLeft}>
                   <MessageCircleMore color={colors.primary} size={20} />
                   <View style={styles.cardTitleWrap}>
-                    <Text style={styles.cardTitle}>Send a checkin message to</Text>
+                    <Text style={styles.cardTitle}>Reach out to</Text>
                     <Text style={styles.cardTitleName}>{fullName || firstName}</Text>
                   </View>
                 </View>

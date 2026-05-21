@@ -25,6 +25,7 @@ import { styles } from './styles';
 import OptionsList from './components/OptionsList';
 import SuggestedActionCard from './components/SuggestedActionCard';
 import { logger } from '../../lib/logger';
+import { trackSupportRequestResolved } from '../../lib/analyticsEvents';
 
 type ScreenRouteProp = RouteProp<RootStackParamList, 'RiskAssessment'>;
 type ScreenNavProp = NativeStackNavigationProp<RootStackParamList, 'RiskAssessment'>;
@@ -78,6 +79,10 @@ export default function RiskAssessmentScreen() {
           status: 'RESOLVED',
           resolved_Date: Date.now(),
         });
+        // resolution = the MHFR's suggested support action (categorical, not
+        // free text). Value vocabulary parity with WeWeb to be confirmed by
+        // Maurice (EP-1023). suggestedAction is non-null past the line-67 guard.
+        trackSupportRequestResolved({ support_request_id: sr.id, resolution: suggestedAction });
         // Push the server's authoritative copy into the MHFR cache so any
         // mounted screens (notably SupportRequestDetailsScreen) reflect the
         // new Resolved status immediately, without waiting on the network

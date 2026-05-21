@@ -14,8 +14,8 @@ interface UseUserResult {
   updateLastSeen: (timezone: string) => Promise<void>;
   updatePhoneNumber: (phoneNumber: string, countryIso: string) => Promise<{
     result1: unknown;
-    is_existing_user: string;
-    existing_user_id: string;
+    is_existing_user: boolean | string;
+    existing_user_id: number | string;
   } | null>;
   updateReminderSettings: (settings: {
     frequency: string;

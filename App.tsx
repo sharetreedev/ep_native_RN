@@ -1,3 +1,6 @@
+// Crypto polyfill — Amplitude's SDK generates UUIDs and needs this loaded
+// before any analytics code runs. Must stay at the very top.
+import 'react-native-get-random-values';
 import './global.css';
 import React from 'react';
 import { Platform, View, ActivityIndicator } from 'react-native';
@@ -13,8 +16,10 @@ import { MHFRProvider } from './src/contexts/MHFRContext';
 import { NotificationsProvider } from './src/contexts/NotificationsContext';
 import { ToastProvider } from './src/contexts/ToastContext';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
+import RuntimeResetSplash from './src/components/RuntimeResetSplash';
 import { fontAssets } from './src/theme/fonts';
 import { colors } from './src/theme';
+import { initAnalytics } from './src/lib/analytics';
 import * as Sentry from '@sentry/react-native';
 
 Sentry.init({
@@ -62,6 +67,9 @@ if (Platform.OS !== 'web') {
     console.warn('[OneSignal] Native module not available (Expo Go?):', e);
   }
 }
+
+// Initialise Amplitude analytics (web / Expo Go / missing-key safe — see analytics.ts).
+initAnalytics();
 
 export default Sentry.wrap(function App() {
   const [fontsLoaded] = useFonts(fontAssets);
@@ -112,6 +120,10 @@ export default Sentry.wrap(function App() {
             </CourseProvider>
           </AuthProvider>
         </ToastProvider>
+        {/* Rendered outside the auth-gated tree so it overlays everything
+            during the runtime reset (logout / delete / merge). See
+            src/lib/resetRuntime.ts for the trigger flow. */}
+        <RuntimeResetSplash />
       </SafeAreaProvider>
     </ErrorBoundary>
   );

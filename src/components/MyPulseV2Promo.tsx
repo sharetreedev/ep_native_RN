@@ -25,14 +25,37 @@ export default function MyPulseV2Promo() {
   const { version, loading } = useMyPulseVersion();
   const { hasCheckedInToday } = useCheckIn();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [activeRouteName, setActiveRouteName] = useState<string | undefined>(undefined);
+  const isDailyInsightVisible = activeRouteName === 'DailyInsight';
   const [visible, setVisible] = useState(false);
   const { width: windowWidth } = useWindowDimensions();
   const cardWidth = windowWidth - 64;
 
   useEffect(() => {
+    const readActiveRoute = () => {
+      try {
+        let state: any = navigation.getState?.();
+        while (state?.routes?.[state.index]?.state) {
+          state = state.routes[state.index].state;
+        }
+        setActiveRouteName(state?.routes?.[state?.index]?.name);
+      } catch {
+        setActiveRouteName(undefined);
+      }
+    };
+    readActiveRoute();
+    const unsubscribe = navigation.addListener('state', readActiveRoute);
+    return unsubscribe;
+  }, [navigation]);
+
+  useEffect(() => {
     if (loading) return;
     if (version === 'v2') return;
     if (!hasCheckedInToday) return;
+    if (isDailyInsightVisible) {
+      if (visible) setVisible(false);
+      return;
+    }
     (async () => {
       try {
         const seen = await SecureStore.getItemAsync(STORAGE_KEY);
@@ -41,7 +64,7 @@ export default function MyPulseV2Promo() {
         logger.warn('[MyPulseV2Promo] SecureStore read failed:', e);
       }
     })();
-  }, [loading, version, hasCheckedInToday]);
+  }, [loading, version, hasCheckedInToday, isDailyInsightVisible, visible]);
 
   const persistDismissed = async () => {
     try {

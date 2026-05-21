@@ -1,8 +1,9 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import { ChevronUp } from 'lucide-react-native';
 import Avatar from '../../../components/Avatar';
-import { colors, fonts, fontSizes } from '../../../theme';
+import ProfileTabs from '../../../components/ProfileTabs';
+import { colors, fonts, fontSizes, spacing, borderRadius } from '../../../theme';
 import { XanoCoordinateCount, XanoGroupRunningStats } from '../../../api';
 
 export interface GroupListItemPayload {
@@ -17,80 +18,193 @@ export interface GroupListItemPayload {
   checkins30day: XanoCoordinateCount[];
 }
 
+type Tab = 'Current' | 'Invites';
+const TABS: readonly Tab[] = ['Current', 'Invites'] as const;
+
 interface GroupsListPageProps {
   containerHeight: number;
   activeGroups: any[];
+  invites: any[];
   isLoading: boolean;
   onGroupPress: (payload: GroupListItemPayload) => void;
+  onAcceptInvite: (forestMapId: number) => Promise<unknown>;
+  onDeclineInvite: (forestMapId: number) => Promise<unknown>;
 }
+
+const inviteGroupName = (invite: any): string =>
+  invite?.forest?.group?.groupName ??
+  invite?.group?.groupName ??
+  invite?.groupName ??
+  `Group #${invite?.forest?.groupId ?? invite?.groupId ?? invite?.group_id ?? ''}`.trim();
+
+const inviteImageUrl = (invite: any): string | undefined =>
+  invite?.forest?.group?.imageKey ?? invite?.group?.imageKey ?? invite?.imageKey ?? undefined;
+
+const inviteForestMapId = (invite: any): number | undefined =>
+  invite?.forest?.id ?? invite?.id;
+
+const inviteRoleLabel = (invite: any): string | undefined => {
+  const raw = (invite?.forest?.role ?? invite?.forest_map?.role ?? '') as string;
+  return raw ? raw.replace(/\b\w/g, (c) => c.toUpperCase()) : undefined;
+};
 
 export default function GroupsListPage({
   containerHeight,
   activeGroups,
+  invites,
   isLoading,
   onGroupPress,
+  onAcceptInvite,
+  onDeclineInvite,
 }: GroupsListPageProps) {
+  const [tab, setTab] = useState<Tab>('Current');
+  const [pendingId, setPendingId] = useState<number | null>(null);
+
+  const handleAccept = async (invite: any) => {
+    const id = inviteForestMapId(invite);
+    if (id == null) return;
+    setPendingId(id);
+    try { await onAcceptInvite(id); } finally { setPendingId(null); }
+  };
+
+  const handleDecline = async (invite: any) => {
+    const id = inviteForestMapId(invite);
+    if (id == null) return;
+    setPendingId(id);
+    try { await onDeclineInvite(id); } finally { setPendingId(null); }
+  };
+
   return (
     <View style={[styles.page, styles.listPage, { height: containerHeight }]}>
       <TouchableOpacity style={styles.swipeHint}>
         <ChevronUp color={colors.textMuted} size={24} style={{ transform: [{ rotate: '180deg' }] }} />
       </TouchableOpacity>
 
-      <ScrollView style={styles.listScroll} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false} nestedScrollEnabled>
-        {activeGroups.length === 0 && !isLoading && (
-          <Text style={styles.emptyText}>No groups yet</Text>
-        )}
-        {activeGroups.map((group: any, index: number) => {
-          const groupInfo = group.forest?.group;
-          const groupName = groupInfo?.groupName || group.groupName || `Group #${group.groupId ?? group.id}`;
-          const imageUrl = groupInfo?.imageKey;
-          const rawRole = (group.forest?.role ?? group.forest_map?.role ?? '') as string;
-          const role = rawRole.replace(/\b\w/g, (c: string) => c.toUpperCase());
-          const memberCount = groupInfo?.member_count as number | undefined;
-          const forestId = group.forest?.id;
-          const initial = groupName.charAt(0).toUpperCase();
-          const isLast = index === activeGroups.length - 1;
-          const groupId = groupInfo?.id ?? group.groupId ?? group.id;
+      <ProfileTabs<Tab>
+        tabs={TABS}
+        activeTab={tab}
+        onTabChange={setTab}
+        containerStyle={{ paddingHorizontal: 8, marginTop: 12 }}
+        tabStyle={{ marginRight: 16 }}
+      />
 
-          return (
-            <TouchableOpacity
-              key={`group-${group.id ?? index}`}
-              style={[styles.listItem, !isLast && styles.listItemBorder]}
-              onPress={() => {
-                const rs = group.group?.running_stats ?? groupInfo?.running_stats ?? group.running_stats ?? null;
-                onGroupPress({
-                  groupId,
-                  groupName,
-                  forestId,
-                  runningStats: rs,
-                  imageUrl: imageUrl ?? undefined,
-                  role: role || undefined,
-                  membersCoordinatesCount: group.members_coordinates_count ?? [],
-                  checkins7day: rs?.checkins_7day ?? [],
-                  checkins30day: rs?.checkins30day ?? [],
-                });
-              }}
-            >
-              <View style={styles.listItemLeft}>
-                <Avatar
-                  source={imageUrl}
-                  initials={initial}
-                  size="md"
-                  style={{ marginRight: 12 }}
-                />
-                <View>
-                  <Text style={styles.listItemName}>{groupName}</Text>
-                  {(role || memberCount != null) ? (
-                    <Text style={styles.listItemRole}>
-                      {role}{role && memberCount != null ? ' · ' : ''}{memberCount != null ? `${memberCount} ${memberCount === 1 ? 'member' : 'members'}` : ''}
-                    </Text>
-                  ) : null}
+      <ScrollView style={styles.listScroll} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false} nestedScrollEnabled>
+        {tab === 'Current' ? (
+          <>
+            {activeGroups.length === 0 && !isLoading && (
+              <Text style={styles.emptyText}>No groups yet</Text>
+            )}
+            {activeGroups.map((group: any, index: number) => {
+              const groupInfo = group.forest?.group;
+              const groupName = groupInfo?.groupName || group.groupName || `Group #${group.groupId ?? group.id}`;
+              const imageUrl = groupInfo?.imageKey;
+              const rawRole = (group.forest?.role ?? group.forest_map?.role ?? '') as string;
+              const role = rawRole.replace(/\b\w/g, (c: string) => c.toUpperCase());
+              const memberCount = groupInfo?.member_count as number | undefined;
+              const forestId = group.forest?.id;
+              const initial = groupName.charAt(0).toUpperCase();
+              const isLast = index === activeGroups.length - 1;
+              const groupId = groupInfo?.id ?? group.groupId ?? group.id;
+
+              return (
+                <TouchableOpacity
+                  key={`group-${group.id ?? index}`}
+                  style={[styles.listItem, !isLast && styles.listItemBorder]}
+                  onPress={() => {
+                    const rs = group.group?.running_stats ?? groupInfo?.running_stats ?? group.running_stats ?? null;
+                    onGroupPress({
+                      groupId,
+                      groupName,
+                      forestId,
+                      runningStats: rs,
+                      imageUrl: imageUrl ?? undefined,
+                      role: role || undefined,
+                      membersCoordinatesCount: group.members_coordinates_count ?? [],
+                      checkins7day: rs?.checkins_7day ?? [],
+                      checkins30day: rs?.checkins30day ?? [],
+                    });
+                  }}
+                >
+                  <View style={styles.listItemLeft}>
+                    <Avatar
+                      source={imageUrl}
+                      initials={initial}
+                      size="md"
+                      style={{ marginRight: 12 }}
+                    />
+                    <View>
+                      <Text style={styles.listItemName}>{groupName}</Text>
+                      {(role || memberCount != null) ? (
+                        <Text style={styles.listItemRole}>
+                          {role}{role && memberCount != null ? ' · ' : ''}{memberCount != null ? `${memberCount} ${memberCount === 1 ? 'member' : 'members'}` : ''}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                  <Text style={styles.listItemChevron}>›</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </>
+        ) : (
+          <>
+            {invites.length === 0 && (
+              <Text style={styles.emptyText}>No pending invites</Text>
+            )}
+            {invites.map((invite: any, index: number) => {
+              const id = inviteForestMapId(invite);
+              const name = inviteGroupName(invite);
+              const imageUrl = inviteImageUrl(invite);
+              const role = inviteRoleLabel(invite);
+              const initial = name.charAt(0).toUpperCase();
+              const isLast = index === invites.length - 1;
+              const busy = pendingId === id;
+              return (
+                <View
+                  key={`invite-${id ?? index}`}
+                  style={[styles.listItem, !isLast && styles.listItemBorder]}
+                >
+                  <View style={styles.listItemLeft}>
+                    <Avatar
+                      source={imageUrl}
+                      initials={initial}
+                      size="md"
+                      style={{ marginRight: 12 }}
+                    />
+                    <View style={{ flexShrink: 1 }}>
+                      <Text style={styles.listItemName}>{name}</Text>
+                      <Text style={styles.listItemRole}>
+                        Invitation pending{role ? ` · ${role}` : ''}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.inviteActions}>
+                    {busy ? (
+                      <ActivityIndicator color={colors.primary} />
+                    ) : (
+                      <>
+                        <TouchableOpacity
+                          style={[styles.inviteBtn, styles.declineBtn]}
+                          onPress={() => handleDecline(invite)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.declineBtnText}>Decline</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.inviteBtn, styles.acceptBtn]}
+                          onPress={() => handleAccept(invite)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.acceptBtnText}>Accept</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                  </View>
                 </View>
-              </View>
-              <Text style={styles.listItemChevron}>›</Text>
-            </TouchableOpacity>
-          );
-        })}
+              );
+            })}
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -119,8 +233,37 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderLight,
   },
-  listItemLeft: { flexDirection: 'row', alignItems: 'center' },
+  listItemLeft: { flexDirection: 'row', alignItems: 'center', flexShrink: 1, flex: 1 },
   listItemName: { fontFamily: fonts.bodyBold, fontSize: fontSizes.base, color: colors.textPrimary },
   listItemRole: { fontSize: fontSizes.sm, fontFamily: fonts.bodyMedium, color: colors.textSecondary },
   listItemChevron: { color: colors.textPlaceholder },
+  inviteActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  inviteBtn: {
+    paddingHorizontal: spacing.base,
+    paddingVertical: 8,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+  },
+  declineBtn: {
+    backgroundColor: 'transparent',
+    borderColor: colors.border,
+  },
+  declineBtnText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.sm,
+    color: colors.textSecondary,
+  },
+  acceptBtn: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  acceptBtnText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.sm,
+    color: colors.textOnPrimary,
+  },
 });

@@ -10,7 +10,9 @@ import * as Crypto from 'expo-crypto';
 import { RootStackParamList } from '../../types/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { auth as authApi } from '../../api';
-import { ChevronDown, Check } from 'lucide-react-native';
+import { logger } from '../../lib/logger';
+import { presentIntercom } from '../../lib/intercom';
+import { ChevronDown, Check, HelpCircle } from 'lucide-react-native';
 import * as Sentry from '@sentry/react-native';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
 import Button from '../../components/Button';
@@ -49,6 +51,7 @@ export default function AuthScreen() {
 
     const [forgotLoading, setForgotLoading] = useState(false);
     const [otherSignInVisible, setOtherSignInVisible] = useState(false);
+    const [checkingMigration, setCheckingMigration] = useState(false);
 
     const [appleAvailable, setAppleAvailable] = useState(false);
     useEffect(() => {
@@ -111,6 +114,66 @@ export default function AuthScreen() {
 
         try {
             if (mode === 'login') {
+                // Migration pre-check: decides whether this email signs in
+                // normally, needs an emailed-code migration, or has no
+                // password account (mobile only). If the check itself fails
+                // we fall back to a normal login so a flaky endpoint can
+                // never lock out existing users.
+                const trimmedEmail = email.trim();
+                let migration: Awaited<ReturnType<typeof authApi.isMigratedUser>>;
+                setCheckingMigration(true);
+                try {
+                    migration = await authApi.isMigratedUser(trimmedEmail);
+                } catch {
+                    // The pre-check is REQUIRED, not best-effort. A migrated
+                    // user's old password is dead, so silently falling back to
+                    // login() would guarantee a failed login and a confusing
+                    // lockout for exactly the users this flow exists for.
+                    // Surface a clear, retryable error and stop here.
+                    Alert.alert(
+                        'Connection problem',
+                        "We couldn't verify your account just now. Please check your connection and try again.",
+                    );
+                    return;
+                } finally {
+                    setCheckingMigration(false);
+                }
+
+                // Observability at a critical branch point — the HTTP client
+                // never logs 200 bodies, so without this we're blind to why
+                // a given email routed to login vs email vs phone.
+                logger.log('[AuthScreen] is_migrated_user1 →', JSON.stringify(migration));
+
+                if (migration.response === 'phone') {
+                    navigation.navigate('AccountNotFound', { email: trimmedEmail });
+                    return;
+                }
+                if (migration.response === 'email') {
+                    const migratedUserId = Number(migration.user);
+                    if (!Number.isInteger(migratedUserId) || migratedUserId <= 0) {
+                        Alert.alert(
+                            'Something went wrong',
+                            'We could not start your account migration. Please contact support.',
+                        );
+                        return;
+                    }
+                    try {
+                        await authApi.generateCodeWithId('email', migratedUserId);
+                    } catch {
+                        Alert.alert(
+                            'Could not send code',
+                            'We could not send your verification code. Please try again.',
+                        );
+                        return;
+                    }
+                    navigation.navigate('MigrationVerify', {
+                        email: trimmedEmail,
+                        userId: migration.user,
+                    });
+                    return;
+                }
+                // 'login' (or any unexpected value): a non-migrated user has a
+                // working password, so a normal login is the safe default.
                 await login(email, password);
             } else {
                 if (!firstName || !lastName || !country) {
@@ -337,7 +400,7 @@ export default function AuthScreen() {
                         <Button
                             title={mode === 'login' ? 'Sign in' : 'Sign up'}
                             onPress={handleAuth}
-                            loading={isLoading}
+                            loading={isLoading || checkingMigration}
                             style={styles.mainButton}
                         />
 
@@ -382,6 +445,16 @@ export default function AuthScreen() {
                     </View>
                 </ScrollView>
             </KeyboardAvoidingView>
+            <TouchableOpacity
+                style={styles.helpButton}
+                onPress={presentIntercom}
+                accessibilityRole="button"
+                accessibilityLabel="Get help"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+                <HelpCircle size={18} color={colors.textSecondary} />
+                <Text style={styles.helpButtonText}>Help</Text>
+            </TouchableOpacity>
             <ModalPicker
                 visible={countryPickerVisible}
                 onDismiss={() => setCountryPickerVisible(false)}
@@ -455,6 +528,21 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: colors.background,
+    },
+    helpButton: {
+        position: 'absolute',
+        top: spacing.base,
+        right: spacing.base,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingVertical: spacing.xs,
+        paddingHorizontal: spacing.sm,
+    },
+    helpButtonText: {
+        fontFamily: fonts.bodyMedium,
+        fontSize: fontSizes.sm,
+        color: colors.textSecondary,
     },
     scrollContent: {
         flexGrow: 1,

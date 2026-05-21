@@ -22,6 +22,7 @@ import { supportRequests as xanoSupportRequests, XanoSupportRequest } from '../.
 import Avatar from '../../components/Avatar';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
 import { logger } from '../../lib/logger';
+import { trackSupportRequestContactAttempted } from '../../lib/analyticsEvents';
 import EmotionTimeline from './components/EmotionTimeline';
 import MHFRActionSection from './components/MHFRActionSection';
 import ContactAttemptLog from './components/ContactAttemptLog';
@@ -76,6 +77,7 @@ export default function SupportRequestDetailsScreen() {
         contact_attempts_count: newCount,
         old_contact_attempt_count: contactCount,
       });
+      trackSupportRequestContactAttempted({ support_request_id: sr.id });
       await refreshMHFRRequests();
       navigation.goBack();
     } catch (e) {
@@ -357,6 +359,7 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
+    marginBottom: 0,
   },
 
   // ── Groups ──

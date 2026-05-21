@@ -24,17 +24,11 @@ import PairsListView from '../../components/DailyInsight/PairsListView';
 import { useSafeEdges } from '../../contexts/MHFRContext';
 import { colors, fonts, fontSizes, spacing, buttonStyles } from '../../theme';
 import { reportError } from '../../lib/logger';
+import { userDateOf, userDaysAgo } from '../../lib/userDate';
 
 import type { XanoTimelineCheckIn } from '../../api';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DailyInsight'>;
-
-/** Convert any date/datetime string to YYYY-MM-DD in the device's local timezone. */
-function toLocalDateString(value: string): string {
-  const d = new Date(value);
-  if (isNaN(d.getTime())) return value.slice(0, 10);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 type InsightStep = 'timeline' | 'trends' | 'pairs';
 
 const STEPS: InsightStep[] = ['timeline', 'trends', 'pairs'];
@@ -86,13 +80,10 @@ export default function DailyInsightScreen({ navigation, route }: Props) {
     async function loadData() {
       const promises: Promise<void>[] = [];
 
-      // Fetch timeline from API (last 7 days) — use local dates
-      const now = new Date();
-      const toLocal = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const endDate = toLocal(now);
-      const start = new Date(now);
-      start.setDate(start.getDate() - 7);
-      const startDate = toLocal(start);
+      // Fetch timeline from API (last 7 days) in the user's timezone so
+      // bucketing and range stay aligned regardless of device TZ.
+      const endDate = userDaysAgo(0, user?.timezone);
+      const startDate = userDaysAgo(7, user?.timezone);
       // Each fetch is isolated so a single failure doesn't block the others.
       // Errors are reported (not silently swallowed) so we have production
       // visibility of partial-data screens.
@@ -212,18 +203,21 @@ export default function DailyInsightScreen({ navigation, route }: Props) {
   // it to today's row unless the server response already includes it (deduped
   // by coordinate id + same local date).
   const justCheckedIn = route.params?.justCheckedIn;
+  const timezone = user?.timezone;
   const timelineWithOptimistic = useMemo(() => {
     if (!justCheckedIn) return checkInsHook.timeline;
-    const todayLocal = toLocalDateString(justCheckedIn.createdAt);
-    const alreadyPresent = checkInsHook.timeline.some(
-      (c) =>
-        toLocalDateString(c.loggedDate) === todayLocal &&
-        c.coordinate?.id === justCheckedIn.coordinateId,
-    );
+    const createdAtMs = new Date(justCheckedIn.createdAt).getTime();
+    const todayLocal = userDateOf(createdAtMs, timezone);
+    const alreadyPresent = checkInsHook.timeline.some((c) => {
+      const moment = typeof c.loggedDateTime === 'number' ? c.loggedDateTime : c.loggedDate;
+      return userDateOf(moment, timezone) === todayLocal
+        && c.coordinate?.id === justCheckedIn.coordinateId;
+    });
     if (alreadyPresent) return checkInsHook.timeline;
     const synthetic: XanoTimelineCheckIn = {
       user_id: 0,
       loggedDate: justCheckedIn.createdAt,
+      loggedDateTime: createdAtMs,
       dailyInsight: '',
       coordinate: {
         id: justCheckedIn.coordinateId,
@@ -239,7 +233,7 @@ export default function DailyInsightScreen({ navigation, route }: Props) {
       },
     };
     return [synthetic, ...checkInsHook.timeline];
-  }, [checkInsHook.timeline, justCheckedIn]);
+  }, [checkInsHook.timeline, justCheckedIn, timezone]);
 
   if (!dataReady) {
     return (

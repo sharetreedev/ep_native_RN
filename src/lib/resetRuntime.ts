@@ -1,0 +1,159 @@
+import * as SecureStore from 'expo-secure-store';
+import * as Updates from 'expo-updates';
+import { tokenStore } from '../api/client';
+import { invalidateAll } from './fetchCache';
+import { logger } from './logger';
+
+// SecureStore keys that hold per-user UI state ("have you dismissed this
+// promo?") and should be cleared whenever the user identity changes. Token
+// key is handled separately via tokenStore.clear() because we sometimes want
+// to preserve the token (e.g. account merge — same session, new identity
+// bound server-side).
+//
+// Intentionally excluded:
+//  - `mypulse_version` — per-device preference (opted into v2), not per-user.
+//  - `push_primer_shown_v1` — push permission is per-device at the OS layer,
+//    not per-user. Once a user on this device has seen the soft primer they
+//    don't need re-priming when a different user signs in.
+const USER_SCOPED_SECURE_KEYS: readonly string[] = [
+  'mypulse_v2_promo_dismissed_v1',
+];
+
+// Subscriber for the splash overlay. The splash component registers a single
+// listener on mount; `resetAndReload` pushes visibility/message changes to it
+// before tearing down state. We use a module-level callback instead of React
+// context so the reset can be triggered from anywhere (including inside other
+// contexts) without provider-ordering gymnastics.
+type SplashState = { visible: boolean; message: string };
+let splashListener: ((state: SplashState) => void) | null = null;
+
+export function subscribeRuntimeReset(cb: (state: SplashState) => void): () => void {
+  splashListener = cb;
+  return () => {
+    splashListener = null;
+  };
+}
+
+export type ResetReason = 'logout' | 'delete' | 'merge';
+
+export interface ResetOptions {
+  /** Message shown on the full-screen splash while the reload happens. */
+  message: string;
+  /** Wipe the auth token. True for logout/delete, false for merge (the token
+   *  is still valid — the server-side merge re-binds it to the merged-into
+   *  account, and a logout-style clear here would force the user to sign in
+   *  again immediately after the merge). */
+  clearAuthToken: boolean;
+  /** Disassociate the device from the current user in OneSignal. True for
+   *  logout/delete; false for merge (same device, new identity — let the
+   *  next launch re-associate naturally via /auth/me). */
+  onesignalLogout: boolean;
+}
+
+async function clearUserScopedSecureStore(): Promise<void> {
+  await Promise.all(
+    USER_SCOPED_SECURE_KEYS.map((k) =>
+      SecureStore.deleteItemAsync(k).catch((e) => {
+        // Non-fatal — worst case the user sees the primer twice.
+        logger.warn(`[resetRuntime] failed to clear ${k}:`, e);
+      }),
+    ),
+  );
+}
+
+function tryOneSignalLogout(): void {
+  try {
+    // Required at runtime — OneSignal native module isn't available in Expo Go.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { OneSignal } = require('react-native-onesignal');
+    OneSignal.logout();
+  } catch (e) {
+    logger.warn('[resetRuntime] OneSignal logout failed:', e);
+  }
+}
+
+// Intercom keeps its logged-in user at the NATIVE layer, which survives the JS
+// runtime reload below. Without an explicit logout the next person to use this
+// device would inherit the previous user's Intercom conversation history —
+// exactly the cross-account leakage this whole reset exists to prevent. Gated
+// on the same `onesignalLogout` flag: true for logout/delete (disassociate the
+// device), false for merge (same device, new identity — the re-identify on the
+// next boot rebinds the native session to the merged-into user).
+function tryIntercomLogout(): void {
+  try {
+    // Required at runtime — Intercom native module isn't available in Expo Go.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const Intercom = require('@intercom/intercom-react-native').default;
+    Intercom.logout();
+  } catch (e) {
+    logger.warn('[resetRuntime] Intercom logout failed:', e);
+  }
+}
+
+// Amplitude keeps the user id + device id in its own store, which survives the
+// JS runtime reload. reset() clears both so the next session starts as a fresh
+// anonymous user — same cross-account-leakage concern as Intercom above, and
+// gated on the same flag (skip on merge: same device, the next-boot re-identify
+// rebinds events to the merged-into user).
+function tryAnalyticsReset(): void {
+  try {
+    // Required at runtime — Amplitude native module isn't available in Expo Go.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { resetAnalytics } = require('./analytics');
+    resetAnalytics();
+  } catch (e) {
+    logger.warn('[resetRuntime] Amplitude reset failed:', e);
+  }
+}
+
+/**
+ * Tear down all per-user state and restart the JS runtime so no module-scope
+ * singletons, in-flight fetches, context state, or third-party caches can
+ * survive into the next session. This is the bulletproof equivalent of a
+ * manual "clear everything" pass — guaranteed by construction, not discipline.
+ *
+ * Flow:
+ *  1. Show the splash overlay with the caller's message.
+ *  2. Brief pause so the splash actually paints before we tear down.
+ *  3. OneSignal + Intercom logout + Amplitude reset (if requested), invalidate in-memory cache,
+ *     wipe user-scoped SecureStore keys, clear the auth token (if requested).
+ *  4. Reload the JS runtime (`Updates.reloadAsync` in production, `DevSettings.reload`
+ *     in dev). The JS bundle re-boots; all module/context state is fresh.
+ *
+ * If the reload itself throws (Expo Go without dev-settings reload available),
+ * we hide the splash and re-throw so the caller can fall back to a manual
+ * state reset.
+ */
+export async function resetAndReload(opts: ResetOptions): Promise<void> {
+  splashListener?.({ visible: true, message: opts.message });
+
+  // Let the splash render a frame before we start work. ~200ms is enough for
+  // the fade-in to be visible but short enough not to feel laggy.
+  await new Promise((r) => setTimeout(r, 200));
+
+  if (opts.onesignalLogout) {
+    tryOneSignalLogout();
+    tryIntercomLogout();
+    tryAnalyticsReset();
+  }
+  invalidateAll();
+  await clearUserScopedSecureStore();
+  if (opts.clearAuthToken) await tokenStore.clear();
+
+  // A tiny additional pause so the splash isn't replaced by a blank
+  // half-rendered frame during the reload.
+  await new Promise((r) => setTimeout(r, 100));
+
+  // Only `Updates.reloadAsync` is safe under the new architecture — it tears
+  // down the runtime cleanly. `DevSettings.reload()` segfaults in Expo Go +
+  // Fabric (ShadowTreeRegistry vs. Hermes teardown race). When reload isn't
+  // available (Expo Go without expo-updates configured), we hide the splash
+  // and re-throw so the caller can fall through to a manual local reset.
+  try {
+    await Updates.reloadAsync();
+  } catch (e) {
+    logger.warn('[resetRuntime] reload unavailable, falling back:', e);
+    splashListener?.({ visible: false, message: '' });
+    throw e;
+  }
+}

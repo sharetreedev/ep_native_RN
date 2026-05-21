@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Modal, StyleSheet, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, StyleSheet, Animated, ActivityIndicator } from 'react-native';
 import Svg, { Text as SvgText, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { MappedEmotion } from '../../hooks/useEmotionStates';
@@ -141,9 +141,13 @@ interface CheckInConfirmModalProps {
     emotion: MappedEmotion;
     onConfirm: () => void;
     onCancel: () => void;
+    /** When true, disables actions and shows a spinner on the confirm button.
+     *  Used by the support-request quick check-in path while awaiting the
+     *  check-in + SR creation round-trip. */
+    isSubmitting?: boolean;
 }
 
-export function CheckInConfirmModal({ emotion, onConfirm, onCancel }: CheckInConfirmModalProps) {
+export function CheckInConfirmModal({ emotion, onConfirm, onCancel, isSubmitting = false }: CheckInConfirmModalProps) {
     const displayName = emotion.name.charAt(0).toUpperCase() + emotion.name.slice(1).toLowerCase();
     const emotionColour = emotion.emotionColour || emotion.color;
     const themeColour = emotion.themeColour || emotionColour;
@@ -186,17 +190,18 @@ export function CheckInConfirmModal({ emotion, onConfirm, onCancel }: CheckInCon
     const gradEnd = shineLift > 0 ? lightenColor(emotionColour, shineLift * 0.35) : emotionColour;
 
     const handleConfirm = () => {
+        if (isSubmitting) return;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         onConfirm();
     };
 
     return (
-        <Modal visible transparent animationType="none" onRequestClose={onCancel}>
+        <Modal visible transparent animationType="none" onRequestClose={isSubmitting ? () => {} : onCancel}>
             <Animated.View style={[modalStyles.backdrop, { opacity: backdropOpacity }]}>
                 <TouchableOpacity
                     style={modalStyles.backdropTouch}
                     activeOpacity={1}
-                    onPress={onCancel}
+                    onPress={isSubmitting ? undefined : onCancel}
                 />
             </Animated.View>
             <View style={modalStyles.contentWrap} pointerEvents="box-none">
@@ -227,19 +232,25 @@ export function CheckInConfirmModal({ emotion, onConfirm, onCancel }: CheckInCon
 
                     <View style={modalStyles.actions}>
                         <TouchableOpacity
-                            style={modalStyles.confirmButton}
+                            style={[modalStyles.confirmButton, isSubmitting && modalStyles.confirmButtonDisabled]}
                             onPress={handleConfirm}
                             activeOpacity={0.7}
+                            disabled={isSubmitting}
                         >
-                            <Text style={modalStyles.confirmText}>Check In</Text>
+                            {isSubmitting ? (
+                                <ActivityIndicator color={colors.textOnPrimary} />
+                            ) : (
+                                <Text style={modalStyles.confirmText}>Check In</Text>
+                            )}
                         </TouchableOpacity>
 
                         <TouchableOpacity
                             onPress={onCancel}
                             activeOpacity={0.7}
                             style={modalStyles.cancelButton}
+                            disabled={isSubmitting}
                         >
-                            <Text style={modalStyles.cancelText}>Cancel</Text>
+                            <Text style={[modalStyles.cancelText, isSubmitting && modalStyles.cancelTextDisabled]}>Cancel</Text>
                         </TouchableOpacity>
                     </View>
                 </Animated.View>
@@ -296,6 +307,9 @@ const modalStyles = StyleSheet.create({
         backgroundColor: colors.primary,
         alignItems: 'center',
     },
+    confirmButtonDisabled: {
+        opacity: 0.7,
+    },
     confirmText: {
         fontFamily: fonts.bodyBold,
         fontSize: fontSizes.base,
@@ -309,6 +323,9 @@ const modalStyles = StyleSheet.create({
         fontFamily: fonts.bodySemiBold,
         fontSize: fontSizes.md,
         color: colors.textMuted,
+    },
+    cancelTextDisabled: {
+        opacity: 0.5,
     },
 });
 

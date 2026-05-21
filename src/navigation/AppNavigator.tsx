@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -6,11 +6,15 @@ import { RootStackParamList } from '../types/navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { useCheckIn } from '../contexts/CheckInContext';
 import { colors } from '../theme';
-import { consumePendingLesson } from './pendingLesson';
+import { consumePendingLesson, peekPendingLesson } from './pendingLesson';
 import TabNavigator from './TabNavigator';
 import AuthScreen from '../screens/AuthScreen/AuthScreen';
 import MobileSignInScreen from '../screens/MobileSignInScreen/MobileSignInScreen';
 import MobileVerifyScreen from '../screens/MobileVerifyScreen/MobileVerifyScreen';
+import AccountNotFoundScreen from '../screens/AccountNotFoundScreen/AccountNotFoundScreen';
+import MigrationVerifyScreen from '../screens/MigrationVerifyScreen/MigrationVerifyScreen';
+import MigrationWelcomeScreen from '../screens/MigrationWelcomeScreen/MigrationWelcomeScreen';
+import SetPasswordScreen from '../screens/SetPasswordScreen/SetPasswordScreen';
 import OnboardingScreen from '../screens/OnboardingScreen/OnboardingScreen';
 import CheckInScreen from '../screens/CheckInScreen/CheckInScreen';
 import DailyInsightScreen from '../screens/DailyInsightScreen/DailyInsightScreen';
@@ -40,31 +44,47 @@ import RiskAssessmentScreen from '../screens/RiskAssessmentScreen/RiskAssessment
 import MHFRBanner from '../components/MHFRBanner';
 import PushPrimer from '../components/PushPrimer';
 import MyPulseV2Promo from '../components/MyPulseV2Promo';
+import PendingGroupInviteSheet from '../components/PendingGroupInviteSheet';
+import NewMHFRSupportRequestSheet from '../components/NewMHFRSupportRequestSheet';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function AppNavigator() {
-    const { isAuthenticated, isLoading, user } = useAuth();
+    const { isAuthenticated, isLoading, user, pendingPasswordSetup } = useAuth();
     const { hasCheckedInToday } = useCheckIn();
     const navRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
     const checkinPushed = useRef(false);
 
     // Determine the initial route for authenticated users
-    const needsOnboarding = isAuthenticated && !user?.onboardingComplete;
-    const needsCheckIn = isAuthenticated && user?.onboardingComplete && !hasCheckedInToday;
+    const needsOnboarding = isAuthenticated && !pendingPasswordSetup && !user?.onboardingComplete;
+    const needsCheckIn =
+        isAuthenticated && !pendingPasswordSetup && user?.onboardingComplete && !hasCheckedInToday;
 
-    // Navigate to lesson if user enrolled during onboarding
-    useEffect(() => {
-        if (!needsOnboarding && !isLoading) {
-            const lesson = consumePendingLesson();
-            if (lesson) {
-                // Small delay to let the Main stack mount
-                setTimeout(() => {
-                    navRef.current?.navigate('Lessons', { lesson });
-                }, 100);
-            }
-        }
+    // Hand off a pending lesson (set during onboarding's course-enroll step)
+    // to the Lessons screen as soon as the authed stack is mounted and ready.
+    // We trigger from both onReady and onStateChange because:
+    //   - onReady covers the cold-launch case (user closed the app between
+    //     enroll and re-open; lesson is rehydrated from SecureStore)
+    //   - onStateChange covers the hot case (Stack swaps from Onboarding-only
+    //     to the full authed tree when `needsOnboarding` flips false)
+    // The lesson is durably stored in SecureStore (see pendingLesson.ts), so
+    // missing one trigger doesn't lose the handoff — the next state change,
+    // or the next launch, will still pick it up.
+    const tryConsumePendingLesson = useCallback(() => {
+        if (needsOnboarding || isLoading) return;
+        if (!peekPendingLesson()) return;
+        const ref = navRef.current;
+        if (!ref?.isReady()) return;
+        const routes = ref.getRootState()?.routeNames as string[] | undefined;
+        if (!routes?.includes('Lessons')) return;
+        consumePendingLesson().then((lesson) => {
+            if (lesson) ref.navigate('Lessons', { lesson });
+        });
     }, [needsOnboarding, isLoading]);
+
+    useEffect(() => {
+        tryConsumePendingLesson();
+    }, [tryConsumePendingLesson]);
 
     if (isLoading) {
         return (
@@ -83,15 +103,32 @@ export default function AppNavigator() {
                     checkinPushed.current = true;
                     navRef.current?.navigate('CheckIn');
                 }
+                tryConsumePendingLesson();
             }}
+            onStateChange={tryConsumePendingLesson}
         >
             <View style={styles.appContainer}>
-            {isAuthenticated && !needsOnboarding && <MHFRBanner />}
-            {isAuthenticated && !needsOnboarding && <PushPrimer />}
-            {isAuthenticated && !needsOnboarding && <MyPulseV2Promo />}
+            {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && <MHFRBanner />}
+            {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && <PushPrimer />}
+            {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && <MyPulseV2Promo />}
+            {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && <PendingGroupInviteSheet sessionKey={user?.id} />}
+            {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && <NewMHFRSupportRequestSheet />}
             <Stack.Navigator id="RootStack" screenOptions={{ headerShown: false }}>
                 {isAuthenticated ? (
-                    needsOnboarding ? (
+                    pendingPasswordSetup ? (
+                        <>
+                            <Stack.Screen
+                                name="MigrationWelcome"
+                                component={MigrationWelcomeScreen}
+                                options={{ gestureEnabled: false }}
+                            />
+                            <Stack.Screen
+                                name="SetPassword"
+                                component={SetPasswordScreen}
+                                options={{ gestureEnabled: false }}
+                            />
+                        </>
+                    ) : needsOnboarding ? (
                         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
                     ) : (
                         <>
@@ -132,6 +169,8 @@ export default function AppNavigator() {
                         <Stack.Screen name="Auth" component={AuthScreen} />
                         <Stack.Screen name="MobileSignIn" component={MobileSignInScreen} />
                         <Stack.Screen name="MobileVerify" component={MobileVerifyScreen} />
+                        <Stack.Screen name="AccountNotFound" component={AccountNotFoundScreen} />
+                        <Stack.Screen name="MigrationVerify" component={MigrationVerifyScreen} />
                     </>
                 )}
             </Stack.Navigator>

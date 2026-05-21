@@ -45,11 +45,6 @@ export default function EditProfileScreen() {
   const selectedCountryLabel = COUNTRIES.find((c) => c.value === country)?.label || '';
 
   const handlePickImage = useCallback(async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Please allow access to your photo library.');
-      return;
-    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: 'images',
       allowsEditing: true,

@@ -33,28 +33,44 @@ export default function LessonScreen() {
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [scrubPosition, setScrubPosition] = useState(0);
   const trackWidthRef = useRef(0);
-  const trackXRef = useRef(0);
+  const durationMsRef = useRef(0);
 
-  const clampRatio = (pageX: number) => {
-    const ratio = (pageX - trackXRef.current) / trackWidthRef.current;
-    return Math.max(0, Math.min(1, ratio));
-  };
+  useEffect(() => { durationMsRef.current = durationMs; }, [durationMs]);
+
+  // Anchor the drag at grant using locationX (relative to the track hit area —
+  // synchronous, no measureInWindow race), then accumulate movement via
+  // gestureState.dx. dx is the smoothed finger displacement from grant, so it
+  // produces a steady scrub track. The inner track/fill/thumb views set
+  // pointerEvents="none" so the hit area itself is always the touch target —
+  // otherwise locationX would be reported relative to whichever child landed
+  // under the finger (especially the 16px scrub thumb), making taps near the
+  // current playhead snap to ~0.
+  const scrubStartRatioRef = useRef(0);
+
+  const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: (e: GestureResponderEvent) => {
+        const width = trackWidthRef.current;
+        const startRatio = width > 0 ? clamp01(e.nativeEvent.locationX / width) : 0;
+        scrubStartRatioRef.current = startRatio;
         setIsScrubbing(true);
-        setScrubPosition(clampRatio(e.nativeEvent.pageX));
+        setScrubPosition(startRatio);
       },
-      onPanResponderMove: (e: GestureResponderEvent) => {
-        setScrubPosition(clampRatio(e.nativeEvent.pageX));
+      onPanResponderMove: (_e, gestureState) => {
+        const width = trackWidthRef.current;
+        if (width <= 0) return;
+        setScrubPosition(clamp01(scrubStartRatioRef.current + gestureState.dx / width));
       },
-      onPanResponderRelease: (e: GestureResponderEvent) => {
-        const ratio = clampRatio(e.nativeEvent.pageX);
-        const newMs = ratio * durationMs;
-        soundRef.current?.setPositionAsync(newMs);
+      onPanResponderRelease: (_e, gestureState) => {
+        const width = trackWidthRef.current;
+        const ratio = width > 0
+          ? clamp01(scrubStartRatioRef.current + gestureState.dx / width)
+          : scrubStartRatioRef.current;
+        soundRef.current?.setPositionAsync(ratio * durationMsRef.current);
         setIsScrubbing(false);
       },
       onPanResponderTerminate: () => {
@@ -65,9 +81,6 @@ export default function LessonScreen() {
 
   const onTrackLayout = (e: LayoutChangeEvent) => {
     trackWidthRef.current = e.nativeEvent.layout.width;
-    e.target.measureInWindow((x: number) => {
-      trackXRef.current = x;
-    });
   };
 
   const audioUrl = lesson?.audio_url?.url;
@@ -238,11 +251,11 @@ export default function LessonScreen() {
           onLayout={onTrackLayout}
           {...panResponder.panHandlers}
         >
-          <View style={styles.progressTrack}>
+          <View pointerEvents="none" style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${duration > 0 ? (position / duration) * 100 : 0}%` }]} />
           </View>
           {duration > 0 && (
-            <View style={[styles.scrubThumb, { left: `${duration > 0 ? (position / duration) * 100 : 0}%` }]} />
+            <View pointerEvents="none" style={[styles.scrubThumb, { left: `${duration > 0 ? (position / duration) * 100 : 0}%` }]} />
           )}
         </View>
         <View style={styles.timeRow}>

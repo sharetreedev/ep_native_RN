@@ -18,7 +18,11 @@ export const user = {
     request<XanoUser>('POST', '/user/update_app_profile_banner'),
 
   updatePhoneNumber: (phoneNumber: string, countryIso: string) =>
-    request<{ result1: unknown; is_existing_user: string; existing_user_id: string }>(
+    request<{
+      result1: unknown;
+      is_existing_user: boolean | string;
+      existing_user_id: number | string;
+    }>(
       'POST', '/user/update_phone_number', { phoneNumber, country_iso: countryIso },
     ),
 

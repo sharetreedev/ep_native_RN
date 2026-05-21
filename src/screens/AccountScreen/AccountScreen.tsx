@@ -7,8 +7,9 @@ import { RootStackParamList } from '../../types/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCourses } from '../../hooks/useCourses';
 import { useScreenAnnouncement } from '../../hooks/useScreenAnnouncement';
-import { Pencil, Bell, Info, User, ArrowLeft, Settings } from 'lucide-react-native';
+import { Pencil, Bell, Info, User, ArrowLeft, Settings, LifeBuoy } from 'lucide-react-native';
 import { colors, fonts, fontSizes, spacing } from '../../theme';
+import { presentIntercom } from '../../lib/intercom';
 import Avatar from '../../components/Avatar';
 import { useSafeEdges } from '../../contexts/MHFRContext';
 
@@ -74,11 +75,21 @@ export default function AccountScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.menuItemNoBorder}
+            style={styles.menuItem}
             onPress={() => navigation.navigate('AccountSettings')}
           >
             <Settings color={colors.textSecondary} size={20} />
             <Text style={styles.menuItemText}>Account Settings</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItemNoBorder}
+            onPress={presentIntercom}
+            accessibilityRole="button"
+            accessibilityLabel="Contact support"
+          >
+            <LifeBuoy color={colors.textSecondary} size={20} />
+            <Text style={styles.menuItemText}>Contact Support</Text>
           </TouchableOpacity>
         </View>
 

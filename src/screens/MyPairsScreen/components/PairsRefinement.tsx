@@ -5,6 +5,7 @@ import Avatar from '../../../components/Avatar';
 import EmotionBadge from '../../../components/EmotionBadge';
 import CheckInWithUser from '../../../components/CheckInWithUser';
 import ProfileTabs from '../../../components/ProfileTabs';
+import { getDirectionIcon } from '../../../utils/getDirectionIcon';
 import { colors, fonts, fontSizes } from '../../../theme';
 
 type PairTab = 'Trusted' | "I'm Supporting" | 'Supporting Me';
@@ -140,9 +141,7 @@ function PairsRefinement({
                         || (otherUser?.Display ? { Display: otherUser.Display, emotionColour: otherUser.emotionColour } : null);
 
                     const lastCheckInLabel = formatLastCheckIn(lastCheckInDate, nowMs);
-                    const metaText = lastCheckInLabel
-                        ? `${pairTypeLabel} · ${lastCheckInLabel}`
-                        : pairTypeLabel;
+                    const metaText = lastCheckInLabel || null;
 
                     return (
                         <TouchableOpacity
@@ -161,11 +160,27 @@ function PairsRefinement({
                                 />
                                 <View style={{ flex: 1 }}>
                                     <Text style={styles.listItemName} numberOfLines={1}>{name}</Text>
-                                    <Text style={styles.listItemMeta}>{metaText}</Text>
+                                    {metaText ? <Text style={styles.listItemMeta}>{metaText}</Text> : null}
                                 </View>
                             </View>
                             {hasRecentCheckIn && lastEmotion ? (
                                 <View style={styles.badgeWrap}>
+                                    {(() => {
+                                        // Trend arrow uses today-vs-all-time direction from
+                                        // `user_stats` (matches MyPulse v2 carousel). Falls
+                                        // back through running_stats and the legacy `_t_p`
+                                        // paths so older responses still render.
+                                        const directionLabel =
+                                            otherUser?.user_stats?.direction_t_at?.directionLabel
+                                            ?? otherUser?.running_stats?.direction_t_at?.directionLabel
+                                            ?? otherUser?.direction_t_p?.directionLabel
+                                            ?? otherUser?.running_stats?.direction_t_p?.directionLabel;
+                                        return directionLabel ? (
+                                            <View style={styles.trendIcon}>
+                                                {getDirectionIcon(directionLabel, 22, colors.textPlaceholder)}
+                                            </View>
+                                        ) : null;
+                                    })()}
                                     <EmotionBadge
                                         emotionName={lastEmotion.Display}
                                         emotionColour={lastEmotion.emotionColour}
@@ -233,7 +248,16 @@ const styles = StyleSheet.create({
         borderBottomColor: colors.borderLight,
     },
     listItemLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-    badgeWrap: { alignSelf: 'center' },
+    badgeWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'center' },
+    trendIcon: {
+        width: 36,
+        height: 36,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: colors.textPlaceholder,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     listItemName: { fontFamily: fonts.bodyBold, fontSize: fontSizes.base, color: colors.textPrimary },
     listItemMeta: { fontSize: fontSizes.sm, fontFamily: fonts.bodyMedium, color: colors.textSecondary },
     emptySlotIcon: {

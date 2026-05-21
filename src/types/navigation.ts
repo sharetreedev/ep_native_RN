@@ -5,9 +5,22 @@ export type RootStackParamList = {
     Auth: undefined;
     MobileSignIn: undefined;
     MobileVerify: { userId: string; phone: string; countryIso: string };
+    // Migration sign-in flow (pre-auth):
+    AccountNotFound: { email: string };
+    MigrationVerify: { email: string; userId: string };
+    // Migration set-password flow (post-auth, gated by pendingPasswordSetup):
+    MigrationWelcome: undefined;
+    SetPassword: undefined;
     Onboarding: undefined;
     Main: undefined;
-    CheckIn: { isSupportRequest?: boolean; supportRequestId?: number } | undefined;
+    CheckIn: {
+        isSupportRequest?: boolean;
+        supportRequestId?: number;
+        // True if no check-in existed for today at the moment this flow began.
+        // Forwarded through the support detour so a re-check-in inside it still
+        // ends at DailyInsight, while a non-first manual check-in skips it.
+        wasFirstCheckinToday?: boolean;
+    } | undefined;
     Notifications: undefined;
     EmergencyServices: undefined;
     SupportRequests: { initialTab?: 'myRequests' | 'mhfr' } | undefined;
@@ -31,7 +44,19 @@ export type RootStackParamList = {
     };
     GroupInvite: { groupId: number; groupName?: string };
     CreateGroup: undefined;
-    CheckinSupportRequest: { coordinateId: number; emotionName: string; supportRequestId: number };
+    CheckinSupportRequest: {
+        coordinateId: number;
+        emotionName: string;
+        supportRequestId: number;
+        wasFirstCheckinToday?: boolean;
+        justCheckedIn?: {
+            emotionName: string;
+            emotionColour: string;
+            coordinateId: number;
+            intensity?: number;
+            createdAt: string;
+        };
+    };
     DailyInsight: {
         // Optimistic seed for the timeline view: the just-completed check-in,
         // injected from CheckInScreen. The Xano timeline endpoint reads from

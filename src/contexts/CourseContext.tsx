@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { useAuth } from './AuthContext';
 import { useAsyncHandler } from '../hooks/useAsyncHandler';
 import { invalidate, CACHE_KEYS } from '../lib/fetchCache';
+import { trackModuleCompleted } from '../lib/analyticsEvents';
 import {
   courses as xanoCourses,
   user as xanoUser,
@@ -34,6 +35,19 @@ interface CourseContextValue {
 
 const CourseContext = createContext<CourseContextValue | null>(null);
 
+// `XanoEnrollment.last_completed_module` is typed as `XanoNextLesson | number`
+// because `get_enrollment` returns the full lesson object while
+// `mark_lesson_complete` returns just the ID. Consumers (e.g.
+// CourseDetailsScreen) compare it directly against `module.id`, so we coerce
+// to a number at the context boundary to keep that contract honest.
+const normaliseEnrollment = (e: XanoEnrollment): XanoEnrollment => {
+  const lcm = e.last_completed_module;
+  if (lcm && typeof lcm === 'object') {
+    return { ...e, last_completed_module: lcm.id };
+  }
+  return e;
+};
+
 export function CourseProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const { isLoading, error, wrap } = useAsyncHandler();
@@ -56,14 +70,15 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
   const fetchEnrollment = useCallback(async () => {
     const data = await wrap(() => xanoCourses.getEnrollment());
     if (data && Array.isArray(data) && data.length > 0) {
-      setAllEnrollments(data);
+      const normalised = data.map(normaliseEnrollment);
+      setAllEnrollments(normalised);
       const active =
-        data.find((e) => e.completion_status === 'in progress') ??
-        data.find((e) => e.completion_status === 'not started') ??
-        data[0];
+        normalised.find((e) => e.completion_status === 'in progress') ??
+        normalised.find((e) => e.completion_status === 'not started') ??
+        normalised[0];
       setEnrollment(active);
     } else if (data && !Array.isArray(data)) {
-      const single = data as unknown as XanoEnrollment;
+      const single = normaliseEnrollment(data as unknown as XanoEnrollment);
       setAllEnrollments([single]);
       setEnrollment(single);
     }
@@ -129,6 +144,10 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
 
       if (result) {
         invalidate(CACHE_KEYS.ENROLLMENT);
+        // module_index = course progress tracker (the just-completed module
+        // id; module ids are sequential and used app-wide as the progress
+        // marker). Fires only after the Xano mark-complete succeeds.
+        trackModuleCompleted({ module_index: moduleId });
         setCourseModulesRaw((prev) => {
           if (!prev) return prev;
           const rawModules: XanoCourseModule[] = Array.isArray(prev.my_modules)

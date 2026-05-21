@@ -35,9 +35,16 @@ export default function MyPairsScreen() {
     const { coordMap } = useCoordinateMapping(coordinates);
 
     const [containerHeight, setContainerHeight] = useState(0);
-    const { pendingCheckIn, handleCellPress, confirmCheckIn, cancelCheckIn } = useQuickCheckIn(
-        () => navigation.navigate('DailyInsight' as any)
-    );
+    const { pendingCheckIn, isSubmitting, handleCellPress, confirmCheckIn, cancelCheckIn } = useQuickCheckIn({
+        onSupportRequestNeeded: ({ supportRequestId, coordinateId, emotionName }) => {
+            navigation.navigate('CheckinSupportRequest', {
+                supportRequestId,
+                coordinateId,
+                emotionName,
+                wasFirstCheckinToday: false,
+            });
+        },
+    });
     const [supportSheetPair, setSupportSheetPair] = useState<any>(null);
     const [confirmStopPair, setConfirmStopPair] = useState<any>(null);
     const [stopLoading, setStopLoading] = useState(false);
@@ -155,6 +162,7 @@ export default function MyPairsScreen() {
                     emotion={pendingCheckIn.emotion}
                     onConfirm={confirmCheckIn}
                     onCancel={cancelCheckIn}
+                    isSubmitting={isSubmitting}
                 />
             )}
         </View>

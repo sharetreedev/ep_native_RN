@@ -1,15 +1,17 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, CircleCheck, Lock, CirclePlay } from 'lucide-react-native';
 import Markdown from 'react-native-markdown-display';
 
 const LESSON_IMAGE = require('../../../assets/ep-app-imagery.webp');
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../types/navigation';
 import { useCourses, getEnrollmentCourseName, getEnrollmentCourseDescription, getEnrollmentModuleCount } from '../../hooks/useCourses';
 import { XanoEnrollment, XanoNextLesson } from '../../api';
+import { useCachedFetch } from '../../hooks/useCachedFetch';
+import { CACHE_KEYS } from '../../lib/fetchCache';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
 import { useSafeEdges } from '../../contexts/MHFRContext';
 
@@ -25,9 +27,24 @@ export default function CourseDetailsScreen() {
   const safeEdges = useSafeEdges(['top']);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'CourseDetails'>>();
-  const enrollment = route.params?.enrollment ?? null;
-  const { markLessonComplete } = useCourses();
+  const { enrollment: contextEnrollment, markLessonComplete, fetchEnrollment } = useCourses();
+  // Prefer the context enrollment so that completing a lesson and navigating
+  // back here reflects the new `last_completed_module` without the next module
+  // appearing locked. The route param is kept as a cold-navigation fallback
+  // (deep links / push navigations that pre-load with a stale snapshot).
+  const enrollment = contextEnrollment ?? route.params?.enrollment ?? null;
   const [activeTab, setActiveTab] = useState<Tab>('modules');
+
+  // Force a fresh enrollment fetch every time this screen comes into focus so
+  // the modules list (and its derived "Up Next") always reflects server truth.
+  // The optimistic update in markLessonComplete is a stop-gap — a real fetch
+  // after returning from LessonScreen is the source of truth.
+  const { forceFetch: forceFetchEnrollment } = useCachedFetch(CACHE_KEYS.ENROLLMENT, fetchEnrollment);
+  useFocusEffect(
+    useCallback(() => {
+      forceFetchEnrollment();
+    }, [forceFetchEnrollment]),
+  );
 
   // Build module list directly from enrollment.modules + last_completed_module
   // This replaces the separate course_modules API call entirely

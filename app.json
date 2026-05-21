@@ -4,9 +4,9 @@
     "slug": "mobile",
     "owner": "sharetrees-organization",
     "scheme": "emotionalpulse",
-    "version": "3.1.0",
+    "version": "3.1.2",
     "orientation": "portrait",
-    "icon": "./assets/Logo.png",
+    "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
@@ -14,6 +14,7 @@
       "appleTeamId": "PL8F7LAM2G",
       "infoPlist": {
         "CFBundleDisplayName": "Emotional Pulse",
+        "ITSAppUsesNonExemptEncryption": false,
         "NSMicrophoneUsageDescription": "Emotional Pulse uses your microphone to power voice conversations with Pulse AI during AI MHFR sessions.",
         "NSLocationWhenInUseUsageDescription": "Emotional Pulse does not actively use your location. This notice is required because an included notification service references location APIs."
       },
@@ -148,15 +149,17 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/Logo.png",
-        "backgroundColor": "#9AAD82"
+        "foregroundImage": "./assets/app-icon.png",
+        "backgroundColor": "#6FAD42"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.sharetree.emotionalpulse",
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO"
       ]
     },
     "web": {
@@ -177,10 +180,10 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/Logo-rounded.png",
-          "imageWidth": 240,
+          "image": "./assets/splash-line.png",
+          "imageWidth": 1024,
           "resizeMode": "contain",
-          "backgroundColor": "#EDE9E4"
+          "backgroundColor": "#F5F3EE"
         }
       ],
       "expo-font",
@@ -206,6 +209,15 @@
           "url": "https://sentry.io/",
           "project": "mobile-native-react-native",
           "organization": "sharetree"
+        }
+      ],
+      [
+        "@intercom/intercom-react-native",
+        {
+          "appId": "t015ivcr",
+          "iosApiKey": "ios_sdk-6b45d3f94399303c879a57133f99249b0d58a308",
+          "androidApiKey": "android_sdk-711b03c75cd153f8135fe6a517a14ea5c1235941",
+          "intercomRegion": "US"
         }
       ]
     ]

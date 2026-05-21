@@ -25,6 +25,9 @@ export const colors = {
     alert: '#FDA33A',
     alertLight: 'rgba(253, 163, 58, 0.15)',
 
+    /** Warm terracotta — MHFR-reach-out CTA, matches desktop */
+    terracotta: '#D08A6E',
+
     /** App background (alias: cream in Tailwind) */
     background: '#EDE9E4',
 

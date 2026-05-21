@@ -8,12 +8,12 @@ import {
   ArrowUpLeft,
   ArrowDownRight,
   ArrowDownLeft,
-  CircleMinus,
+  Dot,
 } from 'lucide-react-native';
 import { colors } from '../theme';
 
-export function getDirectionIcon(directionLabel: string | null | undefined, size = 20) {
-  const iconColor = colors.textPrimary;
+export function getDirectionIcon(directionLabel: string | null | undefined, size = 20, color?: string) {
+  const iconColor = color ?? colors.textPrimary;
   switch (directionLabel?.toLowerCase()) {
     case 'up': return <ArrowUp size={size} color={iconColor} />;
     case 'down': return <ArrowDown size={size} color={iconColor} />;
@@ -23,6 +23,6 @@ export function getDirectionIcon(directionLabel: string | null | undefined, size
     case 'top left': return <ArrowUpLeft size={size} color={iconColor} />;
     case 'bottom right': return <ArrowDownRight size={size} color={iconColor} />;
     case 'bottom left': return <ArrowDownLeft size={size} color={iconColor} />;
-    default: return <CircleMinus size={size} color={colors.textPlaceholder} />;
+    default: return <Dot size={size} color={color ?? colors.textPlaceholder} />;
   }
 }

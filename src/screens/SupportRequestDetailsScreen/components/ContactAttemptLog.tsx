@@ -28,6 +28,7 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
+    marginBottom: 0,
   },
   sectionHeader: {
     flexDirection: 'row',

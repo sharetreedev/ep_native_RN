@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, ScrollView, ActivityIndicator, Alert, Image } from 'react-native';
+import { View, Text, ScrollView, ActivityIndicator, Alert, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors } from '../../../theme';
+import { ChevronLeft } from 'lucide-react-native';
+import { colors, spacing } from '../../../theme';
 import Button from '../../../components/Button';
 import OTPInput from '../../../components/OTPInput';
 import { auth as xanoAuth } from '../../../api';
@@ -10,12 +11,14 @@ import { styles } from '../styles';
 interface EmailVerificationStepProps {
   email: string;
   onComplete: () => void;
+  onBack: () => void;
   isSubmitting: boolean;
 }
 
 export default function EmailVerificationStep({
   email,
   onComplete,
+  onBack,
   isSubmitting,
 }: EmailVerificationStepProps) {
   const [emailCodeSent, setEmailCodeSent] = useState(false);
@@ -68,6 +71,17 @@ export default function EmailVerificationStep({
 
   return (
     <SafeAreaView style={styles.container}>
+      <View style={localStyles.backButtonRow}>
+        <TouchableOpacity
+          style={localStyles.backButton}
+          onPress={onBack}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          hitSlop={12}
+        >
+          <ChevronLeft color={colors.textPrimary} size={28} />
+        </TouchableOpacity>
+      </View>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {renderHeader()}
         <Text style={styles.heading}>Verify your email</Text>
@@ -90,3 +104,16 @@ export default function EmailVerificationStep({
     </SafeAreaView>
   );
 }
+
+const localStyles = StyleSheet.create({
+  backButtonRow: {
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.sm,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

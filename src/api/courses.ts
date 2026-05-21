@@ -2,6 +2,7 @@ import { request } from './client';
 import type {
   XanoCourse,
   XanoEnrollment,
+  XanoEnrollResponse,
   XanoNextLesson,
   XanoLessonCompletion,
 } from './types';
@@ -30,7 +31,7 @@ export const courses = {
     request<XanoLessonCompletion>('POST', '/courses/mark_lesson_complete', { module_id: moduleId }),
 
   enroll: (usersId: number, coursesId: number) =>
-    request<XanoEnrollment>('POST', '/course/enroll', {
+    request<XanoEnrollResponse>('POST', '/course/enroll', {
       users_id: usersId,
       courses_id: coursesId,
     }),

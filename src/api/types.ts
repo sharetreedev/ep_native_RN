@@ -89,7 +89,17 @@ export interface XanoAuthResponse {
 
 export interface XanoTimelineCheckIn {
   user_id: number;
+  /** Calendar date as written by the backend. Date-only — see `loggedDateTime`
+   *  for the timezone-unambiguous timestamp; prefer that for bucketing. */
   loggedDate: string;
+  /** Epoch ms for the moment the check-in was logged. Use this for bucketing
+   *  via `userDate` helpers — `loggedDate` alone can be off-by-one across
+   *  timezones because it's stored as a date string. */
+  loggedDateTime?: number | null;
+  /** Epoch seconds version of `loggedDateTime` (Xano `int64` field). */
+  loggedDateUnix?: number;
+  /** Epoch ms timestamp the row was created in the database. */
+  created_at?: number;
   dailyInsight: string;
   coordinate?: {
     id: number;
@@ -451,6 +461,17 @@ export interface XanoEnrollment {
   module_count?: number;
   next_lesson_title?: string | null;
   next_lesson_index?: number | null;
+}
+
+/**
+ * Response shape from POST /course/enroll. Note the typo: the enrollment
+ * record is nested under `course_enrolments` (single key, plural noun).
+ * `next_lesson` is guaranteed to be present immediately — no need to refetch
+ * via `/courses/get_next_lesson` after enrolling.
+ */
+export interface XanoEnrollResponse {
+  course_enrolments: XanoEnrollment;
+  next_lesson: XanoNextLesson;
 }
 
 export interface XanoCourseModule {

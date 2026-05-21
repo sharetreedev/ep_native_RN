@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, ScrollView, ActivityIndicator, Alert, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../../theme';
@@ -16,6 +16,16 @@ export default function PhoneVerificationStep({
   onComplete,
   isSubmitting,
 }: PhoneVerificationStepProps) {
+  const [cooldown, setCooldown] = useState(30);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => {
+      setCooldown((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
+
   const handleCodeComplete = useCallback(
     async (code: string) => {
       const result = await xanoAuth.verifyCode(Number(code));
@@ -29,13 +39,15 @@ export default function PhoneVerificationStep({
   );
 
   const handleResend = useCallback(async () => {
+    if (cooldown > 0) return;
     try {
       await xanoAuth.generateCode('phone');
+      setCooldown(30);
       Alert.alert('Code Sent', 'A new code has been sent to your phone.');
     } catch {
       Alert.alert('Error', 'Failed to resend code.');
     }
-  }, []);
+  }, [cooldown]);
 
   const renderHeader = () => (
     <View style={styles.headerRow}>
@@ -57,9 +69,10 @@ export default function PhoneVerificationStep({
         </View>
         {isSubmitting && <ActivityIndicator color={colors.primary} style={styles.spinner} />}
         <Button
-          title="Resend Code"
+          title={cooldown > 0 ? `Resend Code (${cooldown}s)` : 'Resend Code'}
           variant="secondary"
           onPress={handleResend}
+          disabled={cooldown > 0}
           style={styles.resendButton}
         />
       </ScrollView>
