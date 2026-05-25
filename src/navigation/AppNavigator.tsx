@@ -97,6 +97,14 @@ export default function AppNavigator() {
     // The link is stored by the Linking listener below when the user is
     // unauthenticated, and consumed here once they sign in and the
     // navigator is ready.
+    //
+    // We deliberately do NOT call `Linking.openURL(url)` to "replay" the link.
+    // On iOS, opening a Universal Link URL while the destination app is
+    // already foregrounded causes the OS to bounce the URL out to Safari
+    // instead of routing it back to the app — producing a flicker where
+    // Pulse opens for a beat and then the browser takes over. Instead, parse
+    // the URL ourselves and dispatch a native React Navigation action so
+    // the OS never sees it.
     const tryConsumePendingLink = useCallback(() => {
         if (!isAuthenticated || needsOnboarding || isLoading || pendingPasswordSetup) return;
         if (!peekPendingLink()) return;
@@ -105,11 +113,30 @@ export default function AppNavigator() {
         consumePendingLink().then((url) => {
             if (!url) return;
             logger.info('[AppNavigator] Consuming pending deep link:', url);
-            // Let React Navigation's linking config resolve the URL to a route
-            const action = ref.getRootState();
-            if (action) {
-                Linking.openURL(url);
+
+            const parsed = Linking.parse(url);
+            const path = parsed.path; // e.g. "pair-invite", "group-invite", or null
+            const params = parsed.queryParams ?? {};
+
+            // Map paths to authed-stack routes. Keep this list in sync with
+            // `linking.ts` — that file defines the URL → route mapping; this
+            // one re-applies it for the post-auth replay case.
+            if (path === 'pair-invite') {
+                const pairToken = typeof params.pair_token === 'string' ? params.pair_token : undefined;
+                if (pairToken) {
+                    ref.navigate('PairInvite', { pair_token: pairToken });
+                    return;
+                }
             }
+            if (path === 'group-invite') {
+                const token = typeof params.token === 'string' ? params.token : undefined;
+                if (token) {
+                    ref.navigate('GroupInviteAccept', { token });
+                    return;
+                }
+            }
+
+            logger.warn('[AppNavigator] Pending deep link did not match a known route, ignoring:', { path, params });
         });
     }, [isAuthenticated, needsOnboarding, isLoading, pendingPasswordSetup]);
 
