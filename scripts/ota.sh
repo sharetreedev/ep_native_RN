@@ -13,8 +13,14 @@
 # The corresponding values live as EAS environment variables on the project —
 # set via `eas env:create --environment <env> ...`. This wrapper never reads
 # them from .env, so a misconfigured local machine cannot publish a bad bundle.
+#
+# Uses `npx eas-cli@latest` rather than a bare `eas` so the script works on
+# machines without the EAS CLI installed globally (the most common setup —
+# our package.json doesn't pin eas-cli as a dev dependency).
 
 set -euo pipefail
+
+EAS="npx --yes eas-cli@latest"
 
 if [[ $# -lt 1 ]]; then
   echo "Usage: $0 <production|preview|development> [extra eas update args...]" >&2
@@ -36,7 +42,7 @@ esac
 # Verify the env var is set on the EAS project for this environment BEFORE
 # publishing — fail loud if the project is misconfigured.
 echo "🔍 Verifying EAS environment variables for '$ENV'..."
-if ! eas env:list --environment "$ENV" 2>/dev/null | grep -q "EXPO_PUBLIC_XANO_DATA_SOURCE"; then
+if ! $EAS env:list --environment "$ENV" 2>/dev/null | grep -q "EXPO_PUBLIC_XANO_DATA_SOURCE"; then
   echo "❌ EXPO_PUBLIC_XANO_DATA_SOURCE is not set on the EAS '$ENV' environment." >&2
   echo "   Fix with:" >&2
   echo "     eas env:create --environment $ENV --name EXPO_PUBLIC_XANO_DATA_SOURCE --value <live|staging|test>" >&2
@@ -48,4 +54,4 @@ fi
 unset EXPO_PUBLIC_XANO_DATA_SOURCE
 
 echo "🚀 Publishing OTA to channel '$ENV' with EAS --environment $ENV..."
-exec eas update --channel "$ENV" --environment "$ENV" --non-interactive "$@"
+exec $EAS update --channel "$ENV" --environment "$ENV" --non-interactive "$@"
