@@ -172,6 +172,12 @@ export interface XanoGroup {
   groupRef?: string;
   billing_group?: boolean;
   is_primary?: boolean;
+  // Group-level reminder settings — surfaced to members as the default
+  // schedule before they opt in to custom reminders. Same shape as the
+  // per-user reminder fields on XanoUser.
+  reminder_frequency?: 'WEEKDAYS' | 'WEEKLY' | 'DAILY' | 'NONE';
+  reminder_hour?: number;
+  reminder_min?: number;
 }
 
 export interface XanoUserGroup {

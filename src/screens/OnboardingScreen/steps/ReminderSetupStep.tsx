@@ -2,28 +2,31 @@ import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   ScrollView,
-  Alert,
-  StyleSheet,
+  TouchableOpacity,
   Switch,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { ArrowLeft, ChevronDown } from 'lucide-react-native';
-import { RootStackParamList } from '../../types/navigation';
-import { useAuth } from '../../contexts/AuthContext';
-import { useUser } from '../../hooks/useUser';
-import { useGroups } from '../../hooks/useGroups';
-import { colors, fonts, fontSizes, spacing, borderRadius } from '../../theme';
-import ModalPicker from '../../components/ModalPicker';
-import { useSafeEdges } from '../../contexts/MHFRContext';
+import { ChevronDown } from 'lucide-react-native';
+import { colors, fonts, fontSizes, spacing, borderRadius } from '../../../theme';
+import { styles as sharedStyles } from '../styles';
+import ModalPicker from '../../../components/ModalPicker';
+import { useAuth } from '../../../contexts/AuthContext';
+import { useUser } from '../../../hooks/useUser';
 import {
   getEffectiveReminderSettings,
   formatReminderTime,
   formatReminderFrequency,
-} from '../../lib/reminderSettings';
+} from '../../../lib/reminderSettings';
+import {
+  hasNotificationPermission,
+  requestNotificationPermission,
+} from '../../../lib/notificationPermission';
+import { logger } from '../../../lib/logger';
 
 const FREQUENCIES = [
   { label: 'Daily', value: 'DAILY' },
@@ -41,61 +44,54 @@ const DAYS_OF_WEEK = [
   { label: 'Sunday', value: 0 },
 ];
 
-// Build hour options: 1–12 with AM/PM
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => {
   const ampm = i >= 12 ? 'PM' : 'AM';
   const display = i % 12 || 12;
   return { label: `${display}:00 ${ampm}`, value: i };
 });
 
-export default function RemindersScreen() {
-  const safeEdges = useSafeEdges(['top']);
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { user, refreshUser } = useAuth();
+interface ReminderSetupStepProps {
+  onComplete: () => void;
+  isSubmitting?: boolean;
+}
+
+export default function ReminderSetupStep({ onComplete, isSubmitting }: ReminderSetupStepProps) {
+  const { user } = useAuth();
   const { updateReminderSettings, isLoading } = useUser();
-  const { fetchAll: fetchGroups } = useGroups();
 
-  // Determine if user already has custom settings
-  const hasExistingCustom = !!user?.reminderFrequency && user.reminderFrequency !== 'NONE';
-
-  // Baseline used to pre-fill the form and render the "Currently using…" hint.
-  // Priority: user override → first joined group → default (Weekdays 11 AM).
+  // Effective baseline — user override, falling through to group, then default.
+  // Used to pre-populate the form and surface the "Using your team's schedule"
+  // information row when a group provides the default.
   const effective = getEffectiveReminderSettings(user, user?.groups as any[]);
 
-  const [isCustom, setIsCustom] = useState(hasExistingCustom);
-  const [frequency, setFrequency] = useState(
-    hasExistingCustom
-      ? (user?.reminderFrequency ?? 'DAILY')
-      : effective.frequency === 'NONE'
-        ? 'DAILY'
-        : effective.frequency,
+  // Custom toggle defaults OFF — when off, the user is using the group/default
+  // schedule. The form below the toggle is interactive only when on.
+  const [isCustom, setIsCustom] = useState(false);
+  const [frequency, setFrequency] = useState<string>(
+    effective.frequency === 'NONE' ? 'WEEKDAYS' : effective.frequency
   );
   const [selectedDay, setSelectedDay] = useState<number>(1);
-  const [selectedHour, setSelectedHour] = useState(
-    hasExistingCustom ? (user?.reminderHour ?? 11) : effective.hour,
-  );
+  const [selectedHour, setSelectedHour] = useState<number>(effective.hour);
 
   const [frequencyPickerVisible, setFrequencyPickerVisible] = useState(false);
   const [dayPickerVisible, setDayPickerVisible] = useState(false);
   const [hourPickerVisible, setHourPickerVisible] = useState(false);
-
-  useFocusEffect(
-    useCallback(() => {
-      fetchGroups();
-    }, [fetchGroups])
-  );
+  const [savingPermission, setSavingPermission] = useState(false);
 
   const selectedFrequencyLabel =
     FREQUENCIES.find((f) => f.value === frequency)?.label || 'Daily';
-
   const selectedDayLabel =
     DAYS_OF_WEEK.find((d) => d.value === selectedDay)?.label || 'Monday';
-
   const selectedHourLabel =
     HOUR_OPTIONS.find((h) => h.value === selectedHour)?.label || '11:00 AM';
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
+    setSavingPermission(true);
     try {
+      // When the user picks the group/default schedule (toggle OFF), persist
+      // their custom reminder as NONE so the server-side reminder job uses
+      // the group schedule instead. When the toggle is ON, write their
+      // custom frequency.
       const finalFrequency = isCustom ? frequency : 'NONE';
       const days = !isCustom
         ? []
@@ -114,43 +110,60 @@ export default function RemindersScreen() {
         min: 0,
         is_custom: isCustom,
       });
-      await refreshUser();
-      Alert.alert('Success', 'Reminder settings saved.');
-      navigation.goBack();
-    } catch {
-      Alert.alert('Error', 'Failed to save reminder settings.');
+
+      // Now ask for OS push permission so the schedule actually fires.
+      // We deliberately ask AFTER the user commits to a schedule — the
+      // permission dialog has more context this way and is easier to grant.
+      const granted = await hasNotificationPermission();
+      if (!granted) {
+        logger.info('[ReminderSetup] requesting notification permission');
+        await requestNotificationPermission();
+      }
+    } catch (e) {
+      logger.error('[ReminderSetup] save failed', e);
+      Alert.alert('Error', 'Could not save your reminder settings. Please try again.');
+      setSavingPermission(false);
+      return;
     }
-  };
+
+    setSavingPermission(false);
+    onComplete();
+  }, [
+    isCustom,
+    frequency,
+    selectedDay,
+    selectedHour,
+    updateReminderSettings,
+    onComplete,
+  ]);
+
+  const isBusy = savingPermission || isLoading || !!isSubmitting;
 
   return (
-    <SafeAreaView style={styles.container} edges={safeEdges}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <ArrowLeft color={colors.textSecondary} size={24} />
-        </TouchableOpacity>
-        <Text style={styles.title}>Reminders</Text>
-        <View style={{ width: 24 }} />
-      </View>
+    <SafeAreaView style={sharedStyles.container}>
+      <ScrollView contentContainerStyle={sharedStyles.scrollContent}>
+        <View style={sharedStyles.headerRow}>
+          <Image source={require('../../../../assets/Logo.png')} style={sharedStyles.logo} />
+          <Text style={sharedStyles.brandName}>Emotional Pulse</Text>
+        </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.description}>
-          {effective.source === 'group'
-            ? `Your reminders use ${effective.groupName ?? 'your group'}'s schedule by default. Turn on custom reminders below to set your own.`
-            : effective.source === 'user'
-              ? 'You have a custom reminder schedule set. Adjust it below or turn off Custom to revert to the default.'
-              : 'You’ll get a gentle reminder on the default schedule. Turn on custom reminders below to set your own.'}
+        <Text style={sharedStyles.heading}>Keep up the Pulse with reminders</Text>
+        <Text style={sharedStyles.body}>
+          Set a regular time to check in. We'll send you a gentle nudge so it
+          becomes part of your routine.
         </Text>
 
-        {/* Effective-settings summary */}
-        <View style={summaryStyles.card}>
-          <Text style={summaryStyles.label}>
+        {/* Group / default summary — shows what they're getting by default,
+            so they understand the consequence of leaving Custom off. */}
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryLabel}>
             {effective.source === 'group'
               ? `Using ${effective.groupName ?? 'your group'}'s schedule`
               : effective.source === 'user'
-                ? 'Your custom schedule'
+                ? 'Your saved schedule'
                 : 'Default schedule'}
           </Text>
-          <Text style={summaryStyles.value}>
+          <Text style={styles.summaryValue}>
             {formatReminderFrequency(effective.frequency)}
             {effective.frequency !== 'NONE' && ` at ${formatReminderTime(effective.hour, effective.min)}`}
           </Text>
@@ -159,7 +172,7 @@ export default function RemindersScreen() {
         {/* Custom toggle */}
         <View style={styles.toggleRow}>
           <View style={styles.toggleTextWrap}>
-            <Text style={styles.toggleLabel}>Custom Reminder</Text>
+            <Text style={styles.toggleLabel}>Turn on Custom Reminders</Text>
             <Text style={styles.toggleHint}>Set your own frequency and time</Text>
           </View>
           <Switch
@@ -170,10 +183,9 @@ export default function RemindersScreen() {
           />
         </View>
 
-        {/* Custom settings — only shown when toggle is on */}
+        {/* Custom settings — only interactive when toggle is on */}
         {isCustom && (
           <View style={styles.customSection}>
-            {/* Frequency */}
             <Text style={styles.sectionLabel}>Frequency</Text>
             <TouchableOpacity
               style={styles.dropdown}
@@ -183,7 +195,6 @@ export default function RemindersScreen() {
               <ChevronDown color={colors.textMuted} size={18} />
             </TouchableOpacity>
 
-            {/* Day picker — only for Weekly */}
             {frequency === 'WEEKLY' && (
               <>
                 <Text style={styles.sectionLabel}>Day</Text>
@@ -197,7 +208,6 @@ export default function RemindersScreen() {
               </>
             )}
 
-            {/* Time picker */}
             <Text style={styles.sectionLabel}>Time</Text>
             <TouchableOpacity
               style={styles.dropdown}
@@ -210,11 +220,15 @@ export default function RemindersScreen() {
         )}
 
         <TouchableOpacity
-          style={[styles.saveButton, isLoading && styles.saveButtonDisabled]}
+          style={[styles.saveButton, isBusy && styles.saveButtonDisabled]}
           onPress={handleSave}
-          disabled={isLoading}
+          disabled={isBusy}
         >
-          <Text style={styles.saveButtonText}>Save</Text>
+          {isBusy ? (
+            <ActivityIndicator color={colors.textOnPrimary} />
+          ) : (
+            <Text style={styles.saveButtonText}>Save</Text>
+          )}
         </TouchableOpacity>
       </ScrollView>
 
@@ -228,7 +242,6 @@ export default function RemindersScreen() {
           setFrequencyPickerVisible(false);
         }}
       />
-
       <ModalPicker
         visible={dayPickerVisible}
         onDismiss={() => setDayPickerVisible(false)}
@@ -239,7 +252,6 @@ export default function RemindersScreen() {
           setDayPickerVisible(false);
         }}
       />
-
       <ModalPicker
         visible={hourPickerVisible}
         onDismiss={() => setHourPickerVisible(false)}
@@ -255,28 +267,24 @@ export default function RemindersScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.base,
+  summaryCard: {
+    backgroundColor: colors.surface,
+    padding: spacing.base,
+    borderRadius: borderRadius.lg,
+    marginBottom: spacing.base,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  backButton: { width: 24, alignItems: 'flex-start' as const },
-  title: {
-    fontSize: fontSizes.xl,
-    fontFamily: fonts.heading,
-    color: colors.textPrimary,
+  summaryLabel: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: fontSizes.sm,
+    color: colors.textMuted,
+    marginBottom: 4,
   },
-  scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.base, paddingBottom: 100 },
-  description: {
-    fontFamily: fonts.body,
+  summaryValue: {
+    fontFamily: fonts.bodySemiBold,
     fontSize: fontSizes.base,
-    color: colors.textSecondary,
-    lineHeight: 22,
-    marginBottom: spacing.xl,
+    color: colors.textPrimary,
   },
   toggleRow: {
     flexDirection: 'row',
@@ -292,13 +300,13 @@ const styles = StyleSheet.create({
     marginRight: spacing.base,
   },
   toggleLabel: {
-    fontSize: fontSizes.base,
     fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.base,
     color: colors.textPrimary,
   },
   toggleHint: {
-    fontSize: fontSizes.sm,
     fontFamily: fonts.body,
+    fontSize: fontSizes.sm,
     color: colors.textMuted,
     marginTop: 2,
   },
@@ -306,8 +314,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.base,
   },
   sectionLabel: {
-    fontSize: fontSizes.sm,
     fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.sm,
     color: colors.textSecondary,
     marginBottom: spacing.sm,
     textTransform: 'uppercase',
@@ -326,8 +334,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.base,
   },
   dropdownText: {
-    fontSize: fontSizes.base,
     fontFamily: fonts.body,
+    fontSize: fontSizes.base,
     color: colors.textPrimary,
   },
   saveButton: {
@@ -342,27 +350,5 @@ const styles = StyleSheet.create({
     color: colors.textOnPrimary,
     fontFamily: fonts.bodyBold,
     fontSize: fontSizes.base,
-  },
-});
-
-const summaryStyles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.surface,
-    padding: spacing.base,
-    borderRadius: borderRadius.lg,
-    marginBottom: spacing.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  label: {
-    fontFamily: fonts.bodyMedium,
-    fontSize: fontSizes.sm,
-    color: colors.textMuted,
-    marginBottom: 4,
-  },
-  value: {
-    fontFamily: fonts.bodySemiBold,
-    fontSize: fontSizes.base,
-    color: colors.textPrimary,
   },
 });

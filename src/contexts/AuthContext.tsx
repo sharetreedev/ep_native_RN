@@ -43,6 +43,10 @@ export interface User {
    *  `PendingGroupInviteSheet` for the defensive accessors. */
   pendingGroupInvites?: any[];
   pairs?: XanoPair[];
+  /** Incoming PENDING pair invites where this user is the recipient.
+   *  Sourced from `/pairs` (`data.invites`). Used by PendingInviteOrchestrator
+   *  to present a PairInvite modal on app open or post-onboarding. */
+  pendingPairInvites?: XanoPair[];
   onboardingComplete?: boolean;
   introSlidesSeen?: boolean;
   emailVerified?: boolean;
@@ -304,13 +308,53 @@ async function resolveGroupsPairsAndMHFR(user: User): Promise<User> {
   // Fetch pairs
   try {
     const data = await xanoPairs.getAll();
-    logger.log('[AuthContext] Pairs response:', JSON.stringify({ active: data.active?.length ?? 0, invites: data.invites?.length ?? 0 }));
     const activePairs = Array.isArray(data.active) ? data.active : [];
+    const rawInvitePairs = Array.isArray(data.invites) ? data.invites : [];
+
+    // Pick out the pair invites the current user can act on. The backend
+    // already scopes `data.invites` to PENDING-only, so we just need to
+    // confirm the invite is actually addressed to this user:
+    //   - the invite_email matches the user's email, OR
+    //   - the user's id appears in pairUserIDs
+    //
+    // (Loose numeric / case-insensitive comparison — Xano sometimes returns
+    // id fields as strings, and emails are case-insensitive.)
+    const userIdNum = Number(user.id);
+    const userEmail = (user.email ?? '').trim().toLowerCase();
+
+    const pendingPairInvites = rawInvitePairs.filter((p) => {
+      if (!p || typeof p !== 'object') return false;
+
+      const inviteEmail = (p.invite_email ?? '').toString().trim().toLowerCase();
+      const matchesEmail = !!userEmail && !!inviteEmail && inviteEmail === userEmail;
+
+      const pairUserIDs = Array.isArray(p.pairUserIDs) ? p.pairUserIDs : [];
+      const matchesUserId =
+        Number.isFinite(userIdNum) &&
+        pairUserIDs.some((id: unknown) => Number(id) === userIdNum);
+
+      return matchesEmail || matchesUserId;
+    });
+
+    logger.log('[AuthContext] Pairs response:', JSON.stringify({
+      active: activePairs.length,
+      rawInvites: rawInvitePairs.length,
+      pendingPairInvites: pendingPairInvites.length,
+      userIdNum,
+      // Surface the shape of the first invite so we can spot field mismatches
+      // in production logs without leaking PII.
+      firstInviteKeys: rawInvitePairs[0] ? Object.keys(rawInvitePairs[0]) : null,
+      firstInviteEmail: rawInvitePairs[0]?.invite_email ?? null,
+      firstInvitePairUserIDs: rawInvitePairs[0]?.pairUserIDs ?? null,
+    }));
+
     updates.pairs = activePairs;
+    updates.pendingPairInvites = pendingPairInvites;
   } catch (e) {
     logger.warn('[AuthContext] Failed to fetch pairs, keeping existing:', e);
     // Preserve existing data
     if (user.pairs) updates.pairs = user.pairs;
+    if (user.pendingPairInvites) updates.pendingPairInvites = user.pendingPairInvites;
   }
 
   const merged = { ...user, ...updates };

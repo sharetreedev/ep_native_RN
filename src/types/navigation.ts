@@ -43,6 +43,18 @@ export type RootStackParamList = {
         checkins30day?: XanoCoordinateCount[];
     };
     GroupInvite: { groupId: number; groupName?: string };
+    GroupInviteAccept: { token: string };
+    // PairInvite is reachable two ways:
+    //   - Universal link (deep-link path):    pass `pair_token` (screen loads
+    //     the invite via `pair.getByToken` — this works because the endpoint
+    //     accepts a token without requiring the user to already be in a pair)
+    //   - In-app pending-invite popup:        pass `invite` (the full pair
+    //     record from `user.pendingPairInvites`). The screen skips the API
+    //     fetch entirely and renders directly from this — fetching by id
+    //     would hit `/pairs/{id}`, which Xano rejects with ERROR_FATAL
+    //     ("User is not Pairs with this person") when the user isn't yet
+    //     accepted into the pair.
+    PairInvite: { pair_token?: string; invite?: unknown };
     CreateGroup: undefined;
     CheckinSupportRequest: {
         coordinateId: number;

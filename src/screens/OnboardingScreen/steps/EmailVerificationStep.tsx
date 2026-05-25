@@ -6,6 +6,8 @@ import { colors, spacing } from '../../../theme';
 import Button from '../../../components/Button';
 import OTPInput from '../../../components/OTPInput';
 import { auth as xanoAuth } from '../../../api';
+import { isVerifiedResponse } from '../../../api/auth';
+import { logger } from '../../../lib/logger';
 import { styles } from '../styles';
 
 interface EmailVerificationStepProps {
@@ -52,8 +54,9 @@ export default function EmailVerificationStep({
 
   const handleCodeComplete = useCallback(
     async (code: string) => {
-      const verified = await xanoAuth.verifyCode(Number(code));
-      if (verified === true) {
+      const result = await xanoAuth.verifyCode(code);
+      logger.info('[EmailVerification] verifyCode response', { result });
+      if (isVerifiedResponse(result)) {
         onComplete();
       } else {
         Alert.alert('Invalid Code', 'The code you entered is incorrect. Please try again.');

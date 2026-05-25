@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PairInviteScreen Preview</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&family=Manrope:wght@400;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --primary: #91A27D;
+    --primary-light: rgba(145, 162, 125, 0.2);
+    --destructive: #D08A6E;
+    --destructive-light: rgba(208, 138, 110, 0.15);
+    --alert: #FDA33A;
+    --background: #EDE9E4;
+    --surface: #FFFFFF;
+    --surface-muted: #F3F0EB;
+    --text-primary: #1F2937;
+    --text-secondary: #4B5563;
+    --text-muted: #6B7280;
+    --text-on-primary: #FFFFFF;
+    --border: #E5E7EB;
+    --shadow: rgba(0,0,0,0.05);
+    --font-heading: 'Quicksand', sans-serif;
+    --font-body: 'Manrope', sans-serif;
+  }
+
+  body {
+    background: #1a1a1a;
+    display: flex;
+    gap: 32px;
+    padding: 40px;
+    flex-wrap: wrap;
+    justify-content: center;
+    font-family: var(--font-body);
+  }
+
+  .state-label {
+    color: #999;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-align: center;
+    margin-bottom: 12px;
+    font-family: var(--font-body);
+  }
+
+  .phone-frame {
+    width: 375px;
+    height: 812px;
+    background: var(--background);
+    border-radius: 40px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .safe-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 60px 24px 34px;
+  }
+
+  /* ── Invite State ── */
+  .invite-body { flex: 1; padding-top: 48px; }
+  .invite-title {
+    font-size: 24px;
+    font-family: var(--font-heading);
+    font-weight: 700;
+    color: var(--text-primary);
+    text-align: center;
+    margin-bottom: 12px;
+  }
+  .inviter-row {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 32px;
+  }
+  .inviter-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    object-fit: cover;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+  }
+  .inviter-avatar-fallback {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, #91A27D, #6B7D5A);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 18px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+  }
+  .invite-subtitle {
+    font-size: 15px;
+    font-family: var(--font-body);
+    color: var(--text-secondary);
+    text-align: center;
+    margin-top: 16px;
+    line-height: 1.5;
+  }
+  .invite-card {
+    background: var(--surface);
+    padding: 28px;
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-shadow: 0 1px 2px var(--shadow);
+    margin-bottom: 16px;
+  }
+  .card-icon-wrap {
+    background: var(--primary-light);
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 20px;
+  }
+  .card-icon-wrap svg { color: var(--primary); }
+  .card-title {
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 17px;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+  }
+  .card-desc {
+    font-family: var(--font-body);
+    font-size: 15px;
+    color: var(--text-secondary);
+    text-align: center;
+    line-height: 1.5;
+  }
+  .invite-note {
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 8px;
+  }
+  .footer { padding-bottom: 0; }
+  .btn-primary {
+    width: 100%;
+    padding: 16px;
+    background: var(--primary);
+    border: none;
+    border-radius: 14px;
+    color: var(--text-on-primary);
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 16px;
+    cursor: pointer;
+    text-align: center;
+  }
+  .btn-decline {
+    width: 100%;
+    padding: 14px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 15px;
+    cursor: pointer;
+    margin-top: 12px;
+    text-align: center;
+  }
+
+  /* ── Centered states (loading, accepted, invalid, error) ── */
+  .centered {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0 16px;
+  }
+  .status-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 24px;
+  }
+  .status-icon.success { background: var(--primary-light); }
+  .status-icon.error { background: var(--destructive-light); }
+  .status-icon.warning { background: rgba(253, 163, 58, 0.15); }
+  .status-title {
+    font-size: 20px;
+    font-family: var(--font-heading);
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+  }
+  .status-body {
+    font-size: 15px;
+    font-family: var(--font-body);
+    color: var(--text-secondary);
+    text-align: center;
+    line-height: 1.5;
+    margin-bottom: 32px;
+  }
+  .btn-secondary-link {
+    padding: 14px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 15px;
+    cursor: pointer;
+    margin-top: 12px;
+  }
+
+  /* Loading animation (EP line logo) */
+  .lottie-loader {
+    width: 120px;
+    height: 120px;
+    object-fit: contain;
+  }
+  .lottie-loader.small {
+    width: 60px;
+    height: 60px;
+    margin-top: 24px;
+  }
+  .loading-text {
+    font-family: var(--font-body);
+    font-size: 15px;
+    color: var(--text-secondary);
+    margin-top: 16px;
+  }
+
+  /* SVG icons inline */
+  .icon { display: inline-block; }
+</style>
+</head>
+<body>
+
+<!-- ════════ 1. LOADING ════════ -->
+<div>
+  <div class="state-label">Loading</div>
+  <div class="phone-frame">
+    <div class="safe-area">
+      <div class="centered">
+        <video class="lottie-loader" autoplay loop muted playsinline><source src="ep-line-animation.webm" type="video/webm"></video>
+        <div class="loading-text">Loading invite...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ 2. INVITE (main state) ════════ -->
+<div>
+  <div class="state-label">Invite (Trusted Pair)</div>
+  <div class="phone-frame">
+    <div class="safe-area">
+      <div class="invite-body">
+        <div class="invite-title">Pair Invite</div>
+        <div class="inviter-row">
+          <div class="inviter-avatar-fallback">SJ</div>
+          <div class="invite-subtitle">Sarah Johnson has invited you to be their pair.</div>
+        </div>
+        <div class="invite-card">
+          <div class="card-icon-wrap">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#91A27D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3L4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>
+          </div>
+          <div class="card-title">Trusted Pair</div>
+          <div class="card-desc">You will be able to see each other's emotional pulse, share the highs and know when to reach out for support.<br><br>Trusted Pairs form a small circle of people who look out for each other.</div>
+        </div>
+        <div class="invite-note">This invite was sent to alex@company.com</div>
+      </div>
+      <div class="footer">
+        <button class="btn-primary">Accept Invite</button>
+        <button class="btn-decline">Decline</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ 3. INVITE (Support Pair) ════════ -->
+<div>
+  <div class="state-label">Invite (Support Pair)</div>
+  <div class="phone-frame">
+    <div class="safe-area">
+      <div class="invite-body">
+        <div class="invite-title">Pair Invite</div>
+        <div class="inviter-row">
+          <div class="inviter-avatar-fallback">DM</div>
+          <div class="invite-subtitle">Dylan Mitchell has invited you to be their pair.</div>
+        </div>
+        <div class="invite-card">
+          <div class="card-icon-wrap">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#91A27D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </div>
+          <div class="card-title">Support Pair</div>
+          <div class="card-desc">Support Pairs make it easier for someone you trust to notice when things change and check in with you.<br><br>By accepting, they'll be able to see your emotional pulse so they can better support you.<br><br>You will not see their pulse.</div>
+        </div>
+      </div>
+      <div class="footer">
+        <button class="btn-primary">Accept Invite</button>
+        <button class="btn-decline">Decline</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ 4. ACCEPTED ════════ -->
+<div>
+  <div class="state-label">Accepted</div>
+  <div class="phone-frame">
+    <div class="safe-area">
+      <div class="centered">
+        <div class="status-icon success">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#91A27D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>
+        </div>
+        <div class="status-title">Pair accepted!</div>
+        <div class="status-body">You and Sarah Johnson are now paired. Taking you home...</div>
+        <video class="lottie-loader small" autoplay loop muted playsinline><source src="ep-line-animation.webm" type="video/webm"></video>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ 5. INVALID / EXPIRED ════════ -->
+<div>
+  <div class="state-label">Invalid / Expired</div>
+  <div class="phone-frame">
+    <div class="safe-area">
+      <div class="centered">
+        <div class="status-icon error">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#D08A6E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <div class="status-title">Invite not available</div>
+        <div class="status-body">This invite is no longer valid or has expired.</div>
+        <button class="btn-primary" style="display:flex;align-items:center;justify-content:center;gap:8px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          Return to Home
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ 6. NETWORK ERROR ════════ -->
+<div>
+  <div class="state-label">Network Error</div>
+  <div class="phone-frame">
+    <div class="safe-area">
+      <div class="centered">
+        <div class="status-icon warning">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#FDA33A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <div class="status-title">Something went wrong</div>
+        <div class="status-body">Could not load the invite. Please check your connection and try again.</div>
+        <button class="btn-primary">Try again</button>
+        <button class="btn-secondary-link">Return to Home</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,4 +1,4 @@
-import { request, requestMultipart } from './client';
+import { request, requestMultipart, BRANCH_SUFFIX } from './client';
 import type {
   XanoGroup,
   XanoUserGroup,
@@ -6,6 +6,12 @@ import type {
   XanoGroupsResponse,
   XanoRunningStats,
 } from './types';
+
+// Group-invite deep-link endpoints live on a separate Xano API group
+// (`api:wImR3IV3`) that has not yet been migrated to the canonical mobile
+// branch. Dev builds hit the `:staging` branch; prod/preview hit main.
+// Tracked as backend tech debt — see EP-1033 for the consolidation plan.
+const GROUP_INVITE_BASE_URL = `https://xdny-scc5-yag9.a2.xano.io/api:wImR3IV3${BRANCH_SUFFIX}`;
 
 export const group = {
   create: (groupName: string, groupImage: string, listOfUsers: unknown[]) =>
@@ -92,9 +98,80 @@ export const groups = {
     return match ?? null;
   },
 
-  acceptInvite: (forestMapId: number) =>
-    request<XanoUserGroup>('POST', '/groups/accept_invite', { forest_map_id: forestMapId }),
+  /**
+   * Respond to a group invite (accept or decline).
+   *
+   * Backend contract:
+   *   PATCH /group/respond/{group_forest_map_id}
+   *   body: { reqStatus, userID }
+   *
+   * `userID` is sent explicitly in the body — the backend currently takes it
+   * from input rather than deriving from `$auth.id`. Same tech-debt flagged
+   * on the deep-link respond in EP-1033.
+   *
+   * Replaces three older endpoints that were each used inconsistently:
+   *   - POST /groups/accept_invite           (in-app sheet, old)
+   *   - POST /groups/decline_invite          (in-app sheet, old)
+   *   - PATCH /group_forest_map/{id}         (deep-link screen, on wImR3IV3)
+   */
+  respond: (groupForestMapId: number, userId: number, reqStatus: 'ACCEPTED' | 'REJECTED') =>
+    request<XanoUserGroup>(
+      'PATCH',
+      `/group/respond/${groupForestMapId}`,
+      { reqStatus, userID: userId },
+    ),
+};
 
-  declineInvite: (forestMapId: number) =>
-    request<XanoUserGroup>('POST', '/groups/decline_invite', { forest_map_id: forestMapId }),
+// ─────────────────────────────────────────────────────────────────────────
+// Group-invite deep-link endpoints (api:wImR3IV3)
+// ─────────────────────────────────────────────────────────────────────────
+// The token-based group-invite flow uses a separate Xano API group than the
+// canonical mobile branch. These two endpoints power the GroupInviteAccept
+// screen which is reached via Universal Link from email/SMS invites.
+
+/** Shape of the invite payload returned by `GET /get_group_invite`. */
+export interface XanoGroupInviteRecord {
+  id: number; // group_forest_map_id — used as the path param on the PATCH
+  invitee_email?: string | null;
+  invitee_mobile_number?: string | null;
+  group_id?: number;
+  group_name?: string;
+  group_image?: string | null;
+  invited_by_name?: string;
+  invited_by_user_id?: number;
+  // Joined fields the backend may include (group/inviter metadata)
+  _group?: {
+    id?: number;
+    group_name?: string;
+    group_image?: string | null;
+  };
+  _invited_by?: {
+    id?: number;
+    firstName?: string;
+    lastName?: string;
+    fullName?: string;
+    profilePic_url?: string | { url?: string } | null;
+    profile_hex_colour?: string | null;
+  };
+  [key: string]: unknown;
+}
+
+export const groupInvite = {
+  /**
+   * Fetch invite metadata by token. Works without auth — anyone with the link
+   * can preview the invite, but only the matching recipient can accept.
+   *
+   * NOTE: `get_group_invite` is the only endpoint still on `api:wImR3IV3`.
+   * The respond endpoint has been consolidated onto the canonical branch
+   * (see `groups.respond` above). If/when `get_group_invite` is migrated
+   * onto the canonical branch, this whole `groupInvite` namespace and the
+   * `GROUP_INVITE_BASE_URL` constant above can be deleted.
+   */
+  getByToken: (token: string) =>
+    request<XanoGroupInviteRecord>(
+      'GET',
+      '/get_group_invite',
+      { token_hash: token },
+      { baseUrl: GROUP_INVITE_BASE_URL },
+    ),
 };

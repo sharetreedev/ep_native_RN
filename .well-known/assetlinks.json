@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.sharetree.emotionalpulse",
+      "sha256_cert_fingerprints": [
+        "D9:CF:1B:F0:9E:D5:85:63:60:21:A3:A9:B3:7C:7D:A6:ED:05:BC:4A:FA:20:B8:D2:14:AE:22:55:78:74:11:A0"
+      ]
+    }
+  }
+]

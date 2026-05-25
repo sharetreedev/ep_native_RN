@@ -5,25 +5,36 @@
       "name": "Expo (Metro bundler)",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "start"],
-      "port": 8081
+      "port": 8081,
+      "autoPort": false
     },
     {
       "name": "Expo iOS",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "ios"],
-      "port": 8081
+      "port": 8081,
+      "autoPort": false
     },
     {
       "name": "Expo Android",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "android"],
-      "port": 8081
+      "port": 8081,
+      "autoPort": false
     },
     {
       "name": "Expo Web",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["expo", "start", "--web", "--port", "19006"],
-      "port": 19006
+      "port": 19006,
+      "autoPort": false
+    },
+    {
+      "name": "Preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "preview", "-l", "3456"],
+      "port": 3456,
+      "autoPort": false
     }
   ],
   "autoVerify": false

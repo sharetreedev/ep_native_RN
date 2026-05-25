@@ -26,3 +26,7 @@ emotional-pulse-f5d8b-add4482e5bf6.json
 .claude/settings.local.json
 
 .env.local
+
+# Editor swap files
+*.swp
+*.swo

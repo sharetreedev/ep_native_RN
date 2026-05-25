@@ -21,7 +21,7 @@ export default function MobileVerifyScreen() {
     async (code: string) => {
       setVerifying(true);
       try {
-        const result = await xanoAuth.verifyMobileCode(Number(code), userId);
+        const result = await xanoAuth.verifyMobileCode(code, userId);
         if (result.verified) {
           await loginWithMobile(result.authToken);
         } else {

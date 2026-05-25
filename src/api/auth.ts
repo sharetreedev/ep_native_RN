@@ -3,6 +3,21 @@ import type { XanoAuthMeResponse, XanoAuthResponse, XanoUser } from './types';
 
 export type MigratedUserResponse = 'login' | 'phone' | 'email';
 
+/**
+ * Normalise the response from `/auth/2fa/verifyCode` to a plain boolean.
+ * The endpoint may return a raw boolean, `{ verified: true }`, or
+ * `{ result: true }` depending on backend version — treat them all uniformly.
+ */
+export function isVerifiedResponse(
+  res: boolean | { verified?: boolean; result?: boolean } | null | undefined,
+): boolean {
+  if (res === true) return true;
+  if (res && typeof res === 'object') {
+    return res.verified === true || res.result === true;
+  }
+  return false;
+}
+
 export const auth = {
   login: (email: string, password: string) =>
     request<XanoAuthResponse>('POST', '/auth/login', { email, password }),
@@ -59,15 +74,28 @@ export const auth = {
   generateCode: (type: 'email' | 'phone') =>
     request<{ status: string; message: string }>('POST', '/auth/2fa/generateCode', { type }),
 
-  verifyCode: (verificationCode: number) =>
-    request<boolean>('POST', '/auth/2fa/verifyCode', { verificationCode }),
+  // Send the code as a string — `Number("0123")` strips the leading zero
+  // and Xano then compares "123" to its stored "0123", producing a spurious
+  // "wrong code" error roughly 1 in 10 times.
+  //
+  // The response shape from Xano is `{ verified: boolean }` (verified by
+  // inspecting the actual server response). We previously typed this as
+  // `request<boolean>` and checked `result === true`, which was always false
+  // because the response is an object — so even a correct code was rejected
+  // by the client. Accept either shape to be defensive against backend
+  // contract drift.
+  verifyCode: (verificationCode: string) =>
+    request<boolean | { verified?: boolean; result?: boolean }>(
+      'POST', '/auth/2fa/verifyCode', { verificationCode },
+    ),
 
   signInWithMobile: (phone: string, country_iso: string) =>
     request<{ status: string; message: string; user_id: string }>(
       'POST', '/auth/2fa/signinwithmobile', { phone, country_iso },
     ),
 
-  verifyMobileCode: (verificationCode: number, user_id: string) =>
+  // String, not number — see verifyCode above for the leading-zero rationale.
+  verifyMobileCode: (verificationCode: string, user_id: string) =>
     request<{ message: string; verified: boolean; authToken: string }>(
       'POST', '/auth/2fa/verifyMobileCode', { verificationCode, user_id },
     ),

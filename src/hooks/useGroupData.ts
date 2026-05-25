@@ -8,8 +8,10 @@ import {
   XanoRunningStats,
 } from '../api';
 import { useAsyncHandler } from './useAsyncHandler';
+import { useAuth } from '../contexts/AuthContext';
 import { invalidate, CACHE_KEYS } from '../lib/fetchCache';
 import { trackGroupCreated, trackGroupInviteAccepted } from '../lib/analyticsEvents';
+import { logger } from '../lib/logger';
 
 interface GroupsState {
   activeGroups: XanoUserGroup[];
@@ -17,6 +19,7 @@ interface GroupsState {
 }
 
 export function useGroupData() {
+  const { user } = useAuth();
   const [state, setState] = useState<GroupsState>({ activeGroups: [], invites: [] });
   const { isLoading, error, wrap } = useAsyncHandler({ initialLoading: true });
 
@@ -70,7 +73,12 @@ export function useGroupData() {
   const inviteForestMapId = (i: any): number | undefined => i?.forest?.id ?? i?.id;
 
   const acceptInvite = useCallback(async (forestMapId: number) => {
-    const result = await wrap(() => xanoGroups.acceptInvite(forestMapId));
+    const userId = user?.id ? Number(user.id) : undefined;
+    if (!userId) {
+      logger.warn('[useGroupData] acceptInvite called without authenticated user');
+      return null;
+    }
+    const result = await wrap(() => xanoGroups.respond(forestMapId, userId, 'ACCEPTED'));
     if (result) {
       invalidate(CACHE_KEYS.GROUPS);
       trackGroupInviteAccepted(); // spec: no properties
@@ -81,10 +89,15 @@ export function useGroupData() {
       }));
     }
     return result;
-  }, [wrap]);
+  }, [wrap, user?.id]);
 
   const declineInvite = useCallback(async (forestMapId: number) => {
-    const result = await wrap(() => xanoGroups.declineInvite(forestMapId));
+    const userId = user?.id ? Number(user.id) : undefined;
+    if (!userId) {
+      logger.warn('[useGroupData] declineInvite called without authenticated user');
+      return null;
+    }
+    const result = await wrap(() => xanoGroups.respond(forestMapId, userId, 'REJECTED'));
     if (result) {
       invalidate(CACHE_KEYS.GROUPS);
       setState(prev => ({
@@ -93,7 +106,7 @@ export function useGroupData() {
       }));
     }
     return result;
-  }, [wrap]);
+  }, [wrap, user?.id]);
 
   const getForestMap = useCallback((groupId?: number) =>
     wrap(() => xanoGroup.getForestMap(groupId)), [wrap]);

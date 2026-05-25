@@ -222,10 +222,26 @@ async function handleResponse<T>(res: Response, url: string, hadToken: boolean):
   logger.error(`[Xano] Error Body:`, errorBody);
   logBug(url, res.status, errorBody);
 
-  // Auth expired: clear the invalid token and notify listeners. Gated on
-  // `hadToken` so bad-credentials 401 from /auth/login doesn't nuke state
-  // when there was no session to begin with.
-  if ((res.status === 401 || res.status === 403) && hadToken) {
+  // Auth expired: clear the invalid token and notify listeners.
+  //
+  // Narrow rule: only 401, OR a 403 that explicitly carries Xano's
+  // `ERROR_CODE_UNAUTHORIZED` code. A plain 403 (`ERROR_CODE_ACCESS_DENIED`)
+  // means "you don't have permission for THIS resource", not "your token
+  // is invalid" — logging the user out on those is destructive (e.g. a
+  // pair-invite token-mismatch was previously kicking the user back to
+  // the sign-in screen).
+  //
+  // Gated on `hadToken` so bad-credentials 401 from /auth/login doesn't
+  // nuke state when there was no session to begin with.
+  const errorCode =
+    typeof errorBody === 'object' && errorBody
+      ? (errorBody as { code?: string }).code
+      : undefined;
+  const isAuthExpired =
+    hadToken &&
+    (res.status === 401 ||
+      (res.status === 403 && errorCode === 'ERROR_CODE_UNAUTHORIZED'));
+  if (isAuthExpired) {
     try { await tokenStore.clear(); } catch { /* ignore */ }
     try { onAuthExpired?.(); } catch (e) { logger.error('[Xano] onAuthExpired handler threw:', e); }
   }

@@ -21,6 +21,7 @@ import PhoneVerificationStep from './steps/PhoneVerificationStep';
 import MergeAccountsStep from './steps/MergeAccountsStep';
 import IntroSlidesStep from './steps/IntroSlidesStep';
 import FirstCheckInStep from './steps/FirstCheckInStep';
+import ReminderSetupStep from './steps/ReminderSetupStep';
 import CourseEnrollmentStep from './steps/CourseEnrollmentStep';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -31,6 +32,7 @@ type OnboardingStep =
   | 'merge_accounts'
   | 'intro_slides'
   | 'first_checkin'
+  | 'reminder_setup'
   | 'course_enrollment';
 
 export default function OnboardingScreen() {
@@ -181,24 +183,32 @@ export default function OnboardingScreen() {
   }, [cameFromMerge, onboarding, refreshUser]);
 
   // ── First Check-In ──────────────────────────────────────────────────
+  // Both check-in views confirm the emotion before this callback fires —
+  // the slider via its "Check in as {emotion}" button in the inline detail
+  // card, the grid via `CheckInConfirmModal`. So we run the check-in
+  // immediately here rather than asking the user to confirm a third time.
   const handleCheckInComplete = useCallback(async (emotion: MappedEmotion, coordinateId: number, checkinView: 'slider' | 'grid') => {
-    Alert.alert('Check In', `Do you want to check in as ${emotion.name}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Confirm',
-        onPress: async () => {
-          try {
-            await createCheckIn(emotion, coordinateId, checkinView);
-            markCheckedInToday();
-          } catch {
-            // Non-fatal
-          }
-          await refreshUser();
-          setStep('course_enrollment');
-        },
-      },
-    ]);
+    try {
+      await createCheckIn(emotion, coordinateId, checkinView);
+      markCheckedInToday();
+    } catch {
+      // Non-fatal — continue to the next step regardless so the user isn't
+      // stuck on onboarding due to a transient backend hiccup.
+    }
+    await refreshUser();
+    setStep('reminder_setup');
   }, [createCheckIn, refreshUser, markCheckedInToday]);
+
+  // ── Reminder Setup ──────────────────────────────────────────────────
+  // After first check-in, surface the reminder schedule and (post-save) the
+  // OS push permission prompt. The step renders group/default settings if
+  // the user belongs to a group; otherwise the default schedule is shown.
+  const handleReminderSetupComplete = useCallback(async () => {
+    // Refresh so the user object reflects any reminder fields written by
+    // /user/update_reminder_settings before downstream steps read them.
+    await refreshUser();
+    setStep('course_enrollment');
+  }, [refreshUser]);
 
   // ── Course Enrollment ───────────────────────────────────────────────
   useEffect(() => {
@@ -300,6 +310,15 @@ export default function OnboardingScreen() {
         <FirstCheckInStep
           onComplete={handleCheckInComplete}
           emotionStates={emotionStates}
+        />
+      );
+    }
+
+    if (step === 'reminder_setup') {
+      return (
+        <ReminderSetupStep
+          onComplete={handleReminderSetupComplete}
+          isSubmitting={isSubmitting}
         />
       );
     }

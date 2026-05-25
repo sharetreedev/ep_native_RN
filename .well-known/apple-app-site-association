@@ -1,0 +1,12 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["PL8F7LAM2G.com.vative.stemotionalpulse"],
+        "components": [
+          { "/": "/*", "comment": "All paths on app.emotionalpulse.ai — dedicated app subdomain" }
+        ]
+      }
+    ]
+  }
+}

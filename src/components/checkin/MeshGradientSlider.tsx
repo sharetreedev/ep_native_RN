@@ -5,13 +5,15 @@ import {
   TouchableOpacity,
   StyleSheet,
   Animated,
+  ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import EmotionDetailSheet from '../EmotionDetailSheet';
 import { MappedEmotion } from '../../hooks/useEmotionStates';
 import { useReduceMotion } from '../../hooks/useReduceMotion';
 import { XanoStateCoordinate } from '../../api';
 import { colors, fonts, fontSizes, buttonStyles } from '../../theme';
+import EmotionDetailContent from '../EmotionDetailContent';
 import MeshGradientPalette from './meshGradient/MeshGradientPalette';
 import MeshGradientResult from './meshGradient/MeshGradientResult';
 import {
@@ -30,17 +32,32 @@ interface MeshGradientSliderProps {
   onComplete: (emotion: MappedEmotion, coordinateId: number, needsAttention?: boolean) => void;
 }
 
+type ViewMode = 'palette' | 'detail';
+
+function capitalize(s: string): string {
+  if (!s) return '';
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 export default function MeshGradientSlider({ emotions, coordinates, onComplete }: MeshGradientSliderProps) {
   const reduceMotion = useReduceMotion();
   const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [matchedEmotion, setMatchedEmotion] = useState<MappedEmotion | null>(null);
   const [matchedCoord, setMatchedCoord] = useState<XanoStateCoordinate | null>(null);
-  const [showDetail, setShowDetail] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('palette');
   const lastHapticRef = useRef<number>(0);
+
+  // Initial mount fade/scale (palette appears) — kept from previous version.
   const fadeAnim = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
   const scaleAnim = useRef(new Animated.Value(reduceMotion ? 1 : 0.9)).current;
-  const contentShiftAnim = useRef(new Animated.Value(0)).current;
+
+  // Palette zoom-out animation when transitioning to the detail view.
+  // 1 = normal palette, 2.8 = fully zoomed/scaled out (matches WeWeb).
+  const paletteZoomAnim = useRef(new Animated.Value(1)).current;
+  const paletteOpacityAnim = useRef(new Animated.Value(1)).current;
+  // Detail card opacity — fades in slightly after the palette starts zooming.
+  const detailOpacityAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (reduceMotion) {
@@ -63,23 +80,10 @@ export default function MeshGradientSlider({ emotions, coordinates, onComplete }
     ]).start();
   }, [reduceMotion]);
 
-  useEffect(() => {
-    if (!matchedEmotion) return;
-    if (reduceMotion) {
-      contentShiftAnim.setValue(-60);
-      return;
-    }
-    Animated.spring(contentShiftAnim, {
-      toValue: -60,
-      useNativeDriver: true,
-      tension: 50,
-      friction: 10,
-    }).start();
-  }, [matchedEmotion, reduceMotion]);
-
   const quadrantColors = useMemo(() => buildQuadrantColors(emotions), [emotions]);
   const emotionGrid = useMemo(() => buildEmotionGrid(emotions), [emotions]);
 
+  // ── Touch handlers ──────────────────────────────────────────────────
   const handleTouch = useCallback(
     (x: number, y: number) => {
       const clampedX = Math.max(0, Math.min(PALETTE_ACTUAL, x));
@@ -87,7 +91,6 @@ export default function MeshGradientSlider({ emotions, coordinates, onComplete }
 
       setCursorPos({ x: clampedX, y: clampedY });
 
-      // Continuous haptic feedback (throttled)
       const now = Date.now();
       if (now - lastHapticRef.current >= HAPTIC_THROTTLE_MS) {
         Haptics.selectionAsync();
@@ -113,10 +116,77 @@ export default function MeshGradientSlider({ emotions, coordinates, onComplete }
     [handleTouch]
   );
 
+  // Drag-and-release on a matched emotion → zoom out the palette and reveal
+  // the inline detail view. This is the explicit user-requested flow.
+  const openDetail = useCallback(() => {
+    setViewMode('detail');
+    if (reduceMotion) {
+      paletteZoomAnim.setValue(2.8);
+      paletteOpacityAnim.setValue(0);
+      detailOpacityAnim.setValue(1);
+      return;
+    }
+    Animated.parallel([
+      Animated.timing(paletteZoomAnim, {
+        toValue: 2.8,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.timing(paletteOpacityAnim, {
+        toValue: 0,
+        duration: 350,
+        useNativeDriver: true,
+      }),
+      Animated.timing(detailOpacityAnim, {
+        toValue: 1,
+        duration: 350,
+        delay: 150,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [reduceMotion]);
+
+  const closeDetail = useCallback(() => {
+    if (reduceMotion) {
+      paletteZoomAnim.setValue(1);
+      paletteOpacityAnim.setValue(1);
+      detailOpacityAnim.setValue(0);
+      setViewMode('palette');
+      return;
+    }
+    Animated.parallel([
+      Animated.timing(detailOpacityAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(paletteZoomAnim, {
+        toValue: 1,
+        duration: 450,
+        delay: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(paletteOpacityAnim, {
+        toValue: 1,
+        duration: 300,
+        delay: 150,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setViewMode('palette');
+    });
+  }, [reduceMotion]);
+
   const handleTouchEnd = useCallback(() => {
     setIsDragging(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  }, []);
+    // If the user has landed the lens on a valid emotion, open the detail
+    // view automatically. The "Pick another emotion" button in the detail
+    // view brings them back to the palette to refine.
+    if (matchedEmotion) {
+      openDetail();
+    }
+  }, [matchedEmotion, openDetail]);
 
   const handleConfirm = () => {
     if (matchedEmotion && matchedCoord) {
@@ -124,28 +194,32 @@ export default function MeshGradientSlider({ emotions, coordinates, onComplete }
     }
   };
 
-  const handleReset = () => {
-    if (reduceMotion) {
-      contentShiftAnim.setValue(0);
-    } else {
-      Animated.spring(contentShiftAnim, {
-        toValue: 0,
-        useNativeDriver: true,
-        tension: 50,
-        friction: 10,
-      }).start();
-    }
-    setCursorPos(null);
-    setMatchedEmotion(null);
-    setMatchedCoord(null);
-  };
+  // ── Inline detail content (the "see more" card body) ─────────────────
+  const clusterEmotions = useMemo(() => {
+    if (!matchedEmotion) return [];
+    return emotions.filter(
+      (e) =>
+        e.energy === matchedEmotion.energy && e.pleasantness === matchedEmotion.pleasantness
+    );
+  }, [emotions, matchedEmotion]);
 
   return (
     <View style={styles.outerContainer}>
-      <Animated.View style={[styles.containerCentered, { opacity: fadeAnim, transform: [{ scale: scaleAnim }, { translateY: contentShiftAnim }] }]}>
+      {/* ── Palette layer ── */}
+      <Animated.View
+        pointerEvents={viewMode === 'palette' ? 'auto' : 'none'}
+        style={[
+          styles.paletteLayer,
+          {
+            opacity: Animated.multiply(fadeAnim, paletteOpacityAnim),
+            transform: [{ scale: Animated.multiply(scaleAnim, paletteZoomAnim) }],
+          },
+        ]}
+      >
         <Text style={styles.heading}>How are you feeling?</Text>
 
         <MeshGradientPalette
+          emotionGrid={emotionGrid}
           cursorPos={cursorPos}
           isDragging={isDragging}
           quadrantColors={quadrantColors}
@@ -155,43 +229,51 @@ export default function MeshGradientSlider({ emotions, coordinates, onComplete }
         >
           <MeshGradientResult
             matchedEmotion={matchedEmotion}
-            onShowDetail={() => setShowDetail(true)}
+            onShowDetail={openDetail}
           />
         </MeshGradientPalette>
-
-        <EmotionDetailSheet
-          emotion={matchedEmotion}
-          visible={showDetail}
-          onClose={() => setShowDetail(false)}
-          clusterEmotions={emotions.filter(
-            (e) =>
-              matchedEmotion &&
-              e.energy === matchedEmotion.energy &&
-              e.pleasantness === matchedEmotion.pleasantness
-          )}
-        />
-
       </Animated.View>
 
-      {/* Footer — outside animated content so it stays pinned at bottom */}
-      {matchedEmotion && (
-        <View style={styles.footer}>
-          <TouchableOpacity
-            style={[
-              buttonStyles.primary.container,
-              (isDragging || !matchedCoord) && buttonStyles.primary.disabled,
-            ]}
-            onPress={handleConfirm}
-            disabled={isDragging || !matchedCoord}
-            activeOpacity={0.8}
+      {/* ── Detail layer (inline, replaces palette when open) ── */}
+      {viewMode === 'detail' && matchedEmotion && (
+        <Animated.View
+          style={[styles.detailLayer, { opacity: detailOpacityAnim }]}
+        >
+          <ScrollView
+            style={styles.detailScroll}
+            contentContainerStyle={styles.detailScrollContent}
+            showsVerticalScrollIndicator={false}
           >
-            <Text style={buttonStyles.primary.text}>Check In</Text>
-          </TouchableOpacity>
+            <EmotionDetailContent
+              emotion={matchedEmotion}
+              clusterEmotions={clusterEmotions}
+            />
+          </ScrollView>
 
-          <TouchableOpacity onPress={handleReset} style={styles.resetButton}>
-            <Text style={styles.resetButtonText}>Reset</Text>
-          </TouchableOpacity>
-        </View>
+          <View style={styles.detailFooter}>
+            <TouchableOpacity
+              style={[
+                buttonStyles.primary.container,
+                !matchedCoord && buttonStyles.primary.disabled,
+              ]}
+              onPress={handleConfirm}
+              disabled={!matchedCoord}
+              activeOpacity={0.8}
+            >
+              {!matchedCoord ? (
+                <ActivityIndicator color={colors.textOnPrimary} />
+              ) : (
+                <Text style={buttonStyles.primary.text}>
+                  Check in as {capitalize(matchedEmotion.name)}
+                </Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={closeDetail} style={styles.pickAnotherButton} activeOpacity={0.7}>
+              <Text style={styles.pickAnotherText}>{'< Pick another emotion'}</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
       )}
     </View>
   );
@@ -201,7 +283,7 @@ const styles = StyleSheet.create({
   outerContainer: {
     flex: 1,
   },
-  containerCentered: {
+  paletteLayer: {
     flex: 1,
     justifyContent: 'center',
     marginTop: -80,
@@ -215,21 +297,30 @@ const styles = StyleSheet.create({
     marginBottom: 32,
     paddingHorizontal: PADDING,
   },
-  footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingBottom: 20,
-    paddingTop: 16,
+  detailLayer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.background,
+  },
+  detailScroll: {
+    flex: 1,
+  },
+  detailScrollContent: {
     paddingHorizontal: PADDING,
+    paddingTop: 24,
+    paddingBottom: 8,
   },
-  resetButton: {
+  detailFooter: {
+    paddingHorizontal: PADDING,
+    paddingTop: 12,
+    paddingBottom: 20,
+  },
+  pickAnotherButton: {
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
+    marginTop: 8,
   },
-  resetButtonText: {
-    color: colors.textMuted,
+  pickAnotherText: {
+    color: colors.textSecondary,
     fontFamily: fonts.bodyMedium,
     fontSize: fontSizes.md,
   },

@@ -1,12 +1,16 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import * as Linking from 'expo-linking';
 import { RootStackParamList } from '../types/navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { useCheckIn } from '../contexts/CheckInContext';
 import { colors } from '../theme';
 import { consumePendingLesson, peekPendingLesson } from './pendingLesson';
+import { linking } from './linking';
+import { setPendingLink, consumePendingLink, peekPendingLink } from './pendingLink';
+import { logger } from '../lib/logger';
 import TabNavigator from './TabNavigator';
 import AuthScreen from '../screens/AuthScreen/AuthScreen';
 import MobileSignInScreen from '../screens/MobileSignInScreen/MobileSignInScreen';
@@ -41,10 +45,13 @@ import EnrollmentsScreen from '../screens/EnrollmentsScreen/EnrollmentsScreen';
 import CheckinSupportRequestScreen from '../screens/CheckinSupportRequestScreen/CheckinSupportRequestScreen';
 import SupportRequestDetailsScreen from '../screens/SupportRequestDetailsScreen/SupportRequestDetailsScreen';
 import RiskAssessmentScreen from '../screens/RiskAssessmentScreen/RiskAssessmentScreen';
+import PairInviteScreen from '../screens/PairInviteScreen/PairInviteScreen';
+import GroupInviteAcceptScreen from '../screens/GroupInviteAcceptScreen/GroupInviteAcceptScreen';
 import MHFRBanner from '../components/MHFRBanner';
 import PushPrimer from '../components/PushPrimer';
 import MyPulseV2Promo from '../components/MyPulseV2Promo';
 import PendingGroupInviteSheet from '../components/PendingGroupInviteSheet';
+import PendingPairInviteTrigger from '../components/PendingPairInviteTrigger';
 import NewMHFRSupportRequestSheet from '../components/NewMHFRSupportRequestSheet';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -54,6 +61,10 @@ export default function AppNavigator() {
     const { hasCheckedInToday } = useCheckIn();
     const navRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
     const checkinPushed = useRef(false);
+    // Flipped true once NavigationContainer reports ready, so children that
+    // need to call `navRef.current?.navigate(...)` from a useEffect can
+    // re-run their effects when the navigator is finally usable.
+    const [navReady, setNavReady] = useState(false);
 
     // Determine the initial route for authenticated users
     const needsOnboarding = isAuthenticated && !pendingPasswordSetup && !user?.onboardingComplete;
@@ -82,9 +93,59 @@ export default function AppNavigator() {
         });
     }, [needsOnboarding, isLoading]);
 
+    // Consume a pending deep link after auth completes.
+    // The link is stored by the Linking listener below when the user is
+    // unauthenticated, and consumed here once they sign in and the
+    // navigator is ready.
+    const tryConsumePendingLink = useCallback(() => {
+        if (!isAuthenticated || needsOnboarding || isLoading || pendingPasswordSetup) return;
+        if (!peekPendingLink()) return;
+        const ref = navRef.current;
+        if (!ref?.isReady()) return;
+        consumePendingLink().then((url) => {
+            if (!url) return;
+            logger.info('[AppNavigator] Consuming pending deep link:', url);
+            // Let React Navigation's linking config resolve the URL to a route
+            const action = ref.getRootState();
+            if (action) {
+                Linking.openURL(url);
+            }
+        });
+    }, [isAuthenticated, needsOnboarding, isLoading, pendingPasswordSetup]);
+
     useEffect(() => {
         tryConsumePendingLesson();
-    }, [tryConsumePendingLesson]);
+        tryConsumePendingLink();
+    }, [tryConsumePendingLesson, tryConsumePendingLink]);
+
+    // When a deep link arrives and the user is not authenticated, save it
+    // as a pending link so it survives the auth round-trip. The pending-link
+    // consumer (`tryConsumePendingLink` above) waits for onboarding to be
+    // complete before replaying, so deep-link screens like GroupInviteAccept
+    // and PairInvite only mount once the user is fully signed-in and onboarded.
+    useEffect(() => {
+        const subscription = Linking.addEventListener('url', ({ url }) => {
+            // Don't intercept the OAuth callback — that's handled by AuthSession
+            if (url.includes('emotionalpulse://auth')) return;
+
+            if (!isAuthenticated) {
+                logger.info('[AppNavigator] Unauthenticated deep link received, saving as pending:', url);
+                setPendingLink(url);
+            }
+        });
+
+        // Also check the initial URL that launched the app
+        if (!isAuthenticated) {
+            Linking.getInitialURL().then((url) => {
+                if (url && !url.includes('emotionalpulse://auth')) {
+                    logger.info('[AppNavigator] Unauthenticated initial URL, saving as pending:', url);
+                    setPendingLink(url);
+                }
+            });
+        }
+
+        return () => subscription.remove();
+    }, [isAuthenticated]);
 
     if (isLoading) {
         return (
@@ -97,21 +158,28 @@ export default function AppNavigator() {
     return (
         <NavigationContainer
             ref={navRef}
+            linking={linking}
             onReady={() => {
+                setNavReady(true);
                 // Auto-push CheckIn on top of Main so dismissing it pops back (slides out right)
                 if (needsCheckIn && !checkinPushed.current) {
                     checkinPushed.current = true;
                     navRef.current?.navigate('CheckIn');
                 }
                 tryConsumePendingLesson();
+                tryConsumePendingLink();
             }}
-            onStateChange={tryConsumePendingLesson}
+            onStateChange={() => {
+                tryConsumePendingLesson();
+                tryConsumePendingLink();
+            }}
         >
             <View style={styles.appContainer}>
             {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && <MHFRBanner />}
             {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && <PushPrimer />}
             {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && <MyPulseV2Promo />}
             {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && <PendingGroupInviteSheet sessionKey={user?.id} />}
+            {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && <PendingPairInviteTrigger sessionKey={user?.id} navRef={navRef} navReady={navReady} />}
             {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && <NewMHFRSupportRequestSheet />}
             <Stack.Navigator id="RootStack" screenOptions={{ headerShown: false }}>
                 {isAuthenticated ? (
@@ -162,6 +230,12 @@ export default function AppNavigator() {
                             <Stack.Screen name="CreateGroup" component={CreateGroupScreen} />
                             <Stack.Screen name="GroupInvite" component={GroupInviteScreen} />
                             <Stack.Screen name="AIMHFR" component={AIMHFRScreen} />
+                            <Stack.Screen
+                                name="PairInvite"
+                                component={PairInviteScreen}
+                                options={{ presentation: 'modal' }}
+                            />
+                            <Stack.Screen name="GroupInviteAccept" component={GroupInviteAcceptScreen} />
                         </>
                     )
                 ) : (

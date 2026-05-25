@@ -42,10 +42,12 @@ export const pairs = {
   update: (pairsId: number, fields: Partial<XanoPair>) =>
     request<XanoPair>('PATCH', `/pairs/${pairsId}`, fields as Record<string, unknown>),
 
-  respond: (pairsId: number, reqStatus: 'ACCEPTED' | 'REJECTED', requestToId: number) =>
+  // Backend only accepts `reqStatus` in the body; `pairs_id` is the path
+  // param. Previously also sent `request_to_id`, which the endpoint
+  // doesn't recognise → "Unable to locate input: request_to_id" error.
+  respond: (pairsId: number, reqStatus: 'ACCEPTED' | 'REJECTED') =>
     request<{ success: boolean }>('PATCH', `/pairs/${pairsId}/respond`, {
       reqStatus,
-      request_to_id: requestToId,
     }),
 
   sendRequest: (pairsId: number, fields: { requestToId?: number; invite_email?: string }) => {

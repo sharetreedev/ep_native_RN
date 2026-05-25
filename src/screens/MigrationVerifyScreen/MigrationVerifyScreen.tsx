@@ -35,7 +35,7 @@ export default function MigrationVerifyScreen() {
     async (code: string) => {
       setVerifying(true);
       try {
-        const result = await xanoAuth.verifyMobileCode(Number(code), userId);
+        const result = await xanoAuth.verifyMobileCode(code, userId);
         // Gate on the thing we actually need — a usable token. This is
         // contract-independent: it doesn't matter how the backend encodes
         // `verified` (bool / "true" / "1"), a present authToken means the

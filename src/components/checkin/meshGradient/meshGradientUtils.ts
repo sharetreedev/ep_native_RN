@@ -7,10 +7,20 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export const PADDING = 20;
 export const PALETTE_ACTUAL = SCREEN_WIDTH - PADDING * 2;
-export const CURSOR_SIZE = 32;
 export const HAPTIC_THROTTLE_MS = 80;
 export const DESC_TRUNCATE = 28;
 export const BASE_BG = '#f5f3ee';
+// Gap between grid cells (visible through the lens, matches WeWeb's 4px).
+export const GRID_GAP = 4;
+// Tile = one of the 16 emotion cells in the 4×4 grid.
+export const TILE_SIZE = (PALETTE_ACTUAL - GRID_GAP * 3) / 4;
+// The clear lens is sized to one tile so the grid reads clearly through it.
+export const LENS_SIZE = TILE_SIZE;
+export const LENS_RADIUS = LENS_SIZE / 2;
+// Soft feather around the lens cutout (px). Matches WeWeb's REVEAL_FADE.
+export const LENS_FEATHER = 16;
+// Kept for backwards-compat with any external imports.
+export const CURSOR_SIZE = LENS_SIZE;
 
 export function buildEmotionGrid(emotions: MappedEmotion[]): (MappedEmotion | null)[][] {
   const grid: (MappedEmotion | null)[][] = Array.from({ length: 4 }, () => Array(4).fill(null));

@@ -29,7 +29,7 @@ interface UsePairsResult {
   fetchSentRequests: () => Promise<void>;
   getPairById: (pairsId: number) => Promise<XanoPair | null>;
   invitePair: (pairType: 'DUAL' | 'PUSH' | 'PULL', requestFromId: number) => Promise<XanoPair | null>;
-  respond: (pairsId: number, status: 'ACCEPTED' | 'REJECTED', requestToId: number) => Promise<void>;
+  respond: (pairsId: number, status: 'ACCEPTED' | 'REJECTED') => Promise<void>;
   cancelRequest: (pairId: number) => Promise<void>;
   removePair: (pairId: number) => Promise<void>;
   sendCheckin: (creatorId: number, recipientId: number) => Promise<XanoPairCheckin | null>;
@@ -83,9 +83,8 @@ export function usePairs(): UsePairsResult {
   const respond = useCallback(async (
     pairsId: number,
     status: 'ACCEPTED' | 'REJECTED',
-    requestToId: number,
   ) => {
-    const res = await wrap(() => xanoPairs.respond(pairsId, status, requestToId));
+    const res = await wrap(() => xanoPairs.respond(pairsId, status));
     if (res) {
       // pair_id is the same XanoPair.id across the whole lifecycle.
       if (status === 'ACCEPTED') trackPairCreated({ pair_id: pairsId });
