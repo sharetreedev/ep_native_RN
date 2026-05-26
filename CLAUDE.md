@@ -19,9 +19,14 @@ npm run ota:production -- --message "<brief summary of changes>"
 ```
 - **NEVER call `eas update` directly.** It reads `EXPO_PUBLIC_*` env vars from the local `.env` at publish time, which will silently bake the wrong `x-data-source` header into the production bundle. The `npm run ota:*` scripts wrap `eas update` with `--environment` so the EAS-hosted env vars are used instead.
 - Channels: `ota:production` | `ota:preview` | `ota:development`
-- The wrapper (`scripts/ota.sh`) verifies `EXPO_PUBLIC_XANO_DATA_SOURCE` exists on the target EAS environment before publishing and unsets any locally-exported value.
+- The wrapper (`scripts/ota.sh`) runs four pre-flight checks before invoking `eas update`:
+  1. **`git fetch origin`** then **hard-fail if local HEAD is missing any commits from `origin/main`** — without this, a stale local can silently roll back commits already in production. Recovery: `git pull --ff-only origin main`.
+  2. **Warn (and prompt) if the working tree is dirty** — uncommitted modifications and untracked-but-imported files end up in the Metro bundle, so dirty publishes are reproducible only with effort. Pass `--allow-dirty` to skip the prompt; aborts automatically in non-interactive shells unless that flag is set.
+  3. **Verifies `EXPO_PUBLIC_XANO_DATA_SOURCE` exists on the target EAS environment** and unsets any locally-exported value so the EAS-hosted env always wins.
+  4. **Forwards remaining args to `eas update`** (e.g. `--message "..."`).
 - `src/api/client.ts` hard-throws at module-load if a non-`__DEV__` build ships with anything other than `live`. A misconfigured OTA crashes on launch and users roll back to the previous embedded bundle — safer than silently running against the wrong backend.
-- The message should summarize what changed — infer from conversation history or ask the user
+- The message should summarize what changed — infer from conversation history or ask the user.
+- **Preferred publish flow when multiple devs are on the project:** commit work locally (with `EP-XXXX` in the message), `git pull --ff-only origin main` if behind, then publish. Pushing your commit to `origin/main` before the OTA isn't enforced, but doing so means every OTA bundle maps to a SHA anyone on the team can check out and reproduce.
 
 ### 2. Create Linear issues
 - Create a Linear issue for each piece of work included in this update
