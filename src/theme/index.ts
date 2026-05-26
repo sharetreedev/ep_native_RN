@@ -47,8 +47,9 @@ export const colors = {
     surface: '#FFFFFF',
     surfaceMuted: '#F3F0EB',
 
-    /** Text hierarchy */
-    textPrimary: '#1F2937',
+    /** Text hierarchy — `textPrimary` is the design-system charcoal used for
+     *  all body text, screen titles, and section headers. */
+    textPrimary: '#252627',
     textSecondary: '#4B5563',
     textMuted: '#6B7280',
     textPlaceholder: '#9CA3AF',
