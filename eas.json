@@ -30,7 +30,7 @@
         "appleTeamId": "PL8F7LAM2G"
       },
       "android": {
-        "serviceAccountKeyPath": "./emotional-pulse-f5d8b-add4482e5bf6.json",
+        "serviceAccountKeyPath": "./google-play-service-account.json",
         "track": "internal"
       }
     },
@@ -41,7 +41,7 @@
         "appleTeamId": "PL8F7LAM2G"
       },
       "android": {
-        "serviceAccountKeyPath": "./emotional-pulse-f5d8b-add4482e5bf6.json",
+        "serviceAccountKeyPath": "./google-play-service-account.json",
         "track": "production"
       }
     }

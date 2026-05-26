@@ -24,15 +24,35 @@ import LoadingAnimation from '../../components/LoadingAnimation';
 
 type PairInviteRouteProp = RouteProp<RootStackParamList, 'PairInvite'>;
 
-// The get_by_token response may include joined user data beyond the XanoPair type.
+// The screen handles two response shapes:
+//   1. Deep-link path — `/pair/get_by_token` returns a flat object with
+//      `pair_id`, `pair_type`, `fullName`, `initials`, `profile_pic`,
+//      `profile_hex_colour`, `status`, `message`, `joined`. Apple-signup
+//      users may have empty string for fullName / profile_pic.
+//   2. In-app popup path — receives a raw `XanoPair` via route params,
+//      with `id`, `pairType`, `requestFromId`, `requestToId`,
+//      `invite_email`, `pairUserIDs`. No joined inviter info.
+//
+// We normalise both into the shape the render layer reads. Any extra
+// keys are passed through via the index signature so we don't lose
+// data we don't yet care about.
 interface PairInviteRecord {
-  id: number;
+  id?: number;
+  pair_id?: number;
   pairType?: string;
+  pair_type?: string;
   reqStatus?: string;
+  status?: string;
   requestFromId?: number;
   requestToId?: number;
   invite_email?: string;
-  // Joined fields Xano may return (inviter details)
+  // Flat fields from `/pair/get_by_token`
+  fullName?: string;
+  initials?: string;
+  profile_pic?: string | null;
+  profile_hex_colour?: string | null;
+  message?: string;
+  // Joined fields some endpoints expose under a wrapper (kept for back-compat)
   _request_from?: {
     id?: number;
     firstName?: string;
@@ -40,8 +60,54 @@ interface PairInviteRecord {
     fullName?: string;
     email?: string;
     profilePic_url?: string | { url?: string } | null;
+    profile_hex_colour?: string | null;
   };
   [key: string]: unknown;
+}
+
+/** Return the pair record's id from either shape. */
+function getPairId(r: PairInviteRecord | null | undefined): number | undefined {
+  if (!r) return undefined;
+  return r.id ?? r.pair_id;
+}
+
+/** Return the pair type from either shape. */
+function getPairTypeKey(r: PairInviteRecord | null | undefined): string {
+  return r?.pairType ?? r?.pair_type ?? 'DUAL';
+}
+
+/** Extract the inviter's display name with sensible fallbacks. */
+function getInviterName(r: PairInviteRecord | null | undefined): string {
+  if (!r) return 'Someone';
+  const flat = (r.fullName ?? '').trim();
+  if (flat) return flat;
+  const joined = (r._request_from?.fullName ?? '').trim();
+  if (joined) return joined;
+  const fromParts = [r._request_from?.firstName, r._request_from?.lastName]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  if (fromParts) return fromParts;
+  if (r.invite_email) return r.invite_email;
+  return 'Someone';
+}
+
+function getInviterProfilePic(r: PairInviteRecord | null | undefined): string | null {
+  if (!r) return null;
+  const flat = (r.profile_pic ?? '').toString().trim();
+  if (flat) return flat;
+  const join = r._request_from?.profilePic_url;
+  if (typeof join === 'string' && join.trim()) return join;
+  if (join && typeof join === 'object' && join.url) return join.url;
+  return null;
+}
+
+function getInviterHexColour(r: PairInviteRecord | null | undefined): string | undefined {
+  if (!r) return undefined;
+  const flat = (r.profile_hex_colour ?? '').toString().trim();
+  if (flat) return flat;
+  const join = r._request_from?.profile_hex_colour ?? undefined;
+  return join ?? undefined;
 }
 
 const PAIR_TYPE_LABELS: Record<string, { title: string; description: string }> = {
@@ -142,7 +208,7 @@ export default function PairInviteScreen() {
 
         if (cancelled) return;
 
-        if (!result || !result.id) {
+        if (!result || !getPairId(result)) {
           setStep('invalid');
           setErrorMessage('This invite is no longer valid or has expired.');
           return;
@@ -184,12 +250,11 @@ export default function PairInviteScreen() {
   }, [pairToken, inviteParam, isAuthenticated, user?.id]);
 
   const handleAccept = async () => {
-    if (!inviteRecord?.id || !user?.id) return;
+    const pairId = getPairId(inviteRecord);
+    if (!pairId || !user?.id) return;
 
     setResponding(true);
     try {
-      const pairId = inviteRecord.id;
-
       logger.info('[PairInvite] PATCH respond → ACCEPTED', { pairId });
       await xanoPairs.respond(pairId, 'ACCEPTED');
 
@@ -224,12 +289,11 @@ export default function PairInviteScreen() {
   };
 
   const handleDecline = async () => {
-    if (!inviteRecord?.id || !user?.id) return;
+    const pairId = getPairId(inviteRecord);
+    if (!pairId || !user?.id) return;
 
     setResponding(true);
     try {
-      const pairId = inviteRecord.id;
-
       logger.info('[PairInvite] PATCH respond → REJECTED', { pairId });
       await xanoPairs.respond(pairId, 'REJECTED');
 
@@ -257,8 +321,8 @@ export default function PairInviteScreen() {
     // Retry only applies to the deep-link path — the in-app popup path uses
     // the invite handed in via route params, no fetch involved.
     (async () => {
-      if (inviteParam?.id) {
-        setInviteRecord(inviteParam);
+      if (getPairId(inviteParam)) {
+        setInviteRecord(inviteParam!);
         setStep('invite');
         return;
       }
@@ -268,7 +332,7 @@ export default function PairInviteScreen() {
           pairToken,
           Number(user.id),
         )) as unknown as PairInviteRecord;
-        if (!result || !result.id) {
+        if (!result || !getPairId(result)) {
           setStep('invalid');
           setErrorMessage('This invite is no longer valid or has expired.');
           return;
@@ -289,18 +353,15 @@ export default function PairInviteScreen() {
   };
 
   // ── Inviter display info ──────────────────────────────────────────────
-  const inviterName =
-    inviteRecord?._request_from?.fullName ||
-    [inviteRecord?._request_from?.firstName, inviteRecord?._request_from?.lastName]
-      .filter(Boolean)
-      .join(' ') ||
-    inviteRecord?.invite_email ||
-    'Someone';
+  // Use the normaliser helpers so both response shapes (flat
+  // get_by_token vs nested XanoPair) render correctly. Empty strings
+  // from Apple-signup users (no name/picture yet) fall back to
+  // invite_email → "Someone".
+  const inviterName = getInviterName(inviteRecord);
+  const inviterProfilePic = getInviterProfilePic(inviteRecord);
+  const inviterHexColour = getInviterHexColour(inviteRecord);
 
-  const inviterProfilePic = inviteRecord?._request_from?.profilePic_url ?? null;
-  const inviterHexColour = (inviteRecord?._request_from as Record<string, unknown> | undefined)?.profile_hex_colour as string | null | undefined;
-
-  const pairTypeKey = inviteRecord?.pairType ?? 'DUAL';
+  const pairTypeKey = getPairTypeKey(inviteRecord);
   const pairTypeInfo = PAIR_TYPE_LABELS[pairTypeKey] ?? PAIR_TYPE_LABELS.DUAL;
   const PairTypeIcon = pairTypeKey === 'DUAL' ? ArrowLeftRight : Eye;
 

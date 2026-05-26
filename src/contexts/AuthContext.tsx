@@ -311,29 +311,41 @@ async function resolveGroupsPairsAndMHFR(user: User): Promise<User> {
     const activePairs = Array.isArray(data.active) ? data.active : [];
     const rawInvitePairs = Array.isArray(data.invites) ? data.invites : [];
 
-    // Pick out the pair invites the current user can act on. The backend
-    // already scopes `data.invites` to PENDING-only, so we just need to
-    // confirm the invite is actually addressed to this user:
-    //   - the invite_email matches the user's email, OR
-    //   - the user's id appears in pairUserIDs
+    // Pick out the **incoming** pair invites the current user can act on.
+    // The backend scopes `data.invites` to PENDING, but it also leaks
+    // outgoing invites (where the user is the requester) into the same
+    // array — those would incorrectly pop the PairInvite modal for the
+    // sender. Filter to invites addressed TO this user:
     //
-    // (Loose numeric / case-insensitive comparison — Xano sometimes returns
-    // id fields as strings, and emails are case-insensitive.)
+    //   - the invite_email matches the user's email, OR
+    //   - pairUserIDs has exactly 2 ids and the user is one of them
+    //     (both parties linked → it's a mutual record, not an email stub)
+    //
+    // AND exclude any invite where the user is the requester
+    // (requestFromId === user.id).
+    //
+    // Loose numeric / case-insensitive comparison — Xano sometimes returns
+    // id fields as strings, and emails are case-insensitive.
     const userIdNum = Number(user.id);
     const userEmail = (user.email ?? '').trim().toLowerCase();
 
     const pendingPairInvites = rawInvitePairs.filter((p) => {
       if (!p || typeof p !== 'object') return false;
 
+      // Hard exclude: if the user sent this invite, don't pop it.
+      const fromId = p.requestFromId != null ? Number(p.requestFromId) : NaN;
+      if (Number.isFinite(fromId) && fromId === userIdNum) return false;
+
       const inviteEmail = (p.invite_email ?? '').toString().trim().toLowerCase();
       const matchesEmail = !!userEmail && !!inviteEmail && inviteEmail === userEmail;
 
       const pairUserIDs = Array.isArray(p.pairUserIDs) ? p.pairUserIDs : [];
-      const matchesUserId =
+      const matchesByIds =
+        pairUserIDs.length === 2 &&
         Number.isFinite(userIdNum) &&
         pairUserIDs.some((id: unknown) => Number(id) === userIdNum);
 
-      return matchesEmail || matchesUserId;
+      return matchesEmail || matchesByIds;
     });
 
     logger.log('[AuthContext] Pairs response:', JSON.stringify({
