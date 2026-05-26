@@ -312,40 +312,36 @@ async function resolveGroupsPairsAndMHFR(user: User): Promise<User> {
     const rawInvitePairs = Array.isArray(data.invites) ? data.invites : [];
 
     // Pick out the **incoming** pair invites the current user can act on.
-    // The backend scopes `data.invites` to PENDING, but it also leaks
-    // outgoing invites (where the user is the requester) into the same
-    // array — those would incorrectly pop the PairInvite modal for the
-    // sender. Filter to invites addressed TO this user:
+    // Mirrors what the WeWeb client does, which is the source of truth for
+    // this filter:
     //
-    //   - the invite_email matches the user's email, OR
-    //   - pairUserIDs has exactly 2 ids and the user is one of them
-    //     (both parties linked → it's a mutual record, not an email stub)
+    //   Show an invite if `pairUserIDs` does NOT contain the current
+    //   user's id, AND there's at least one such invite to surface.
     //
-    // AND exclude any invite where the user is the requester
-    // (requestFromId === user.id).
+    // Why this single rule is enough:
+    //   - User self-invited (sender = recipient = me)
+    //     → pairUserIDs includes me → excluded ✓
+    //   - Someone else sent me an invite (I haven't accepted yet)
+    //     → pairUserIDs is [their_id] only → doesn't include me → shown ✓
+    //   - Email-based invite to a brand-new user (no user_id yet)
+    //     → pairUserIDs is [sender_id] only → doesn't include me → shown ✓
+    //   - I'm already accepted into the pair
+    //     → pairUserIDs is [me, them] → excludes ✓
     //
-    // Loose numeric / case-insensitive comparison — Xano sometimes returns
-    // id fields as strings, and emails are case-insensitive.
+    // The previous implementation also matched on `invite_email === user.email`,
+    // which incorrectly surfaced self-invites where the user invited their
+    // own email address (the email match short-circuited the
+    // requestFromId exclude).
+    //
+    // Loose numeric comparison — Xano sometimes returns id fields as
+    // strings, and `user.id` is stored as a string in the User type.
     const userIdNum = Number(user.id);
-    const userEmail = (user.email ?? '').trim().toLowerCase();
 
     const pendingPairInvites = rawInvitePairs.filter((p) => {
       if (!p || typeof p !== 'object') return false;
-
-      // Hard exclude: if the user sent this invite, don't pop it.
-      const fromId = p.requestFromId != null ? Number(p.requestFromId) : NaN;
-      if (Number.isFinite(fromId) && fromId === userIdNum) return false;
-
-      const inviteEmail = (p.invite_email ?? '').toString().trim().toLowerCase();
-      const matchesEmail = !!userEmail && !!inviteEmail && inviteEmail === userEmail;
-
       const pairUserIDs = Array.isArray(p.pairUserIDs) ? p.pairUserIDs : [];
-      const matchesByIds =
-        pairUserIDs.length === 2 &&
-        Number.isFinite(userIdNum) &&
-        pairUserIDs.some((id: unknown) => Number(id) === userIdNum);
-
-      return matchesEmail || matchesByIds;
+      const includesMe = pairUserIDs.some((id: unknown) => Number(id) === userIdNum);
+      return !includesMe;
     });
 
     logger.log('[AuthContext] Pairs response:', JSON.stringify({
