@@ -20,8 +20,11 @@ export const pair = {
   cancelRequest: (pairId: number) =>
     request<{ success: boolean }>('PATCH', '/pair/cancel_request_0', { pair_id: pairId }),
 
+  // Stop sharing with a pair. Canonical endpoint per the backend cleanup:
+  // POST /pair/remove_0 is being decommissioned in favour of REST-shaped
+  // DELETE /pair with the pair_id in the body.
   remove: (pairId: number) =>
-    request<XanoPair>('POST', '/pair/remove_0', { pair_id: pairId }),
+    request<XanoPair>('DELETE', '/pair', { pair_id: pairId }),
 };
 
 export const pairInvite = {
