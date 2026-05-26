@@ -12,13 +12,65 @@ import { useAuth } from '../../contexts/AuthContext';
 import { auth as authApi } from '../../api';
 import { logger } from '../../lib/logger';
 import { presentIntercom } from '../../lib/intercom';
-import { ChevronDown, Check, HelpCircle } from 'lucide-react-native';
+import { ChevronDown, Check, HelpCircle, Smartphone } from 'lucide-react-native';
 import * as Sentry from '@sentry/react-native';
+import Svg, { Rect } from 'react-native-svg';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
 import Button from '../../components/Button';
-import BottomSheet from '../../components/BottomSheet';
 import ModalPicker from '../../components/ModalPicker';
 import { COUNTRIES } from '../../constants/countries';
+
+/**
+ * The Microsoft 4-square logo, rendered as SVG so we don't pull in another
+ * dependency or asset just for one icon. Colours from the official MS
+ * identity guide.
+ */
+function MicrosoftIcon({ size = 20 }: { size?: number }) {
+  const half = size / 2;
+  const gap = Math.max(1, Math.round(size * 0.04));
+  const square = half - gap / 2;
+  return (
+    <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <Rect x={0} y={0} width={square} height={square} fill="#F25022" />
+      <Rect x={half + gap / 2} y={0} width={square} height={square} fill="#7FBA00" />
+      <Rect x={0} y={half + gap / 2} width={square} height={square} fill="#00A4EF" />
+      <Rect x={half + gap / 2} y={half + gap / 2} width={square} height={square} fill="#FFB900" />
+    </Svg>
+  );
+}
+
+/**
+ * A consistent OAuth/alternative-auth button (white background, soft border,
+ * brand icon on the left, label centred). Used for Microsoft + Mobile so they
+ * look like siblings; Apple uses Apple's native button with WHITE_OUTLINE so
+ * it matches the same surface treatment.
+ */
+function AuthProviderButton({
+  icon,
+  label,
+  onPress,
+  disabled,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <TouchableOpacity
+      style={[authButtonStyles.container, disabled && authButtonStyles.disabled]}
+      onPress={onPress}
+      disabled={disabled}
+      activeOpacity={0.7}
+    >
+      <View style={authButtonStyles.iconWrap}>{icon}</View>
+      <Text style={authButtonStyles.label}>{label}</Text>
+      {/* Right-side spacer matches iconWrap width so the label stays
+          visually centred between the two edges. */}
+      <View style={authButtonStyles.iconWrap} />
+    </TouchableOpacity>
+  );
+}
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -50,7 +102,6 @@ export default function AuthScreen() {
     const { login, signup, loginWithMicrosoft, loginWithApple, isLoading, error } = useAuth();
 
     const [forgotLoading, setForgotLoading] = useState(false);
-    const [otherSignInVisible, setOtherSignInVisible] = useState(false);
     const [checkingMigration, setCheckingMigration] = useState(false);
 
     const [appleAvailable, setAppleAvailable] = useState(false);
@@ -293,8 +344,6 @@ export default function AuthScreen() {
     const hasMobile = mode === 'login';
     const hasAlternativeSignIn = hasMicrosoft || hasApple || hasMobile;
 
-    const closeOtherSignIn = () => setOtherSignInVisible(false);
-
     return (
         <SafeAreaView style={styles.container}>
             <KeyboardAvoidingView
@@ -404,6 +453,48 @@ export default function AuthScreen() {
                             style={styles.mainButton}
                         />
 
+                        {hasAlternativeSignIn && (
+                            <>
+                                <View style={styles.dividerRow}>
+                                    <View style={styles.dividerLine} />
+                                    <Text style={styles.dividerText}>
+                                        Or {mode === 'login' ? 'sign in' : 'sign up'} with
+                                    </Text>
+                                    <View style={styles.dividerLine} />
+                                </View>
+
+                                {hasMicrosoft && (
+                                    <AuthProviderButton
+                                        icon={<MicrosoftIcon size={20} />}
+                                        label={mode === 'login' ? 'Sign in with Microsoft' : 'Sign up with Microsoft'}
+                                        onPress={handleMicrosoftLogin}
+                                    />
+                                )}
+
+                                {hasMobile && (
+                                    <AuthProviderButton
+                                        icon={<Smartphone size={20} color={colors.textPrimary} />}
+                                        label="Sign in with Mobile"
+                                        onPress={() => navigation.navigate('MobileSignIn')}
+                                    />
+                                )}
+
+                                {hasApple && (
+                                    <AppleAuthentication.AppleAuthenticationButton
+                                        buttonType={
+                                            mode === 'login'
+                                                ? AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
+                                                : AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP
+                                        }
+                                        buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                                        cornerRadius={borderRadius.button}
+                                        style={styles.appleButton}
+                                        onPress={handleAppleLogin}
+                                    />
+                                )}
+                            </>
+                        )}
+
                         {mode === 'signup' && (
                             <Text style={styles.legalText}>
                                 By signing up you agree to our{' '}
@@ -434,14 +525,6 @@ export default function AuthScreen() {
                                     : "Already have an account? Sign in"}
                             </Text>
                         </TouchableOpacity>
-
-                        {hasAlternativeSignIn && (
-                            <Button
-                                title={mode === 'login' ? 'Sign in another way' : 'Sign up another way'}
-                                onPress={() => setOtherSignInVisible(true)}
-                                variant="secondary"
-                            />
-                        )}
                     </View>
                 </ScrollView>
             </KeyboardAvoidingView>
@@ -465,61 +548,6 @@ export default function AuthScreen() {
                     setCountryPickerVisible(false);
                 }}
             />
-            <BottomSheet
-                visible={otherSignInVisible}
-                onDismiss={closeOtherSignIn}
-                title={mode === 'login' ? 'More ways to sign in' : 'More ways to sign up'}
-            >
-                {hasMicrosoft && (
-                    <Button
-                        title={mode === 'login' ? 'Sign in with Microsoft' : 'Sign up with Microsoft'}
-                        onPress={() => {
-                            closeOtherSignIn();
-                            handleMicrosoftLogin();
-                        }}
-                        variant="secondary"
-                        style={styles.sheetButton}
-                    />
-                )}
-
-                {hasMobile && (
-                    <Button
-                        title="Sign in with Mobile"
-                        onPress={() => {
-                            closeOtherSignIn();
-                            navigation.navigate('MobileSignIn');
-                        }}
-                        variant="secondary"
-                        style={styles.sheetButton}
-                    />
-                )}
-
-                {hasApple && (
-                    <AppleAuthentication.AppleAuthenticationButton
-                        buttonType={
-                            mode === 'login'
-                                ? AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
-                                : AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP
-                        }
-                        buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-                        cornerRadius={borderRadius.button}
-                        style={styles.sheetAppleButton}
-                        onPress={() => {
-                            closeOtherSignIn();
-                            handleAppleLogin();
-                        }}
-                    />
-                )}
-
-                <TouchableOpacity
-                    onPress={closeOtherSignIn}
-                    style={styles.sheetCancel}
-                    accessibilityRole="button"
-                    accessibilityLabel="Cancel"
-                >
-                    <Text style={styles.sheetCancelText}>Cancel</Text>
-                </TouchableOpacity>
-            </BottomSheet>
         </SafeAreaView>
     );
 }
@@ -547,10 +575,14 @@ const styles = StyleSheet.create({
     scrollContent: {
         flexGrow: 1,
         justifyContent: 'center',
-        padding: spacing.base,
+        // ~16px gutter on each side (mobile auth standard). Card adds
+        // vertical breathing room only — no horizontal padding so inputs
+        // span the full content width.
+        paddingHorizontal: spacing.base,
+        paddingVertical: spacing.lg,
     },
     card: {
-        padding: spacing.xl,
+        paddingVertical: spacing.lg,
         borderRadius: borderRadius.lg,
     },
     logo: {
@@ -588,7 +620,27 @@ const styles = StyleSheet.create({
         marginBottom: spacing.xl,
     },
     mainButton: {
+        marginBottom: spacing.lg,
+    },
+    dividerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
         marginBottom: spacing.base,
+    },
+    dividerLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: colors.borderLight,
+    },
+    dividerText: {
+        fontFamily: fonts.bodyMedium,
+        fontSize: fontSizes.sm,
+        color: colors.textMuted,
+        marginHorizontal: spacing.sm,
+    },
+    appleButton: {
+        height: 52,
+        marginBottom: spacing.sm,
     },
     forgotPasswordRow: {
         alignSelf: 'flex-end',
@@ -616,28 +668,11 @@ const styles = StyleSheet.create({
     },
     modeToggle: {
         alignItems: 'center',
-        marginBottom: spacing.xl,
+        marginTop: spacing.lg,
     },
     modeToggleText: {
         color: colors.primary,
         fontFamily: fonts.bodySemiBold,
-        fontSize: fontSizes.sm,
-    },
-    sheetButton: {
-        marginBottom: spacing.base,
-    },
-    sheetAppleButton: {
-        height: 48,
-        marginBottom: spacing.base,
-    },
-    sheetCancel: {
-        alignItems: 'center',
-        paddingVertical: spacing.sm,
-        marginTop: spacing.xs,
-    },
-    sheetCancelText: {
-        color: colors.textMuted,
-        fontFamily: fonts.bodyMedium,
         fontSize: fontSizes.sm,
     },
     nameRow: {
@@ -697,4 +732,32 @@ const styles = StyleSheet.create({
     },
 });
 
-
+const authButtonStyles = StyleSheet.create({
+    container: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        height: 52,
+        paddingHorizontal: spacing.base,
+        backgroundColor: colors.surface,
+        borderRadius: borderRadius.button,
+        borderWidth: 1,
+        borderColor: colors.border,
+        marginBottom: spacing.sm,
+    },
+    disabled: {
+        opacity: 0.5,
+    },
+    iconWrap: {
+        width: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    label: {
+        flex: 1,
+        textAlign: 'center',
+        fontFamily: fonts.bodySemiBold,
+        fontSize: fontSizes.base,
+        color: colors.textPrimary,
+    },
+});
