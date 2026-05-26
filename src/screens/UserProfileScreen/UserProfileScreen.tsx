@@ -12,7 +12,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePairs } from '../../hooks/usePairs';
-import { user as xanoUser, XanoUser, runningStats as xanoRunningStats } from '../../api';
+import { user as xanoUser, XanoUser, XanoCoordinateCount, runningStats as xanoRunningStats } from '../../api';
 import { ArrowLeft, MoreVertical } from 'lucide-react-native';
 import { RootStackParamList } from '../../types/navigation';
 import CheckInWithUser from '../../components/CheckInWithUser';
@@ -137,7 +137,20 @@ export default function UserProfileScreen() {
   const rawCheckinData = useMemo(() => {
     if (pulsePeriod === '7 Days') return runningStats?.checkins_7day ?? [];
     if (pulsePeriod === '30 Days') return runningStats?.checkins30day ?? [];
-    return runningStats?.checkins_all_time ?? runningStats?.checkins30day ?? [];
+    // 'All Time' — the running_stats response doesn't have a
+    // `checkins_all_time` field. We derive it from `modeCheckInArray`,
+    // which carries all-time per-coordinate aggregates as entries with a
+    // real `coordinate_id` and an empty `xy`. (The xy-keyed entries with
+    // `coordinate_id === 0` are a separate bucketing the grid can't use.)
+    // Previously this fell back to `checkins30day` silently, which made
+    // the 30-Day and All-Time pills look identical.
+    const mode = runningStats?.modeCheckInArray ?? [];
+    return mode
+      .filter((e) => !!e.coordinate_id && e.coordinate_id > 0 && (e.xy ?? '') === '')
+      .map((e) => ({
+        coordinate_id: e.coordinate_id,
+        count: e.count ?? 0,
+      })) as XanoCoordinateCount[];
   }, [pulsePeriod, runningStats]);
 
   const { coordMap, densityData } = useCoordinateMapping(coordinates, rawCheckinData);
