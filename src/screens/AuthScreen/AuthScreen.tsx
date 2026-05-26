@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, Image } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, TextInput, StyleSheet, Alert, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, Image, Animated } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -378,8 +378,37 @@ export default function AuthScreen() {
         }
     }
 
-    const toggleMode = () => {
-        setMode(prev => prev === 'login' ? 'signup' : 'login');
+    // Subtle cross-fade when toggling between sign-in and sign-up so the
+    // user sees the screen change rather than the form fields silently
+    // swapping in place. Fade out (160ms) → flip mode → fade back in (200ms).
+    // Slight Y nudge gives the transition a feel of "panel swap" without
+    // being heavy.
+    const modeAnim = useRef(new Animated.Value(1)).current;
+    const toggleMode = useCallback(() => {
+        Animated.timing(modeAnim, {
+            toValue: 0,
+            duration: 160,
+            useNativeDriver: true,
+        }).start(() => {
+            setMode(prev => (prev === 'login' ? 'signup' : 'login'));
+            Animated.timing(modeAnim, {
+                toValue: 1,
+                duration: 200,
+                useNativeDriver: true,
+            }).start();
+        });
+    }, [modeAnim]);
+
+    const modeAnimStyle = {
+        opacity: modeAnim,
+        transform: [
+            {
+                translateY: modeAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [8, 0],
+                }),
+            },
+        ],
     };
 
     const hasMicrosoft = !!MICROSOFT_CLIENT_ID;
@@ -397,7 +426,7 @@ export default function AuthScreen() {
                     contentContainerStyle={styles.scrollContent}
                     keyboardShouldPersistTaps="handled"
                 >
-                    <View style={styles.card}>
+                    <Animated.View style={[styles.card, modeAnimStyle]}>
                         <Image
                             source={require('../../../assets/Logo.png')}
                             style={styles.logo}
@@ -477,19 +506,23 @@ export default function AuthScreen() {
                                     <View style={styles.dividerLine} />
                                 </View>
 
-                                {hasMicrosoft && (
-                                    <AuthProviderButton
-                                        icon={<MicrosoftIcon size={20} />}
-                                        label={mode === 'login' ? 'Sign in with Microsoft' : 'Sign up with Microsoft'}
-                                        onPress={handleMicrosoftLogin}
-                                    />
-                                )}
-
+                                {/* Order matters here. Mobile sign-in is the most
+                                    common alternative for our users, so it
+                                    leads. Microsoft second (work accounts).
+                                    Apple last (iOS-only, often a fallback). */}
                                 {hasMobile && (
                                     <AuthProviderButton
                                         icon={<Smartphone size={20} color={colors.textPrimary} />}
                                         label="Sign in with Mobile"
                                         onPress={() => navigation.navigate('MobileSignIn')}
+                                    />
+                                )}
+
+                                {hasMicrosoft && (
+                                    <AuthProviderButton
+                                        icon={<MicrosoftIcon size={20} />}
+                                        label={mode === 'login' ? 'Sign in with Microsoft' : 'Sign up with Microsoft'}
+                                        onPress={handleMicrosoftLogin}
                                     />
                                 )}
 
@@ -534,7 +567,7 @@ export default function AuthScreen() {
                                     : "Already have an account? Sign in"}
                             </Text>
                         </TouchableOpacity>
-                    </View>
+                    </Animated.View>
                 </ScrollView>
             </KeyboardAvoidingView>
             <TouchableOpacity

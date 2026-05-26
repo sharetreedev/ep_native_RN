@@ -62,6 +62,25 @@ export async function presentIntercom(): Promise<void> {
     }
     return;
   }
+  // Intercom requires a registered user (identified OR unidentified) before
+  // `present()` will actually show the messenger. AuthContext calls
+  // `loginUserWithUserAttributes` after sign-in, but the Help button on the
+  // AuthScreen / OnboardingScreen fires BEFORE that — without a session,
+  // `present()` silently does nothing and the button looks broken.
+  //
+  // Try to ensure there's at least an unidentified session before
+  // presenting. Calling `loginUnidentifiedUser` when an identified user
+  // is already logged in throws (it does NOT clobber the existing
+  // identified session); we swallow that error and proceed.
+  try {
+    await (Intercom as any).loginUnidentifiedUser();
+  } catch (e) {
+    // Most common cause: a user is already logged in. Fine to ignore.
+    logger.log(
+      '[Intercom] loginUnidentifiedUser skipped (likely already logged in):',
+      e instanceof Error ? e.message : e,
+    );
+  }
   try {
     await Intercom.present();
   } catch (e) {
