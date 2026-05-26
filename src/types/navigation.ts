@@ -11,6 +11,11 @@ export type RootStackParamList = {
     // Migration set-password flow (post-auth, gated by pendingPasswordSetup):
     MigrationWelcome: undefined;
     SetPassword: undefined;
+    // Shown after Apple sign-in for users whose record came back with no
+    // firstName (Apple suppresses fullName on every authorization after the
+    // first). Gated before Onboarding so the rest of the app can rely on a
+    // non-empty name.
+    AppleNameCapture: undefined;
     Onboarding: undefined;
     Main: undefined;
     CheckIn: {

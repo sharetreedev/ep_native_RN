@@ -11,6 +11,7 @@ import { RootStackParamList } from '../../types/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { auth as authApi } from '../../api';
 import { logger } from '../../lib/logger';
+import { readAppleNameCache, writeAppleNameCache } from '../../auth/appleNameCache';
 import { presentIntercom } from '../../lib/intercom';
 import { ChevronDown, Check, HelpCircle, Smartphone } from 'lucide-react-native';
 import * as Sentry from '@sentry/react-native';
@@ -289,12 +290,26 @@ export default function AuthScreen() {
                 return;
             }
 
+            // Apple only sends fullName on the FIRST authorization for this
+            // app — every later credential.fullName is null. Persist it
+            // immediately so a backend failure + retry doesn't lose it, and
+            // merge a previously-cached name back in when Apple sends none.
+            const credentialFirst = credential.fullName?.givenName ?? undefined;
+            const credentialLast = credential.fullName?.familyName ?? undefined;
+            if (credentialFirst || credentialLast) {
+                await writeAppleNameCache(credential.user, {
+                    firstName: credentialFirst,
+                    lastName: credentialLast,
+                });
+            }
+            const cachedName = await readAppleNameCache(credential.user);
+
             await loginWithApple({
                 identityToken: credential.identityToken,
                 rawNonce,
                 authorizationCode: credential.authorizationCode,
-                firstName: credential.fullName?.givenName,
-                lastName: credential.fullName?.familyName,
+                firstName: credentialFirst ?? cachedName?.firstName,
+                lastName: credentialLast ?? cachedName?.lastName,
                 email: credential.email,
                 appleUserId: credential.user,
             });

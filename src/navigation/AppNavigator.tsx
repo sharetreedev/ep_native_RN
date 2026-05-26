@@ -19,6 +19,7 @@ import AccountNotFoundScreen from '../screens/AccountNotFoundScreen/AccountNotFo
 import MigrationVerifyScreen from '../screens/MigrationVerifyScreen/MigrationVerifyScreen';
 import MigrationWelcomeScreen from '../screens/MigrationWelcomeScreen/MigrationWelcomeScreen';
 import SetPasswordScreen from '../screens/SetPasswordScreen/SetPasswordScreen';
+import AppleNameCaptureScreen from '../screens/AppleNameCaptureScreen/AppleNameCaptureScreen';
 import OnboardingScreen from '../screens/OnboardingScreen/OnboardingScreen';
 import CheckInScreen from '../screens/CheckInScreen/CheckInScreen';
 import DailyInsightScreen from '../screens/DailyInsightScreen/DailyInsightScreen';
@@ -67,10 +68,17 @@ export default function AppNavigator() {
     // re-run their effects when the navigator is finally usable.
     const [navReady, setNavReady] = useState(false);
 
-    // Determine the initial route for authenticated users
-    const needsOnboarding = isAuthenticated && !pendingPasswordSetup && !user?.onboardingComplete;
+    // Determine the initial route for authenticated users.
+    // Order of gates: pendingPasswordSetup > needsAppleNameCapture > needsOnboarding.
+    // Apple-name-capture sits before onboarding because the rest of the app
+    // (avatars, check-in attribution, pair invites) renders the user's name —
+    // if firstName is empty we'd ship initials of "" everywhere.
+    const needsAppleNameCapture =
+        isAuthenticated && !pendingPasswordSetup && !!user && !user.firstName;
+    const needsOnboarding =
+        isAuthenticated && !pendingPasswordSetup && !needsAppleNameCapture && !user?.onboardingComplete;
     const needsCheckIn =
-        isAuthenticated && !pendingPasswordSetup && user?.onboardingComplete && !hasCheckedInToday;
+        isAuthenticated && !pendingPasswordSetup && !needsAppleNameCapture && user?.onboardingComplete && !hasCheckedInToday;
 
     // Hand off a pending lesson (set during onboarding's course-enroll step)
     // to the Lessons screen as soon as the authed stack is mounted and ready.
@@ -107,7 +115,7 @@ export default function AppNavigator() {
     // the URL ourselves and dispatch a native React Navigation action so
     // the OS never sees it.
     const tryConsumePendingLink = useCallback(() => {
-        if (!isAuthenticated || needsOnboarding || isLoading || pendingPasswordSetup) return;
+        if (!isAuthenticated || needsOnboarding || needsAppleNameCapture || isLoading || pendingPasswordSetup) return;
         if (!peekPendingLink()) return;
         const ref = navRef.current;
         if (!ref?.isReady()) return;
@@ -139,7 +147,7 @@ export default function AppNavigator() {
 
             logger.warn('[AppNavigator] Pending deep link did not match a known route, ignoring:', { path, params });
         });
-    }, [isAuthenticated, needsOnboarding, isLoading, pendingPasswordSetup]);
+    }, [isAuthenticated, needsOnboarding, needsAppleNameCapture, isLoading, pendingPasswordSetup]);
 
     useEffect(() => {
         tryConsumePendingLesson();
@@ -203,12 +211,12 @@ export default function AppNavigator() {
             }}
         >
             <View style={styles.appContainer}>
-            {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && <MHFRBanner />}
-            {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && <PushPrimer />}
-            {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && <MyPulseV2Promo />}
-            {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && <PendingGroupInviteSheet sessionKey={user?.id} />}
-            {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && <PendingPairInviteTrigger sessionKey={user?.id} navRef={navRef} navReady={navReady} />}
-            {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && <NewMHFRSupportRequestSheet />}
+            {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && !needsAppleNameCapture && <MHFRBanner />}
+            {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && !needsAppleNameCapture && <PushPrimer />}
+            {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && !needsAppleNameCapture && <MyPulseV2Promo />}
+            {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && !needsAppleNameCapture && <PendingGroupInviteSheet sessionKey={user?.id} />}
+            {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && !needsAppleNameCapture && <PendingPairInviteTrigger sessionKey={user?.id} navRef={navRef} navReady={navReady} />}
+            {isAuthenticated && !needsOnboarding && !pendingPasswordSetup && !needsAppleNameCapture && <NewMHFRSupportRequestSheet />}
             <Stack.Navigator id="RootStack" screenOptions={{ headerShown: false }}>
                 {isAuthenticated ? (
                     pendingPasswordSetup ? (
@@ -224,6 +232,12 @@ export default function AppNavigator() {
                                 options={{ gestureEnabled: false }}
                             />
                         </>
+                    ) : needsAppleNameCapture ? (
+                        <Stack.Screen
+                            name="AppleNameCapture"
+                            component={AppleNameCaptureScreen}
+                            options={{ gestureEnabled: false }}
+                        />
                     ) : needsOnboarding ? (
                         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
                     ) : (
