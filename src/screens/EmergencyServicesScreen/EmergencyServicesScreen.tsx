@@ -6,8 +6,8 @@ import {
   TouchableOpacity,
   Linking,
   StyleSheet,
-  ActivityIndicator,
 } from 'react-native';
+import LoadingAnimation from '../../components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { ArrowLeft, Phone, ChevronRight, Users } from 'lucide-react-native';
@@ -143,7 +143,7 @@ export default function EmergencyServicesScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>MHFR</Text>
           {loadingMhfr ? (
-            <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.base }} />
+            <LoadingAnimation size={60} style={{ marginVertical: spacing.base }} />
           ) : mhfrContacts.length > 0 ? (
             mhfrContacts.map((c) => (
               <ContactCard

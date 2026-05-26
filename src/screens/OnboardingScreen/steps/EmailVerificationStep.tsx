@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, ScrollView, ActivityIndicator, Alert, Image, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Alert, Image, TouchableOpacity, StyleSheet } from 'react-native';
+import LoadingAnimation from '../../../components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft } from 'lucide-react-native';
 import { colors, spacing } from '../../../theme';
@@ -95,7 +96,7 @@ export default function EmailVerificationStep({
         <View style={styles.otpWrapper}>
           <OTPInput length={4} onComplete={handleCodeComplete} />
         </View>
-        {isSubmitting && <ActivityIndicator color={colors.primary} style={styles.spinner} />}
+        {isSubmitting && <LoadingAnimation size={60} style={styles.spinner} />}
         <Button
           title={cooldown > 0 ? `Resend Code (${cooldown}s)` : 'Resend Code'}
           variant="secondary"

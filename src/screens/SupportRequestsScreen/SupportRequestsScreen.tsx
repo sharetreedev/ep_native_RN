@@ -4,11 +4,11 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   RefreshControl,
   Image,
   StyleSheet,
 } from 'react-native';
+import LoadingAnimation from '../../components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -203,7 +203,7 @@ export default function SupportRequestsScreen() {
 
           {loading ? (
             <View style={styles.centered}>
-              <ActivityIndicator size="large" color={colors.primary} />
+              <LoadingAnimation />
             </View>
           ) : (
             <ScrollView

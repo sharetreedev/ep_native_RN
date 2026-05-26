@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, ScrollView, ActivityIndicator, Image, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Image, StyleSheet } from 'react-native';
+import LoadingAnimation from '../../../components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Markdown from 'react-native-markdown-display';
 import { colors, fonts, fontSizes, spacing, borderRadius } from '../../../theme';
@@ -37,7 +38,7 @@ export default function CourseEnrollmentStep({
         {renderHeader()}
 
         {isLoading ? (
-          <ActivityIndicator color={colors.primary} style={styles.spinner} />
+          <LoadingAnimation size={60} style={styles.spinner} />
         ) : nextCourse ? (
           <View style={courseStyles.card}>
             <Text style={courseStyles.label}>Mini Courses</Text>

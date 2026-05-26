@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import LoadingAnimation from './LoadingAnimation';
 import BottomSheet from './BottomSheet';
 import Avatar from './Avatar';
 import { useAuth } from '../contexts/AuthContext';
@@ -148,7 +149,7 @@ function SingleInvite({
         You've been invited to join <Text style={styles.headlineEmphasis}>{name}</Text>
       </Text>
       {busy ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.base }} />
+        <LoadingAnimation size={60} style={{ marginTop: spacing.base }} />
       ) : (
         <View style={styles.singleActions}>
           <TouchableOpacity style={[styles.btn, styles.declineBtn]} onPress={onDecline} activeOpacity={0.7}>
@@ -189,7 +190,7 @@ function InviteRow({
         </View>
       </View>
       {busy ? (
-        <ActivityIndicator color={colors.primary} />
+        <LoadingAnimation size={60} />
       ) : (
         <View style={styles.rowActions}>
           <TouchableOpacity style={[styles.btn, styles.btnSm, styles.declineBtn]} onPress={onDecline} activeOpacity={0.7}>

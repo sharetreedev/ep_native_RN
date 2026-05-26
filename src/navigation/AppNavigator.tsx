@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as Linking from 'expo-linking';
@@ -52,6 +52,7 @@ import PushPrimer from '../components/PushPrimer';
 import MyPulseV2Promo from '../components/MyPulseV2Promo';
 import PendingGroupInviteSheet from '../components/PendingGroupInviteSheet';
 import PendingPairInviteTrigger from '../components/PendingPairInviteTrigger';
+import LoadingAnimation from '../components/LoadingAnimation';
 import NewMHFRSupportRequestSheet from '../components/NewMHFRSupportRequestSheet';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -177,7 +178,7 @@ export default function AppNavigator() {
     if (isLoading) {
         return (
             <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={colors.primary} />
+                <LoadingAnimation />
             </View>
         );
     }

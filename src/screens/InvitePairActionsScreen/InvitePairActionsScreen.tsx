@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Share,
 } from 'react-native';
+import LoadingAnimation from '../../components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp, CommonActions } from '@react-navigation/native';
 import { ArrowLeft, Link, Share2, Mail } from 'lucide-react-native';
@@ -150,7 +151,7 @@ export default function InvitePairActionsScreen() {
 
   const renderLoading = () => (
     <View style={styles.loadingRow}>
-      <ActivityIndicator color={colors.primary} />
+      <LoadingAnimation size={60} />
       <Text style={styles.loadingText}>Generating your invite link…</Text>
     </View>
   );

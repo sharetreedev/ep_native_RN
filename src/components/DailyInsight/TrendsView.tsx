@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import LoadingAnimation from '../LoadingAnimation';
 import { XanoRunningStats } from '../../api';
 import { useEmotionStates } from '../../hooks/useEmotionStates';
 import { getDirectionIcon } from '../../utils/getDirectionIcon';
@@ -46,7 +47,7 @@ export default function TrendsView({ stats, isLoading }: TrendsViewProps) {
   if (isLoading) {
     return (
       <View style={styles.loading}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <LoadingAnimation />
       </View>
     );
   }

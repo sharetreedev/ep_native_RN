@@ -389,7 +389,6 @@ export default function PairInviteScreen() {
           <Text style={styles.successBody}>
             You and {inviterName} are now paired. Taking you home...
           </Text>
-          <LoadingAnimation size={60} style={{ marginTop: 24 }} />
         </View>
       </SafeAreaView>
     );

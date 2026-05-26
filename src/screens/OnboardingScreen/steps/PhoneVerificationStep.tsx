@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, ScrollView, ActivityIndicator, Alert, Image } from 'react-native';
+import { View, Text, ScrollView, Alert, Image } from 'react-native';
+import LoadingAnimation from '../../../components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../../theme';
 import Button from '../../../components/Button';
@@ -68,7 +69,7 @@ export default function PhoneVerificationStep({
         <View style={styles.otpWrapper}>
           <OTPInput length={4} onComplete={handleCodeComplete} />
         </View>
-        {isSubmitting && <ActivityIndicator color={colors.primary} style={styles.spinner} />}
+        {isSubmitting && <LoadingAnimation size={60} style={styles.spinner} />}
         <Button
           title={cooldown > 0 ? `Resend Code (${cooldown}s)` : 'Resend Code'}
           variant="secondary"

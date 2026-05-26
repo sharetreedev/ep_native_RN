@@ -4,10 +4,10 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  ActivityIndicator,
   Animated,
   StyleSheet,
 } from 'react-native';
+import LoadingAnimation from '../../components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ChevronLeft } from 'lucide-react-native';
@@ -239,7 +239,7 @@ export default function DailyInsightScreen({ navigation, route }: Props) {
     return (
       <SafeAreaView style={styles.container} edges={safeEdges}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <LoadingAnimation />
         </View>
       </SafeAreaView>
     );
@@ -294,7 +294,7 @@ export default function DailyInsightScreen({ navigation, route }: Props) {
                 modeEmotionColour={modeEmotionColour}
               />
             ) : runningStatsHook.isLoading ? (
-              <ActivityIndicator size="large" color={colors.primary} />
+              <LoadingAnimation />
             ) : null
           )}
           {step === 'pairs' && (

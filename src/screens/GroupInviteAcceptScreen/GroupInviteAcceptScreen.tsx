@@ -273,7 +273,6 @@ export default function GroupInviteAcceptScreen() {
           <Text style={styles.successBody}>
             You're now a member. Taking you home...
           </Text>
-          <LoadingAnimation size={60} style={{ marginTop: 24 }} />
         </View>
       </SafeAreaView>
     );

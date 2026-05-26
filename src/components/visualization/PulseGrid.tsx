@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { View, Pressable, ActivityIndicator, Dimensions } from 'react-native';
+import { View, Pressable, Dimensions } from 'react-native';
+import LoadingAnimation from '../LoadingAnimation';
 import { Emotion } from './emotions';
 import EmotionSquare from './EmotionSquare';
 import { useEmotionStates, MappedEmotion } from '../../hooks/useEmotionStates';
@@ -51,7 +52,7 @@ export default function PulseGrid({
   if (isLoading) {
     return (
       <View className="flex-1 justify-center items-center h-[380px]">
-        <ActivityIndicator size="large" color={colors.primary} />
+        <LoadingAnimation />
       </View>
     );
   }

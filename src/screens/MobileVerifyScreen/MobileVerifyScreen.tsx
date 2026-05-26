@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, Alert, ScrollView, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, Alert, ScrollView, Image } from 'react-native';
+import LoadingAnimation from '../../components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RouteProp, useRoute } from '@react-navigation/native';
 import { RootStackParamList } from '../../types/navigation';
@@ -63,7 +64,7 @@ export default function MobileVerifyScreen() {
             <OTPInput length={4} onComplete={handleCodeComplete} />
           </View>
 
-          {isVerifying && <ActivityIndicator color={colors.primary} style={styles.spinner} />}
+          {isVerifying && <LoadingAnimation size={60} style={styles.spinner} />}
 
           <Button
             title="Resend Code"

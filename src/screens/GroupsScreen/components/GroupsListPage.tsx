@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import LoadingAnimation from '../../../components/LoadingAnimation';
 import { ChevronUp } from 'lucide-react-native';
 import Avatar from '../../../components/Avatar';
 import ProfileTabs from '../../../components/ProfileTabs';
@@ -180,7 +181,7 @@ export default function GroupsListPage({
                   </View>
                   <View style={styles.inviteActions}>
                     {busy ? (
-                      <ActivityIndicator color={colors.primary} />
+                      <LoadingAnimation size={60} />
                     ) : (
                       <>
                         <TouchableOpacity
