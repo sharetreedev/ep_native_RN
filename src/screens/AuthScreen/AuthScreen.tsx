@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, Alert, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, Image } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as AuthSession from 'expo-auth-session';
@@ -103,6 +103,7 @@ export default function AuthScreen() {
 
     const [forgotLoading, setForgotLoading] = useState(false);
     const [checkingMigration, setCheckingMigration] = useState(false);
+    const insets = useSafeAreaInsets();
 
     const [appleAvailable, setAppleAvailable] = useState(false);
     useEffect(() => {
@@ -529,7 +530,7 @@ export default function AuthScreen() {
                 </ScrollView>
             </KeyboardAvoidingView>
             <TouchableOpacity
-                style={styles.helpButton}
+                style={[styles.helpButton, { top: insets.top + spacing.xs }]}
                 onPress={presentIntercom}
                 accessibilityRole="button"
                 accessibilityLabel="Get help"
@@ -558,8 +559,12 @@ const styles = StyleSheet.create({
         backgroundColor: colors.background,
     },
     helpButton: {
+        // `top` is set inline using `insets.top + spacing.xs` so the button
+        // sits below the iPhone notch / Android status bar instead of being
+        // clipped by it. SafeAreaView applies the inset as padding to itself,
+        // but absolutely-positioned children are still positioned relative
+        // to the SafeAreaView's outer border, not the inset content area.
         position: 'absolute',
-        top: spacing.base,
         right: spacing.base,
         flexDirection: 'row',
         alignItems: 'center',
