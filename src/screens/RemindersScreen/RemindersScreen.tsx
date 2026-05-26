@@ -52,7 +52,7 @@ export default function RemindersScreen() {
   const safeEdges = useSafeEdges(['top']);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user, refreshUser } = useAuth();
-  const { updateReminderSettings, isLoading } = useUser();
+  const { updateProfile, isLoading } = useUser();
   const { fetchAll: fetchGroups } = useGroups();
 
   // Determine if user already has custom settings
@@ -107,12 +107,12 @@ export default function RemindersScreen() {
               ? [0, 1, 2, 3, 4, 5, 6]
               : [];
 
-      await updateReminderSettings({
-        frequency: finalFrequency,
-        days,
-        hour: isCustom ? selectedHour : 0,
-        min: 0,
-        is_custom: isCustom,
+      await updateProfile({
+        reminder_frequency: finalFrequency,
+        reminder_day: days,
+        reminder_hour: isCustom ? selectedHour : 0,
+        reminder_min: 0,
+        set_custom_user_reminder: isCustom,
       });
       await refreshUser();
       Alert.alert('Success', 'Reminder settings saved.');

@@ -204,7 +204,7 @@ function getTimezone(): string {
 
 async function syncLastSeen(): Promise<void> {
   try {
-    await xanoUserApi.updateLastSeen(getTimezone());
+    await xanoUserApi.updateProfile({ timezone: getTimezone() });
   } catch (e) {
     logger.warn('[AuthContext] Failed to update last seen:', e);
   }
@@ -218,23 +218,10 @@ async function syncLastSeen(): Promise<void> {
 async function ensureProfileHexColour(user: User): Promise<User> {
   if (user.avatarUrl || user.profileHexColour) return user;
   const picked = pickRandomProfileHex();
-  // PATCH endpoint requires first_name/last_name/phone_number/country/full_name
-  // even on partial updates, so we resend existing values alongside the hex.
-  // SSO users without a complete profile fall through with an in-memory hex
-  // only — they'll re-roll until onboarding fills in the required fields.
-  if (user.firstName && user.lastName && user.phoneNumber && user.country && user.name) {
-    try {
-      await xanoUserApi.updateProfile({
-        first_name: user.firstName,
-        last_name: user.lastName,
-        phone_number: user.phoneNumber,
-        country: user.country,
-        full_name: user.name,
-        profile_hex_colour: picked,
-      });
-    } catch (e) {
-      logger.warn('[AuthContext] Failed to persist profile_hex_colour:', e);
-    }
+  try {
+    await xanoUserApi.updateProfile({ profile_hex_colour: picked });
+  } catch (e) {
+    logger.warn('[AuthContext] Failed to persist profile_hex_colour:', e);
   }
   return { ...user, profileHexColour: picked };
 }

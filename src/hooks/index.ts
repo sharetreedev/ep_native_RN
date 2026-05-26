@@ -22,7 +22,6 @@ export * from './useGroupProfile';
 export * from './useGroups';
 export * from './useMyPulseVersion';
 export * from './useNotifications';
-export * from './useOnboarding';
 export * from './usePairs';
 export * from './useQuickCheckIn';
 export * from './useReduceMotion';

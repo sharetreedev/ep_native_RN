@@ -11,15 +11,5 @@ export function useUserSettings() {
   const updatePhoneNumber = useCallback((phoneNumber: string, countryIso: string) =>
     wrap(() => xanoUser.updatePhoneNumber(phoneNumber, countryIso)), [wrap]);
 
-  const updateReminderSettings = useCallback(async (settings: {
-    frequency: string;
-    days: number[];
-    hour: number;
-    min: number;
-    is_custom: boolean;
-  }) => {
-    return wrap(() => xanoUser.updateReminderSettings(settings));
-  }, [wrap]);
-
-  return { isLoading, error, engagementScore, updatePhoneNumber, updateReminderSettings };
+  return { isLoading, error, engagementScore, updatePhoneNumber };
 }

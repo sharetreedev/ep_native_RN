@@ -13,28 +13,29 @@ export function useUserProfile() {
   }, [wrap]);
 
   const updateProfile = useCallback(async (fields: {
-    first_name?: string;
-    last_name?: string;
-    phone_number?: string;
+    firstName?: string;
+    lastName?: string;
+    phoneNumber?: string;
     country?: string;
-    full_name?: string;
+    fullName?: string;
     profile_hex_colour?: string;
+    timezone?: string;
+    emailVerified?: boolean;
+    phoneVerified?: boolean;
+    intro_slides_seen?: boolean;
+    seen_trend_card?: boolean;
+    onboarding_complete?: boolean;
+    reminder_frequency?: string;
+    reminder_hour?: number;
+    reminder_min?: number;
+    reminder_day?: number[];
+    set_custom_user_reminder?: boolean;
+    profilePicFile?: { uri: string; name?: string; type?: string };
   }) => {
     const data = await wrap(() => xanoUser.updateProfile(fields));
     if (data) setProfile(data);
     return data;
   }, [wrap]);
 
-  const updateProfilePic = useCallback(async (profilePicUri: string) => {
-    const data = await wrap(() => xanoUser.updateProfilePic(profilePicUri));
-    if (data) setProfile(data);
-    return data;
-  }, [wrap]);
-
-  const updateLastSeen = useCallback(async (timezone: string) => {
-    const data = await wrap(() => xanoUser.updateLastSeen(timezone));
-    if (data) setProfile(data);
-  }, [wrap]);
-
-  return { profile, isLoading, error, viewUser, updateProfile, updateProfilePic, updateLastSeen };
+  return { profile, isLoading, error, viewUser, updateProfile };
 }

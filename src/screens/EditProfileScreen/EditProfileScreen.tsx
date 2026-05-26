@@ -31,7 +31,7 @@ export default function EditProfileScreen() {
   const safeEdges = useSafeEdges(['top']);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user, refreshUser } = useAuth();
-  const { updateProfile, updateProfilePic, isLoading } = useUser();
+  const { updateProfile, isLoading } = useUser();
 
   const [firstName, setFirstName] = useState(user?.firstName || '');
   const [lastName, setLastName] = useState(user?.lastName || '');
@@ -61,20 +61,13 @@ export default function EditProfileScreen() {
     try {
       const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ');
       await updateProfile({
-        first_name: firstName.trim(),
-        last_name: lastName.trim(),
-        full_name: fullName,
-        phone_number: phone.trim(),
-        country: country,
-        // Required-on-PATCH by Xano even though we're not changing it here.
-        // Falls back to empty string for users who somehow have no hex yet,
-        // which the server will accept (the field is required-present, not
-        // required-non-empty).
-        profile_hex_colour: user?.profileHexColour || '',
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        fullName,
+        phoneNumber: phone.trim(),
+        country,
+        ...(avatarFileUri ? { profilePicFile: { uri: avatarFileUri } } : {}),
       });
-      if (avatarFileUri) {
-        await updateProfilePic(avatarFileUri);
-      }
       await refreshUser();
       Alert.alert('Success', 'Profile updated successfully.');
       navigation.goBack();

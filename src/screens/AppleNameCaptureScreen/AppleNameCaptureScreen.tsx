@@ -20,8 +20,6 @@ import { colors, fonts, fontSizes, spacing, borderRadius } from '../../theme';
 import Avatar from '../../components/Avatar';
 import ModalPicker from '../../components/ModalPicker';
 import { COUNTRIES } from '../../constants/countries';
-import { pickRandomProfileHex } from '../../lib/profileColours';
-
 const appLogo = require('../../../assets/Logo.png');
 
 // Shown after Apple sign-in when the user record has no firstName. This
@@ -33,7 +31,7 @@ const appLogo = require('../../../assets/Logo.png');
 export default function AppleNameCaptureScreen() {
   useScreenAnnouncement('Tell us your name');
   const { user, refreshUser } = useAuth();
-  const { updateProfile, updateProfilePic } = useUser();
+  const { updateProfile } = useUser();
 
   const [firstName, setFirstName] = useState(user?.firstName ?? '');
   const [lastName, setLastName] = useState(user?.lastName ?? '');
@@ -67,32 +65,12 @@ export default function AppleNameCaptureScreen() {
     try {
       const fullName = [trimmedFirst, trimmedLast].filter(Boolean).join(' ');
       await updateProfile({
-        first_name: trimmedFirst,
-        last_name: trimmedLast,
-        full_name: fullName,
-        // Xano `/user/update/profile` rejects empty values for `country` and
-        // `profile_hex_colour` (treats `""` as "Missing param"). Country is
-        // collected here via the picker. The hex usually comes from
-        // `ensureProfileHexColour` post-auth, but we fall back to a fresh
-        // pick so the PATCH can't 400 even if that side-effect hasn't
-        // propagated yet. `phone_number` is allowed empty and is captured
-        // later by Onboarding's phone-verify step.
-        phone_number: user?.phoneNumber ?? '',
+        firstName: trimmedFirst,
+        lastName: trimmedLast,
+        fullName,
         country,
-        profile_hex_colour: user?.profileHexColour || pickRandomProfileHex(),
+        ...(avatarFileUri ? { profilePicFile: { uri: avatarFileUri } } : {}),
       });
-      // Best-effort avatar upload — name is the load-bearing gate field, so
-      // a picture failure shouldn't block the user from proceeding.
-      if (avatarFileUri) {
-        try {
-          await updateProfilePic(avatarFileUri);
-        } catch {
-          Alert.alert(
-            'Photo didn’t upload',
-            'We saved your name but couldn’t upload your photo. You can add it later from your profile.',
-          );
-        }
-      }
       await refreshUser();
     } catch {
       Alert.alert(

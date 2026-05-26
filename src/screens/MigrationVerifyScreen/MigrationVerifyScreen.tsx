@@ -4,7 +4,7 @@ import LoadingAnimation from '../../components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RouteProp, useRoute } from '@react-navigation/native';
 import { RootStackParamList } from '../../types/navigation';
-import { auth as xanoAuth, onboarding, tokenStore } from '../../api';
+import { auth as xanoAuth, user as xanoUser, tokenStore } from '../../api';
 import { useAuth } from '../../contexts/AuthContext';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
 import Button from '../../components/Button';
@@ -58,7 +58,7 @@ export default function MigrationVerifyScreen() {
           // the backend re-syncs. allSettled so one failure can't drop the
           // other.
           const markers = await Promise.allSettled([
-            onboarding.emailVerified(),
+            xanoUser.updateProfile({ emailVerified: true }),
             xanoAuth.awsSynced(),
           ]);
           markers.forEach((m, i) => {

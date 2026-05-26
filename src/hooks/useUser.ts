@@ -11,34 +11,37 @@ interface UseUserResult {
   searchInGroups: (searchText: string) => Promise<XanoUser[]>;
   getTop4Mhfr: () => Promise<XanoUser[]>;
   engagementScore: () => Promise<unknown>;
-  updateLastSeen: (timezone: string) => Promise<void>;
   updatePhoneNumber: (phoneNumber: string, countryIso: string) => Promise<{
     result1: unknown;
     is_existing_user: boolean | string;
     existing_user_id: number | string;
   } | null>;
-  updateReminderSettings: (settings: {
-    frequency: string;
-    days: number[];
-    hour: number;
-    min: number;
-    is_custom: boolean;
-  }) => Promise<XanoUser | null>;
   updateProfile: (fields: {
-    first_name?: string;
-    last_name?: string;
-    phone_number?: string;
+    firstName?: string;
+    lastName?: string;
+    phoneNumber?: string;
     country?: string;
-    full_name?: string;
+    fullName?: string;
     profile_hex_colour?: string;
+    timezone?: string;
+    emailVerified?: boolean;
+    phoneVerified?: boolean;
+    intro_slides_seen?: boolean;
+    seen_trend_card?: boolean;
+    onboarding_complete?: boolean;
+    reminder_frequency?: string;
+    reminder_hour?: number;
+    reminder_min?: number;
+    reminder_day?: number[];
+    set_custom_user_reminder?: boolean;
+    profilePicFile?: { uri: string; name?: string; type?: string };
   }) => Promise<XanoUser | null>;
-  updateProfilePic: (profilePicUri: string) => Promise<XanoUser | null>;
 }
 
 export function useUser(): UseUserResult {
-  const { profile, isLoading: profileLoading, error: profileError, viewUser, updateProfile, updateProfilePic, updateLastSeen } = useUserProfile();
+  const { profile, isLoading: profileLoading, error: profileError, viewUser, updateProfile } = useUserProfile();
   const { searchInGroups, getTop4Mhfr } = useUserSearch();
-  const { engagementScore, updatePhoneNumber, updateReminderSettings } = useUserSettings();
+  const { engagementScore, updatePhoneNumber } = useUserSettings();
 
   return {
     profile,
@@ -48,10 +51,7 @@ export function useUser(): UseUserResult {
     searchInGroups,
     getTop4Mhfr,
     engagementScore,
-    updateLastSeen,
     updatePhoneNumber,
-    updateReminderSettings,
     updateProfile,
-    updateProfilePic,
   };
 }

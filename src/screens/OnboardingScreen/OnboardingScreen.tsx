@@ -7,7 +7,6 @@ import { trackOnboardingCompleted } from '../../lib/analyticsEvents';
 import { colors, fonts, fontSizes, spacing } from '../../theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCheckIn } from '../../contexts/CheckInContext';
-import { useOnboarding } from '../../hooks/useOnboarding';
 import { useCourses } from '../../hooks/useCourses';
 import { useCheckIns } from '../../hooks/useCheckIns';
 import { useEmotionStates } from '../../hooks/useEmotionStates';
@@ -38,7 +37,6 @@ type OnboardingStep =
 export default function OnboardingScreen() {
   const { user, refreshUser, logout } = useAuth();
   const { markCheckedInToday } = useCheckIn();
-  const onboarding = useOnboarding();
   const { emotionStates } = useEmotionStates();
   const { createCheckIn } = useCheckIns();
   const coursesHook = useCourses();
@@ -71,7 +69,7 @@ export default function OnboardingScreen() {
   const handleEmailVerified = useCallback(async () => {
     setIsSubmitting(true);
     try {
-      await onboarding.markEmailVerified();
+      await xanoUser.updateProfile({ emailVerified: true });
       await refreshUser();
       setStep('phone_entry');
     } catch {
@@ -79,7 +77,7 @@ export default function OnboardingScreen() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [onboarding, refreshUser]);
+  }, [refreshUser]);
 
   // ── Phone Entry ─────────────────────────────────────────────────────
   const handlePhoneSubmit = useCallback(async (phone: string, countryCode: string, countryIso: string) => {
@@ -119,7 +117,7 @@ export default function OnboardingScreen() {
     }
     setIsSubmitting(true);
     try {
-      await onboarding.markPhoneVerified();
+      await xanoUser.updateProfile({ phoneVerified: true });
       await refreshUser();
       setStep('intro_slides');
     } catch {
@@ -127,7 +125,7 @@ export default function OnboardingScreen() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [onboarding, refreshUser, mergeExistingUserId]);
+  }, [refreshUser, mergeExistingUserId]);
 
   // ── Merge Accounts ──────────────────────────────────────────────────
   const handleMergeAccounts = useCallback(async () => {
@@ -178,9 +176,9 @@ export default function OnboardingScreen() {
       }
       return;
     }
-    await onboarding.markIntroSlidesSeen();
+    await xanoUser.updateProfile({ intro_slides_seen: true });
     setStep('first_checkin');
-  }, [cameFromMerge, onboarding, refreshUser]);
+  }, [cameFromMerge, refreshUser]);
 
   // ── First Check-In ──────────────────────────────────────────────────
   // Both check-in views confirm the emotion before this callback fires —
@@ -204,8 +202,8 @@ export default function OnboardingScreen() {
   // OS push permission prompt. The step renders group/default settings if
   // the user belongs to a group; otherwise the default schedule is shown.
   const handleReminderSetupComplete = useCallback(async () => {
-    // Refresh so the user object reflects any reminder fields written by
-    // /user/update_reminder_settings before downstream steps read them.
+    // Refresh so the user object reflects any reminder fields written in
+    // the previous step before downstream steps read them.
     await refreshUser();
     setStep('course_enrollment');
   }, [refreshUser]);
@@ -230,8 +228,7 @@ export default function OnboardingScreen() {
         const { next_lesson } = await xanoCourses.enroll(Number(user?.id), Number(courseId));
         if (next_lesson) await setPendingLesson(next_lesson);
       }
-      await onboarding.markCourseEnrollmentSeen(Number(user?.id));
-      await onboarding.markComplete();
+      await xanoUser.updateProfile({ onboarding_complete: true });
       trackOnboardingCompleted(); // spec: no properties
       await refreshUser();
     } catch {
@@ -239,13 +236,12 @@ export default function OnboardingScreen() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [onboarding, user?.id, refreshUser, coursesHook.nextCourse]);
+  }, [user?.id, refreshUser, coursesHook.nextCourse]);
 
   const handleSkipCourse = useCallback(async () => {
     setIsSubmitting(true);
     try {
-      await onboarding.markCourseEnrollmentSeen(Number(user?.id));
-      await onboarding.markComplete();
+      await xanoUser.updateProfile({ onboarding_complete: true });
       trackOnboardingCompleted(); // spec: no properties
       await refreshUser();
     } catch {
@@ -253,7 +249,7 @@ export default function OnboardingScreen() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [onboarding, user?.id, refreshUser]);
+  }, [refreshUser]);
 
   // ── Render ──────────────────────────────────────────────────────────
 

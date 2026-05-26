@@ -57,7 +57,7 @@ interface ReminderSetupStepProps {
 
 export default function ReminderSetupStep({ onComplete, isSubmitting }: ReminderSetupStepProps) {
   const { user } = useAuth();
-  const { updateReminderSettings, isLoading } = useUser();
+  const { updateProfile, isLoading } = useUser();
 
   // Effective baseline — user override, falling through to group, then default.
   // Used to pre-populate the form and surface the "Using your team's schedule"
@@ -103,12 +103,12 @@ export default function ReminderSetupStep({ onComplete, isSubmitting }: Reminder
               ? [0, 1, 2, 3, 4, 5, 6]
               : [];
 
-      await updateReminderSettings({
-        frequency: finalFrequency,
-        days,
-        hour: isCustom ? selectedHour : 0,
-        min: 0,
-        is_custom: isCustom,
+      await updateProfile({
+        reminder_frequency: finalFrequency,
+        reminder_day: days,
+        reminder_hour: isCustom ? selectedHour : 0,
+        reminder_min: 0,
+        set_custom_user_reminder: isCustom,
       });
 
       // Now ask for OS push permission so the schedule actually fires.
@@ -133,7 +133,7 @@ export default function ReminderSetupStep({ onComplete, isSubmitting }: Reminder
     frequency,
     selectedDay,
     selectedHour,
-    updateReminderSettings,
+    updateProfile,
     onComplete,
   ]);
 
