@@ -13,9 +13,9 @@
     "ota:production": "./scripts/ota.sh production",
     "ota:preview": "./scripts/ota.sh preview",
     "ota:development": "./scripts/ota.sh development",
-    "build:production": "eas build --platform all --profile production --auto-submit",
-    "build:preview": "eas build --platform all --profile preview",
-    "build:development": "eas build --platform all --profile development",
+    "build:production": "npx --yes eas-cli@latest build --platform all --profile production --auto-submit",
+    "build:preview": "npx --yes eas-cli@latest build --platform all --profile preview",
+    "build:development": "npx --yes eas-cli@latest build --platform all --profile development",
     "gen:api": "curl -fsS 'https://xdny-scc5-yag9.a2.xano.io/apispec:LmTnxskw?type=json&token=3lKoCp191zBYPWYomHeFnV_wJpU' | node -e 'process.stdout.write(JSON.stringify(JSON.parse(require(\"fs\").readFileSync(0,\"utf8\")),null,2))' > docs/xano-api.json && openapi-typescript docs/xano-api.json -o src/api/xano-schema.d.ts"
   },
   "jest": {
