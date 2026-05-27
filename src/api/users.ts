@@ -25,9 +25,11 @@ export const user = {
 
   // PATCH /user/update/profile is a "patch by keys present" endpoint — only
   // the fields you pass are touched. Pass `profilePicFile` to swap the
-  // avatar in the same call (the request switches to multipart so Xano gets
-  // the raw bytes and stores them as a file resource on `Profile_Pic_File`).
-  updateProfile: (fields: {
+  // avatar; we send the binary in a separate multipart PATCH because Xano's
+  // script reads scalar fields via `util.get_raw_input(encoding="json")`,
+  // which doesn't parse multipart bodies — so sending both at once leaves
+  // the name fields unpatched while the pic uploads fine.
+  updateProfile: async (fields: {
     firstName?: string;
     lastName?: string;
     phoneNumber?: string;
@@ -48,6 +50,12 @@ export const user = {
     profilePicFile?: { uri: string; name?: string; type?: string };
   }) => {
     const { profilePicFile, ...jsonFields } = fields;
+    let result: XanoUser | undefined;
+    if (Object.keys(jsonFields).length > 0) {
+      result = await request<XanoUser>(
+        'PATCH', '/user/update/profile', jsonFields as Record<string, unknown>,
+      );
+    }
     if (profilePicFile) {
       const formData = new FormData();
       const ext = profilePicFile.uri.split('.').pop()?.split(';')[0]?.toLowerCase() || 'jpeg';
@@ -57,13 +65,9 @@ export const user = {
         type: mime,
         name: profilePicFile.name ?? `profile.${ext}`,
       } as any);
-      for (const [k, v] of Object.entries(jsonFields)) {
-        if (v === undefined) continue;
-        formData.append(k, typeof v === 'string' ? v : JSON.stringify(v));
-      }
-      return requestMultipart<XanoUser>('PATCH', '/user/update/profile', formData);
+      result = await requestMultipart<XanoUser>('PATCH', '/user/update/profile', formData);
     }
-    return request<XanoUser>('PATCH', '/user/update/profile', jsonFields as Record<string, unknown>);
+    return result as XanoUser;
   },
 
   // EP-949: in-app account deletion (App Store 5.1.1(v) / Google Play User Data).

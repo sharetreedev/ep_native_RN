@@ -30,7 +30,7 @@ const appLogo = require('../../../assets/Logo.png');
 // string everywhere.
 export default function AppleNameCaptureScreen() {
   useScreenAnnouncement('Tell us your name');
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, logout } = useAuth();
   const { updateProfile } = useUser();
 
   const [firstName, setFirstName] = useState(user?.firstName ?? '');
@@ -77,8 +77,23 @@ export default function AppleNameCaptureScreen() {
         'Could not save your name',
         'Something went wrong saving your name. Please check your connection and try again.',
       );
+    } finally {
+      // Always reset so a silent gate-stays-active failure doesn't leave the
+      // button permanently in "Saving…". If updateProfile succeeded, the
+      // screen unmounts on the next render anyway.
       setSubmitting(false);
     }
+  }
+
+  function handleSignOut() {
+    Alert.alert(
+      'Sign out?',
+      'You can finish setting up your profile next time you sign in.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign out', style: 'destructive', onPress: () => { logout(); } },
+      ],
+    );
   }
 
   return (
@@ -94,7 +109,7 @@ export default function AppleNameCaptureScreen() {
           <View style={styles.headerBlock}>
             <Text style={styles.title}>What should we call you?</Text>
             <Text style={styles.subtitle}>
-              Apple didn't share your name with us this time, so we need a hand. This is the name and photo that'll show on your check-ins and to anyone you pair with.
+              Adding a name and photo helps your pairs recognise you on check-ins and in support requests.
             </Text>
           </View>
 
@@ -179,6 +194,16 @@ export default function AppleNameCaptureScreen() {
             <Text style={styles.buttonText}>
               {submitting ? 'Saving…' : 'Continue'}
             </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={handleSignOut}
+            disabled={submitting}
+            accessibilityRole="button"
+            accessibilityLabel="Sign out"
+            style={styles.signOutLink}
+          >
+            <Text style={styles.signOutLinkText}>Sign out</Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -301,5 +326,16 @@ const styles = StyleSheet.create({
     color: colors.textOnPrimary,
     fontFamily: fonts.bodyBold,
     fontSize: fontSizes.base,
+  },
+  signOutLink: {
+    alignItems: 'center',
+    paddingVertical: spacing.base,
+    marginTop: spacing.sm,
+  },
+  signOutLinkText: {
+    fontSize: fontSizes.sm,
+    fontFamily: fonts.body,
+    color: colors.textMuted,
+    textDecorationLine: 'underline',
   },
 });
