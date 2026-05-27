@@ -74,16 +74,28 @@ export default function CreateGroupScreen() {
     }
   }, [step, navigation]);
 
-  const handleCreate = useCallback(async () => {
+  const handleCreate = useCallback(async (options?: { skipInvites?: boolean }) => {
     setIsSubmitting(true);
     try {
-      const group = await createGroup(groupName.trim(), groupImage, []);
+      // When the user picked a local image, send it via multipart as the
+      // `group_image_file` input — the script runs storage.create_image and
+      // populates the Groups row's image URL from the uploaded binary.
+      const imageFile = groupImage
+        ? (() => {
+            const ext = groupImage.split('.').pop()?.split(';')[0]?.toLowerCase() || 'jpeg';
+            const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+            return { uri: groupImage, name: `group_image.${ext}`, type: mime };
+          })()
+        : undefined;
+      const group = await createGroup(groupName.trim(), '', [], imageFile);
       if (group) {
-        for (const email of emails) {
-          try {
-            await inviteViaEmail(group.id, email);
-          } catch {
-            // Continue even if individual invite fails
+        if (!options?.skipInvites) {
+          for (const email of emails) {
+            try {
+              await inviteViaEmail(group.id, email);
+            } catch {
+              // Continue even if individual invite fails
+            }
           }
         }
         navigation.goBack();
@@ -229,23 +241,33 @@ export default function CreateGroupScreen() {
               <Text style={styles.primaryButtonText}>Continue</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity
-              style={[styles.primaryButton, isSubmitting && styles.primaryButtonDisabled]}
-              onPress={handleCreate}
-              disabled={isSubmitting}
-              activeOpacity={0.8}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator color={colors.textOnPrimary} />
-              ) : (
-                <Text style={styles.primaryButtonText}>
-                  {emails.length > 0 ? 'Create & Invite' : 'Create Group'}
-                </Text>
+            <>
+              <TouchableOpacity
+                style={[styles.primaryButton, isSubmitting && styles.primaryButtonDisabled]}
+                onPress={() => handleCreate()}
+                disabled={isSubmitting}
+                activeOpacity={0.8}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator color={colors.textOnPrimary} />
+                ) : (
+                  <Text style={styles.primaryButtonText}>
+                    {emails.length > 0 ? 'Create & Invite' : 'Create Group'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+              {emails.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => handleCreate({ skipInvites: true })}
+                  disabled={isSubmitting}
+                  style={styles.skipButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Skip inviting and create the group"
+                >
+                  <Text style={styles.skipButtonText}>Skip inviting for now</Text>
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
-          )}
-          {step === TOTAL_STEPS && emails.length === 0 && (
-            <Text style={styles.skipHint}>You can skip inviting for now</Text>
+            </>
           )}
         </View>
       </KeyboardAvoidingView>
@@ -465,11 +487,15 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.base,
     color: colors.textOnPrimary,
   },
-  skipHint: {
-    fontFamily: fonts.body,
+  skipButton: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    marginTop: spacing.xs,
+  },
+  skipButtonText: {
+    fontFamily: fonts.bodyMedium,
     fontSize: fontSizes.sm,
     color: colors.textMuted,
-    textAlign: 'center',
-    marginTop: spacing.sm,
+    textDecorationLine: 'underline',
   },
 });

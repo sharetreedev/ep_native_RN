@@ -57,8 +57,13 @@ export function useGroupData() {
     }
   }, [wrap]);
 
-  const createGroup = useCallback(async (groupName: string, groupImage: string, listOfUsers: unknown[]) => {
-    const result = await wrap(() => xanoGroup.create(groupName, groupImage, listOfUsers));
+  const createGroup = useCallback(async (
+    groupName: string,
+    groupImage: string,
+    listOfUsers: unknown[],
+    groupImageFile?: { uri: string; name?: string; type?: string },
+  ) => {
+    const result = await wrap(() => xanoGroup.create(groupName, groupImage, listOfUsers, groupImageFile));
     if (result) {
       invalidate(CACHE_KEYS.GROUPS);
       trackGroupCreated(); // spec: no properties

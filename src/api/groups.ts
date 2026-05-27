@@ -18,12 +18,37 @@ export const group = {
   // SPEC NOTE: spec returns the full Groups row but marks every field as
   // optional. Hand-rolled XanoGroup is a narrower required-fields-first view
   // used across the app. Keep hand-rolled until the spec marks required.
-  create: (groupName: string, groupImage: string, listOfUsers: unknown[]) =>
-    request<XanoGroup>('POST', '/group/create', {
+  //
+  // When `groupImageFile` is supplied (local file URI from ImagePicker), send
+  // the request as multipart so the binary uploads to the `group_image_file`
+  // input on the Xano endpoint — script then runs storage.create_image and
+  // persists the URL onto the Groups row. Without a file we send plain JSON.
+  create: (
+    groupName: string,
+    groupImage: string,
+    listOfUsers: unknown[],
+    groupImageFile?: { uri: string; name?: string; type?: string },
+  ) => {
+    if (groupImageFile) {
+      const formData = new FormData();
+      formData.append('group_name', groupName);
+      formData.append('list_of_users', JSON.stringify(listOfUsers));
+      if (groupImage) formData.append('group_image', groupImage);
+      const ext = groupImageFile.uri.split('.').pop()?.split(';')[0]?.toLowerCase() || 'jpeg';
+      const mime = groupImageFile.type ?? (ext === 'png' ? 'image/png' : 'image/jpeg');
+      formData.append('group_image_file', {
+        uri: groupImageFile.uri,
+        type: mime,
+        name: groupImageFile.name ?? `group_image.${ext}`,
+      } as any);
+      return requestMultipart<XanoGroup>('POST', '/group/create', formData);
+    }
+    return request<XanoGroup>('POST', '/group/create', {
       group_name: groupName,
       group_image: groupImage,
       list_of_users: listOfUsers,
-    }),
+    });
+  },
 
   // SPEC NOTE: swagger declares `{}` — under-documented.
   createInvite: (params: {

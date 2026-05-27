@@ -14,7 +14,12 @@ interface UseGroupsResult {
   isLoading: boolean;
   error: string | null;
   fetchAll: () => Promise<void>;
-  createGroup: (groupName: string, groupImage: string, listOfUsers: unknown[]) => Promise<XanoGroup | null>;
+  createGroup: (
+    groupName: string,
+    groupImage: string,
+    listOfUsers: unknown[],
+    groupImageFile?: { uri: string; name?: string; type?: string },
+  ) => Promise<XanoGroup | null>;
   acceptInvite: (forestMapId: number) => Promise<XanoUserGroup | null>;
   declineInvite: (forestMapId: number) => Promise<XanoUserGroup | null>;
   inviteViaEmail: (groupId: number, inviteeEmail: string) => Promise<{ success: string; message: string; data: string } | null>;
