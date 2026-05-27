@@ -1,5 +1,16 @@
 import { request } from './client';
 import type { XanoAuthMeResponse, XanoAuthResponse, XanoUser } from './types';
+import type { components, operations } from './xano-schema';
+
+// Helper aliases — pull operation request/response types straight from the
+// generated swagger types so we don't restate what Xano already declares.
+// If the swagger changes, `npm run gen:api` regenerates the types and any
+// drift becomes a compile error here.
+//
+// (`components` is exported for downstream type lookups even if not used yet.)
+export type Op<K extends keyof operations> = operations[K];
+type _UnusedComponents = components;
+export type VerifyCodeResponse = Op<'api/auth/2fa/verifyCode|POST'>['responses']['200']['content']['application/json'];
 
 export type MigratedUserResponse = 'login' | 'phone' | 'email';
 
@@ -88,16 +99,14 @@ export const auth = {
 
   // Send the code as a string — `Number("0123")` strips the leading zero
   // and Xano then compares "123" to its stored "0123", producing a spurious
-  // "wrong code" error roughly 1 in 10 times.
+  // "wrong code" error roughly 1 in 10 times. The swagger declares
+  // `verificationCode: int64` but Xano coerces the string at runtime.
   //
-  // The response shape from Xano is `{ verified: boolean }` (verified by
-  // inspecting the actual server response). We previously typed this as
-  // `request<boolean>` and checked `result === true`, which was always false
-  // because the response is an object — so even a correct code was rejected
-  // by the client. Accept either shape to be defensive against backend
-  // contract drift.
+  // Response type is sourced from the generated swagger schema. Per the
+  // spec, the body is `{ verified?: string }` (string, e.g. "true"). The
+  // `isVerifiedResponse` helper normalises both legacy and current shapes.
   verifyCode: (verificationCode: string) =>
-    request<boolean | { verified?: boolean; result?: boolean }>(
+    request<VerifyCodeResponse>(
       'POST', '/auth/2fa/verifyCode', { verificationCode },
     ),
 

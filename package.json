@@ -15,7 +15,8 @@
     "ota:development": "./scripts/ota.sh development",
     "build:production": "eas build --platform all --profile production --auto-submit",
     "build:preview": "eas build --platform all --profile preview",
-    "build:development": "eas build --platform all --profile development"
+    "build:development": "eas build --platform all --profile development",
+    "gen:api": "curl -fsS 'https://xdny-scc5-yag9.a2.xano.io/apispec:LmTnxskw?type=json&token=3lKoCp191zBYPWYomHeFnV_wJpU' | node -e 'process.stdout.write(JSON.stringify(JSON.parse(require(\"fs\").readFileSync(0,\"utf8\")),null,2))' > docs/xano-api.json && openapi-typescript docs/xano-api.json -o src/api/xano-schema.d.ts"
   },
   "jest": {
     "preset": "jest-expo",
@@ -104,6 +105,7 @@
     "babel-preset-expo": "~54.0.10",
     "jest": "~29.7.0",
     "jest-expo": "~54.0.0",
+    "openapi-typescript": "^7.13.0",
     "typescript": "^5.9.3"
   }
 }
