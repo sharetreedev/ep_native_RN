@@ -1,26 +1,15 @@
 import { request } from './client';
-import type { XanoAuthMeResponse, XanoAuthResponse, XanoUser } from './types';
-import type { components, operations } from './xano-schema';
-
-// Helper aliases — pull operation request/response types straight from the
-// generated swagger types so we don't restate what Xano already declares.
-// If the swagger changes, `npm run gen:api` regenerates the types and any
-// drift becomes a compile error here.
-//
-// (`components` is exported for downstream type lookups even if not used yet.)
-export type Op<K extends keyof operations> = operations[K];
-type _UnusedComponents = components;
-export type VerifyCodeResponse = Op<'api/auth/2fa/verifyCode|POST'>['responses']['200']['content']['application/json'];
+import type { XanoAuthMeResponse, XanoUser } from './types';
+import type { Body } from './schema';
 
 export type MigratedUserResponse = 'login' | 'phone' | 'email';
 
 /**
  * Normalise the response from `/auth/2fa/verifyCode` to a plain boolean.
- * The endpoint has historically returned each of:
- *   - a raw boolean
- *   - `{ verified: true }`
- *   - `{ result: true }`
- *   - the verified flag wrapped one level deeper (e.g. `{ result1: { verified: true } }`)
+ *
+ * Per the swagger (docs/xano-api.json), Xano returns
+ * `{ verified?: string }` — i.e. `{ "verified": "true" }` (string, not
+ * boolean). Older builds returned a bare boolean or `{ verified: true }`.
  * Walk one level into nested objects so a Xano response-wrapping pass
  * doesn't silently break the check.
  */
@@ -43,32 +32,34 @@ export function isVerifiedResponse(res: unknown): boolean {
 
 export const auth = {
   login: (email: string, password: string) =>
-    request<XanoAuthResponse>('POST', '/auth/login', { email, password }),
+    request<Body<'api/auth/login|POST'>>('POST', '/auth/login', { email, password }),
 
   // Pre-sign-in migration check. `response` decides the flow:
   //   login → old-DB password still works, sign in normally
   //   email → migrated; verify via emailed code, then force a password reset
   //   phone → no email account; offer mobile sign-in instead
   // `user` is the numeric user id (as a string).
+  // Spec types `response` as plain string; we narrow at the call site.
   isMigratedUser: (email: string) =>
-    request<{ response: MigratedUserResponse; user: string }>(
+    request<Body<'api/auth/is_migrated_user1|POST'> & { response: MigratedUserResponse }>(
       'POST', '/auth/is_migrated_user1', { email },
     ),
 
   generateCodeWithId: (type: 'email' | 'phone', usersId: number) =>
-    request<{ status: string; message: string }>(
+    request<Body<'api/auth/generateCodeWithId|POST'>>(
       'POST', '/auth/generateCodeWithId', { type, users_id: usersId },
     ),
 
   // Saves a new password for the (now authenticated) migrated user. Requires
   // the Bearer token from verifyMobileCode to already be set.
   resetPassword: (userId: number, password: string) =>
-    request<Record<string, never>>(
+    request<Body<'api/reset_password_|POST'>>(
       'POST', '/reset_password_', { user_id: userId, password },
     ),
 
   // Flags a migrated account as reconciled from the old AWS database. Called
   // once, post email-code verification (the Bearer token must be set).
+  // Spec returns the whole Users row; our XanoUser type aligns with that.
   awsSynced: () =>
     request<XanoUser>('POST', '/auth/aws_synced'),
 
@@ -84,56 +75,74 @@ export const auth = {
     source?: string;
     onesignal_subscription_id?: string;
   }) =>
-    request<XanoAuthResponse>('POST', '/auth/signup', fields as Record<string, unknown>),
+    request<Body<'api/auth/signup|POST'>>(
+      'POST', '/auth/signup', fields as Record<string, unknown>,
+    ),
 
+  // /auth/me returns the full Users row + joined relations (groups, pairs,
+  // pendingPairInvites, pendingGroupInvites). The spec just describes the
+  // base Users row, so we keep the hand-rolled XanoAuthMeResponse which
+  // documents the joined fields. Worth reconciling against the spec when
+  // it catches up.
   me: () =>
     request<XanoAuthMeResponse>('GET', '/auth/me'),
 
   mergeAccounts: (existingUserId: number) =>
-    request<{ result1: Pick<XanoUser, 'id' | 'email' | 'phoneNumber' | 'fullName' | 'phoneVerified'> }>(
+    request<Body<'api/auth/merge_accounts|PUT'>>(
       'PUT', '/auth/merge_accounts', { existing_user_id: existingUserId },
     ),
 
   generateCode: (type: 'email' | 'phone') =>
-    request<{ status: string; message: string }>('POST', '/auth/2fa/generateCode', { type }),
+    request<Body<'api/auth/2fa/generateCode|POST'>>(
+      'POST', '/auth/2fa/generateCode', { type },
+    ),
 
   // Send the code as a string — `Number("0123")` strips the leading zero
   // and Xano then compares "123" to its stored "0123", producing a spurious
   // "wrong code" error roughly 1 in 10 times. The swagger declares
   // `verificationCode: int64` but Xano coerces the string at runtime.
   //
-  // Response type is sourced from the generated swagger schema. Per the
-  // spec, the body is `{ verified?: string }` (string, e.g. "true"). The
-  // `isVerifiedResponse` helper normalises both legacy and current shapes.
+  // Response per spec is `{ verified?: string }`; `isVerifiedResponse`
+  // normalises that.
   verifyCode: (verificationCode: string) =>
-    request<VerifyCodeResponse>(
+    request<Body<'api/auth/2fa/verifyCode|POST'>>(
       'POST', '/auth/2fa/verifyCode', { verificationCode },
     ),
 
   signInWithMobile: (phone: string, country_iso: string) =>
-    request<{ status: string; message: string; user_id: string }>(
+    request<Body<'api/auth/2fa/signinwithmobile|POST'>>(
       'POST', '/auth/2fa/signinwithmobile', { phone, country_iso },
     ),
 
   // String, not number — see verifyCode above for the leading-zero rationale.
+  // Spec declares `verified` as a string here too (mirrors /verifyCode).
   verifyMobileCode: (verificationCode: string, user_id: string) =>
-    request<{ message: string; verified: boolean; authToken: string }>(
+    request<Body<'api/auth/2fa/verifyMobileCode|POST'>>(
       'POST', '/auth/2fa/verifyMobileCode', { verificationCode, user_id },
     ),
 
+  // Spec response is currently `{}` (Xano hasn't declared the body) but the
+  // endpoint really does return `{ authToken: string }`. Intersect until the
+  // spec is updated — then this becomes plain `Body<'…microsoft/callback|POST'>`.
   microsoftCallback: (params: {
     token: string;
     code_verifier: string;
     tenant_id?: string;
     domain?: string;
   }) =>
-    request<{ authToken: string }>(
+    request<Body<'api/auth/microsoft/callback|POST'> & { authToken: string }>(
       'POST', '/auth/microsoft/callback', params as Record<string, unknown>,
     ),
 
+  // SPEC NOTE: swagger says this endpoint is GET, we call POST with a JSON
+  // body. Both reach Xano; the script is wired to read the email regardless.
+  // Worth aligning if/when the spec is corrected.
   requestPasswordReset: (email: string) =>
-    request<{ message: string }>('POST', '/auth/request_password_reset', { email }),
+    request<Body<'api/auth/request_password_reset|GET'>>(
+      'POST', '/auth/request_password_reset', { email },
+    ),
 
+  // Spec declares `{ authToken: string }` — matches what we read.
   appleCallback: (params: {
     identity_token: string;
     raw_nonce: string;
@@ -143,7 +152,7 @@ export const auth = {
     email?: string;
     apple_user_id?: string;
   }) =>
-    request<{ authToken: string }>(
+    request<Body<'api/auth/apple/callback|POST'>>(
       'POST', '/auth/apple/callback', params as Record<string, unknown>,
     ),
 };

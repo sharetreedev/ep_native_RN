@@ -6,6 +6,7 @@ import type {
   XanoGroupsResponse,
   XanoRunningStats,
 } from './types';
+import type { Body } from './schema';
 
 // Group-invite deep-link endpoints live on a separate Xano API group
 // (`api:wImR3IV3`) that has not yet been migrated to the canonical mobile
@@ -14,6 +15,9 @@ import type {
 const GROUP_INVITE_BASE_URL = `https://xdny-scc5-yag9.a2.xano.io/api:wImR3IV3${BRANCH_SUFFIX}`;
 
 export const group = {
+  // SPEC NOTE: spec returns the full Groups row but marks every field as
+  // optional. Hand-rolled XanoGroup is a narrower required-fields-first view
+  // used across the app. Keep hand-rolled until the spec marks required.
   create: (groupName: string, groupImage: string, listOfUsers: unknown[]) =>
     request<XanoGroup>('POST', '/group/create', {
       group_name: groupName,
@@ -21,6 +25,7 @@ export const group = {
       list_of_users: listOfUsers,
     }),
 
+  // SPEC NOTE: swagger declares `{}` — under-documented.
   createInvite: (params: {
     group_id: number;
     invitee_email: string;
@@ -30,27 +35,42 @@ export const group = {
   }) =>
     request<XanoForestMapEntry>('POST', '/group/create_invite', params as Record<string, unknown>),
 
+  // SPEC NOTE: spec response shape `{ success, message, data }` matches but
+  // marks every field as optional; useGroups types the hook return as all
+  // required. Keep hand-rolled until the spec marks required.
   createInviteViaEmail: (groupId: number, inviteeEmail: string) =>
     request<{ success: string; message: string; data: string }>(
       'POST', '/group/create_invite_via_email', { group_id: groupId, invitee_email: inviteeEmail },
     ),
 
+  // SPEC NOTE: spec marks all fields optional; XanoForestMapEntry treats
+  // `id` as required. Keep hand-rolled.
   getForestMap: (groupId?: number) =>
     request<XanoForestMapEntry[]>(
       'GET', '/group/get_forest_map', groupId !== undefined ? { group_id: groupId } : undefined,
     ),
 
+  // SPEC NOTE: spec response array shape matches the inline type but marks
+  // every field as optional; useGroups types the hook return with required
+  // fields. Keep hand-rolled until the spec marks required.
   getMembers: (groupId: number) =>
     request<{ id: number; reqStatus: string; role: string; admin: string; sinceOnDate: number | null; user: { fullName: string; profilePic_url: string } | null }[]>(
       'GET', '/group/get_members', { group_id: groupId },
     ),
 
+  // Spec response `{ forest, group }` — matches; consumer just shows the
+  // invite metadata.
   getInvite: (forestId: number) =>
-    request<{ forest: unknown; group: unknown }>('POST', '/group/get_invite', { forest_id: forestId }),
+    request<Body<'api/group/get_invite|POST'>>('POST', '/group/get_invite', { forest_id: forestId }),
 
+  // SPEC NOTE: spec documents many group_running_stats fields, but hand-rolled
+  // XanoRunningStats captures additional joined fields (direction_* / shift_*
+  // comparisons, full period objects) that consumers rely on. Keep hand-rolled.
   getRunningStats: (groupRunningStatsId: number) =>
     request<XanoRunningStats>('GET', `/group/get_running_stats/${groupRunningStatsId}/`),
 
+  // SPEC NOTE: spec returns the full Groups row (matches `group.create`);
+  // same optional-fields concern → keep hand-rolled XanoGroup.
   inviteUsers: (params: {
     emails: string;
     group_id: number;
@@ -62,12 +82,15 @@ export const group = {
   }) =>
     request<XanoGroup>('POST', '/group/invite_users', params as Record<string, unknown>),
 
+  // SPEC NOTE: swagger declares `{}` — under-documented. Consumer ignores
+  // the response.
   updateGroupName: (groupsId: number, groupName: string) =>
     request<Record<string, unknown>>('POST', '/group/update_group_name', {
       groups_id: groupsId,
       group_name: groupName,
     }),
 
+  // SPEC NOTE: swagger declares `{}` — under-documented.
   updateProfilePic: (groupsId: number, profilePic: { uri: string; name: string; type: string }) => {
     const formData = new FormData();
     formData.append('groups_id', String(groupsId));
@@ -75,6 +98,7 @@ export const group = {
     return requestMultipart<Record<string, unknown>>('POST', '/group/update_profile_pic', formData);
   },
 
+  // SPEC NOTE: swagger declares `{}` — under-documented.
   updateBanner: (groupsId: number, banner: { uri: string; name: string; type: string }) => {
     const formData = new FormData();
     formData.append('groups_id', String(groupsId));
@@ -84,6 +108,10 @@ export const group = {
 };
 
 export const groups = {
+  // SPEC NOTE: spec types `active_groups`/`invites` as objects, but the
+  // runtime envelope's per-row shape is deeply joined and under-documented.
+  // Hand-rolled XanoGroupsResponse keeps the call site types loose enough to
+  // index the joins consumers depend on.
   getAll: () =>
     request<XanoGroupsResponse>('GET', '/groups/get_all'),
 
@@ -113,6 +141,9 @@ export const groups = {
    *   - POST /groups/accept_invite           (in-app sheet, old)
    *   - POST /groups/decline_invite          (in-app sheet, old)
    *   - PATCH /group_forest_map/{id}         (deep-link screen, on wImR3IV3)
+   *
+   * SPEC NOTE: swagger declares `{}` — under-documented. Keep XanoUserGroup
+   * hand-rolled.
    */
   respond: (groupForestMapId: number, userId: number, reqStatus: 'ACCEPTED' | 'REJECTED') =>
     request<XanoUserGroup>(
@@ -166,6 +197,10 @@ export const groupInvite = {
    * (see `groups.respond` above). If/when `get_group_invite` is migrated
    * onto the canonical branch, this whole `groupInvite` namespace and the
    * `GROUP_INVITE_BASE_URL` constant above can be deleted.
+   *
+   * This endpoint isn't in the canonical Xano OpenAPI spec — it lives on the
+   * separate `api:wImR3IV3` group — so the hand-rolled XanoGroupInviteRecord
+   * is the source of truth here.
    */
   getByToken: (token: string) =>
     request<XanoGroupInviteRecord>(

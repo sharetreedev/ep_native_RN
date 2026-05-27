@@ -12,9 +12,9 @@ interface UseUserResult {
   getTop4Mhfr: () => Promise<XanoUser[]>;
   engagementScore: () => Promise<unknown>;
   updatePhoneNumber: (phoneNumber: string, countryIso: string) => Promise<{
-    result1: unknown;
-    is_existing_user: boolean | string;
-    existing_user_id: number | string;
+    result1?: unknown;
+    is_existing_user?: boolean | string;
+    existing_user_id?: number | string;
   } | null>;
   updateProfile: (fields: {
     firstName?: string;
