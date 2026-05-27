@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as ImagePicker from 'expo-image-picker';
+import { pickImage } from '../../lib/imagePicker';
 import { ArrowLeft, MoreHorizontal, UserPlus } from 'lucide-react-native';
 import { RootStackParamList } from '../../types/navigation';
 import { useGroups } from '../../hooks/useGroups';
@@ -141,15 +141,8 @@ export default function GroupProfileScreen() {
   };
 
   const handlePickProfilePic = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images',
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setPickedProfilePicUri(result.assets[0].uri);
-    }
+    const uri = await pickImage({ aspect: [1, 1] });
+    if (uri) setPickedProfilePicUri(uri);
   };
 
   const handleSaveProfilePic = async () => {
@@ -169,15 +162,8 @@ export default function GroupProfileScreen() {
   };
 
   const handlePickBanner = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images',
-      allowsEditing: true,
-      aspect: [16, 9],
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setPickedBannerUri(result.assets[0].uri);
-    }
+    const uri = await pickImage({ aspect: [16, 9] });
+    if (uri) setPickedBannerUri(uri);
   };
 
   const handleSaveBanner = async () => {

@@ -7,6 +7,7 @@ import Button from '../../../components/Button';
 import OTPInput from '../../../components/OTPInput';
 import { auth as xanoAuth } from '../../../api';
 import { isVerifiedResponse } from '../../../api/auth';
+import { logger } from '../../../lib/logger';
 import { styles } from '../styles';
 
 interface PhoneVerificationStepProps {
@@ -30,11 +31,17 @@ export default function PhoneVerificationStep({
 
   const handleCodeComplete = useCallback(
     async (code: string) => {
-      const result = await xanoAuth.verifyCode(code);
-      if (isVerifiedResponse(result)) {
-        onComplete();
-      } else {
-        Alert.alert('Invalid Code', 'The code you entered is incorrect. Please try again.');
+      try {
+        const result = await xanoAuth.verifyCode(code);
+        logger.info('[PhoneVerification] verifyCode response', { result });
+        if (isVerifiedResponse(result)) {
+          onComplete();
+        } else {
+          Alert.alert('Invalid Code', 'The code you entered is incorrect. Please try again.');
+        }
+      } catch (e) {
+        logger.error('[PhoneVerification] verifyCode threw', e);
+        Alert.alert('Verification failed', 'Could not verify the code right now. Please try again.');
       }
     },
     [onComplete],

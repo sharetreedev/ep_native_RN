@@ -5,15 +5,27 @@ export type MigratedUserResponse = 'login' | 'phone' | 'email';
 
 /**
  * Normalise the response from `/auth/2fa/verifyCode` to a plain boolean.
- * The endpoint may return a raw boolean, `{ verified: true }`, or
- * `{ result: true }` depending on backend version — treat them all uniformly.
+ * The endpoint has historically returned each of:
+ *   - a raw boolean
+ *   - `{ verified: true }`
+ *   - `{ result: true }`
+ *   - the verified flag wrapped one level deeper (e.g. `{ result1: { verified: true } }`)
+ * Walk one level into nested objects so a Xano response-wrapping pass
+ * doesn't silently break the check.
  */
-export function isVerifiedResponse(
-  res: boolean | { verified?: boolean; result?: boolean } | null | undefined,
-): boolean {
-  if (res === true) return true;
+export function isVerifiedResponse(res: unknown): boolean {
+  if (res === true || res === 'true') return true;
   if (res && typeof res === 'object') {
-    return res.verified === true || res.result === true;
+    const obj = res as Record<string, unknown>;
+    if (obj.verified === true || obj.verified === 'true') return true;
+    if (obj.result === true || obj.result === 'true') return true;
+    for (const v of Object.values(obj)) {
+      if (v && typeof v === 'object') {
+        const inner = v as Record<string, unknown>;
+        if (inner.verified === true || inner.verified === 'true') return true;
+        if (inner.result === true || inner.result === 'true') return true;
+      }
+    }
   }
   return false;
 }

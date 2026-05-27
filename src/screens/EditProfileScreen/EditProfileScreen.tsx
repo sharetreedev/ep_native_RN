@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ArrowLeft, Pencil, BadgeCheck, ChevronDown } from 'lucide-react-native';
-import * as ImagePicker from 'expo-image-picker';
+import { pickImage } from '../../lib/imagePicker';
 import { RootStackParamList } from '../../types/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUser } from '../../hooks/useUser';
@@ -45,15 +45,10 @@ export default function EditProfileScreen() {
   const selectedCountryLabel = COUNTRIES.find((c) => c.value === country)?.label || '';
 
   const handlePickImage = useCallback(async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images',
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setAvatarUri(result.assets[0].uri);
-      setAvatarFileUri(result.assets[0].uri);
+    const uri = await pickImage({ aspect: [1, 1] });
+    if (uri) {
+      setAvatarUri(uri);
+      setAvatarFileUri(uri);
     }
   }, []);
 

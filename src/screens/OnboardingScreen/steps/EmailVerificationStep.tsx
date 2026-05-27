@@ -55,12 +55,17 @@ export default function EmailVerificationStep({
 
   const handleCodeComplete = useCallback(
     async (code: string) => {
-      const result = await xanoAuth.verifyCode(code);
-      logger.info('[EmailVerification] verifyCode response', { result });
-      if (isVerifiedResponse(result)) {
-        onComplete();
-      } else {
-        Alert.alert('Invalid Code', 'The code you entered is incorrect. Please try again.');
+      try {
+        const result = await xanoAuth.verifyCode(code);
+        logger.info('[EmailVerification] verifyCode response', { result });
+        if (isVerifiedResponse(result)) {
+          onComplete();
+        } else {
+          Alert.alert('Invalid Code', 'The code you entered is incorrect. Please try again.');
+        }
+      } catch (e) {
+        logger.error('[EmailVerification] verifyCode threw', e);
+        Alert.alert('Verification failed', 'Could not verify the code right now. Please try again.');
       }
     },
     [onComplete],

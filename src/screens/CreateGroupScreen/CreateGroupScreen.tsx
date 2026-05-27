@@ -14,8 +14,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import * as ImagePicker from 'expo-image-picker';
 import { ArrowLeft, Camera, Plus, X } from 'lucide-react-native';
+import { pickImage } from '../../lib/imagePicker';
 import { useGroups } from '../../hooks/useGroups';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
 import { useSafeEdges } from '../../contexts/MHFRContext';
@@ -37,15 +37,8 @@ export default function CreateGroupScreen() {
   const canProceed = step === 1 ? groupName.trim().length > 0 : true;
 
   const handlePickImage = useCallback(async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images',
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setGroupImage(result.assets[0].uri);
-    }
+    const uri = await pickImage({ aspect: [1, 1] });
+    if (uri) setGroupImage(uri);
   }, []);
 
   const handleAddEmail = useCallback(() => {

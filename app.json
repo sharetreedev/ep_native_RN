@@ -209,7 +209,7 @@
         "expo-image-picker",
         {
           "photosPermission": "Emotional Pulse uses your photo library so you can choose a profile photo or a group photo.",
-          "cameraPermission": false
+          "cameraPermission": "Emotional Pulse uses your camera so you can take a profile photo or a group photo."
         }
       ],
       [

@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Pencil, ChevronDown } from 'lucide-react-native';
-import * as ImagePicker from 'expo-image-picker';
+import { pickImage } from '../../lib/imagePicker';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUser } from '../../hooks/useUser';
 import { useScreenAnnouncement } from '../../hooks/useScreenAnnouncement';
@@ -47,15 +47,10 @@ export default function AppleNameCaptureScreen() {
   const canSubmit = trimmedFirst.length > 0 && country.length > 0 && !submitting;
 
   const handlePickImage = useCallback(async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images',
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setAvatarUri(result.assets[0].uri);
-      setAvatarFileUri(result.assets[0].uri);
+    const uri = await pickImage({ aspect: [1, 1] });
+    if (uri) {
+      setAvatarUri(uri);
+      setAvatarFileUri(uri);
     }
   }, []);
 
