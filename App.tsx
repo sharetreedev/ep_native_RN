@@ -3,7 +3,7 @@
 import 'react-native-get-random-values';
 import './global.css';
 import React from 'react';
-import { Platform, View, ActivityIndicator } from 'react-native';
+import { Platform, View } from 'react-native';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Updates from 'expo-updates';
@@ -17,6 +17,7 @@ import { NotificationsProvider } from './src/contexts/NotificationsContext';
 import { ToastProvider } from './src/contexts/ToastContext';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import RuntimeResetSplash from './src/components/RuntimeResetSplash';
+import BootSplash from './src/components/BootSplash';
 import { fontAssets } from './src/theme/fonts';
 import { colors } from './src/theme';
 import { initAnalytics } from './src/lib/analytics';
@@ -73,12 +74,10 @@ initAnalytics();
 
 export default Sentry.wrap(function App() {
   const [fontsLoaded] = useFonts(fontAssets);
-
-  React.useEffect(() => {
-    if (fontsLoaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [fontsLoaded]);
+  // The JS splash stays mounted until it has finished fading out, which
+  // happens after fonts are ready. BootSplash owns hiding the native splash
+  // (on its first layout) so the OS circle hands off cleanly to the wide logo.
+  const [splashDone, setSplashDone] = React.useState(false);
 
   // Check for OTA updates on launch
   React.useEffect(() => {
@@ -96,35 +95,38 @@ export default Sentry.wrap(function App() {
     })();
   }, []);
 
-  if (!fontsLoaded) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
-
   return (
-    <ErrorBoundary>
-      <SafeAreaProvider>
-        <ToastProvider>
-          <AuthProvider>
-            <CourseProvider>
-              <CheckInProvider>
-                <MHFRProvider>
-                  <NotificationsProvider>
-                    <AppNavigator />
-                  </NotificationsProvider>
-                </MHFRProvider>
-              </CheckInProvider>
-            </CourseProvider>
-          </AuthProvider>
-        </ToastProvider>
-        {/* Rendered outside the auth-gated tree so it overlays everything
-            during the runtime reset (logout / delete / merge). See
-            src/lib/resetRuntime.ts for the trigger flow. */}
-        <RuntimeResetSplash />
-      </SafeAreaProvider>
-    </ErrorBoundary>
+    <View style={{ flex: 1, backgroundColor: colors.primary }}>
+      {fontsLoaded && (
+        <ErrorBoundary>
+          <SafeAreaProvider>
+            <ToastProvider>
+              <AuthProvider>
+                <CourseProvider>
+                  <CheckInProvider>
+                    <MHFRProvider>
+                      <NotificationsProvider>
+                        <AppNavigator />
+                      </NotificationsProvider>
+                    </MHFRProvider>
+                  </CheckInProvider>
+                </CourseProvider>
+              </AuthProvider>
+            </ToastProvider>
+            {/* Rendered outside the auth-gated tree so it overlays everything
+                during the runtime reset (logout / delete / merge). See
+                src/lib/resetRuntime.ts for the trigger flow. */}
+            <RuntimeResetSplash />
+          </SafeAreaProvider>
+        </ErrorBoundary>
+      )}
+
+      {/* Full-bleed JS splash on top of everything until the app is ready.
+          Overlays the (hidden-behind-it) app tree so initialisation runs in
+          parallel, then fades out. */}
+      {!splashDone && (
+        <BootSplash ready={fontsLoaded} onFinish={() => setSplashDone(true)} />
+      )}
+    </View>
   );
 });

@@ -34,6 +34,12 @@ interface CoordinatesGridProps {
   pairData?: PairPoint[];
   /** Optional theme colors */
   accentColor?: string;
+  /**
+   * Render each density point's count as a share of the total across all
+   * points (e.g. "42%") instead of the raw number. Used by Global Pulse;
+   * Group Pulse leaves this off so its member-count badge stays numeric.
+   */
+  showCountAsPercentage?: boolean;
 }
 
 /**
@@ -47,9 +53,13 @@ export default React.memo(function CoordinatesGrid({
   densityData = [],
   pairData = [],
   accentColor = '#6366f1', // indigo-500
+  showCountAsPercentage = false,
 }: CoordinatesGridProps) {
   const rows = [0, 1, 2, 3, 4, 5, 6, 7];
   const cols = [0, 1, 2, 3, 4, 5, 6, 7];
+
+  // Sum of all counts, used to render each point as a % of the whole.
+  const densityTotal = densityData.reduce((sum, p) => sum + (p.count ?? 0), 0);
 
   const renderSoloMarker = (r: number, c: number) => {
     const isActive = activeCoordinates?.[0] === r && activeCoordinates?.[1] === c;
@@ -71,7 +81,13 @@ export default React.memo(function CoordinatesGrid({
     const glowSize = `${Math.round(160 * sizeScale)}%`;
     const coreSize = `${Math.round(120 * sizeScale)}%`;
     const coreRadius = 18 * (0.5 + point.intensity * 0.5);
-    const showCount = (point.count ?? 0) > 0;
+    const count = point.count ?? 0;
+    const showCount = count > 0;
+    let countLabel: string | number = count;
+    if (showCountAsPercentage) {
+      const pct = densityTotal > 0 ? (count / densityTotal) * 100 : 0;
+      countLabel = pct > 0 && pct < 1 ? '<1%' : `${Math.round(pct)}%`;
+    }
 
     return (
       <View className="absolute inset-0 items-center justify-center pointer-events-none">
@@ -105,7 +121,7 @@ export default React.memo(function CoordinatesGrid({
             fontWeight: '700',
             textAlign: 'center',
           }}>
-            {point.count}
+            {countLabel}
           </Text>
         )}
       </View>

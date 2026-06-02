@@ -119,7 +119,7 @@ export default function UserProfileScreen() {
   const rawLastCheckin = runningStats?.days_since_last_pulse || 'No data';
   const lastCheckinLabel = rawLastCheckin.charAt(0).toUpperCase() + rawLastCheckin.slice(1);
   const checkinRate = runningStats?.checkin_frequency
-    ? `${runningStats.checkin_frequency.toFixed(1)}x`
+    ? `${runningStats.checkin_frequency.toFixed(1)}x a week`
     : 'N/A';
   const totalCheckins = runningStats?.checkInCount ?? 'N/A';
   const modeEmotion = runningStats?.checkInMode?.emotionText;

@@ -5,6 +5,7 @@ import * as Haptics from 'expo-haptics';
 import { MappedEmotion } from '../../hooks/useEmotionStates';
 import { XanoStateCoordinate } from '../../api';
 import { colors, fonts, fontSizes, spacing, borderRadius } from '../../theme';
+import Avatar from '../Avatar';
 
 function lightenColor(hex: string, amount: number): string {
     const h = hex.replace('#', '');
@@ -16,7 +17,7 @@ function lightenColor(hex: string, amount: number): string {
 
 const GRID_SIZE = 8;
 
-interface SelectedCell {
+export interface SelectedCell {
     coordinate: XanoStateCoordinate;
     emotion: MappedEmotion;
 }
@@ -28,9 +29,19 @@ interface CheckInTouchGridProps {
     emotions: MappedEmotion[];
     selectedId: number | null;
     onSelect: (cell: SelectedCell) => void;
+    /** Current user's avatar — rendered as the "pin" that drops onto the
+     *  tapped tile to confirm the selection before the screen advances. */
+    avatarSource?: string;
+    avatarName?: string;
+    avatarHex?: string;
 }
 
-export function CheckInTouchGrid({ coordinates, emotions, selectedId, onSelect }: CheckInTouchGridProps) {
+// How long the avatar pin animates + holds on the tapped tile before we
+// advance to the emotion-detail step. Short — the detail card is the real
+// "before you commit" pause; this is just the selection flourish.
+const PIN_DROP_MS = 600;
+
+export function CheckInTouchGrid({ coordinates, emotions, selectedId, onSelect, avatarSource, avatarName, avatarHex }: CheckInTouchGridProps) {
     const emotionMap = useMemo(() => {
         const map: Record<number, MappedEmotion> = {};
         emotions.forEach((e) => { map[e.xanoId] = e; });
@@ -67,13 +78,66 @@ export function CheckInTouchGrid({ coordinates, emotions, selectedId, onSelect }
         return cells;
     }, [coordinates, emotionMap]);
 
-    const handlePress = useCallback((cell: SelectedCell) => {
+    // Pixel size of the grid, captured on layout so we can place the pin at
+    // the centre of any tapped cell (cells are flex:1, so cell = grid / 8).
+    const [gridSize, setGridSize] = useState({ w: 0, h: 0 });
+    // The tile the user just tapped, with its computed pin geometry. Set this
+    // and the drop animation runs; cleared only by unmount / a fresh mount.
+    const [dropped, setDropped] = useState<{ cell: SelectedCell; cx: number; cy: number; pinSize: number } | null>(null);
+    // The tile currently under the finger — highlights immediately on press so
+    // the user sees which quadrant they're on, before the avatar even drops.
+    const [pressedId, setPressedId] = useState<number | null>(null);
+    const lockRef = useRef(false);
+    const dropAnim = useRef(new Animated.Value(0)).current;
+    // `onSelect` is an inline arrow from the parent, so its identity changes
+    // every render. Hold it in a ref so the drop effect can fire exactly once
+    // (keyed only on `dropped`) without a mid-hold parent re-render resetting
+    // the animation or the advance timer.
+    const onSelectRef = useRef(onSelect);
+    onSelectRef.current = onSelect;
+
+    const handlePress = useCallback((cell: SelectedCell, row: number, col: number) => {
+        if (lockRef.current) return;
+        lockRef.current = true;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        onSelect(cell);
-    }, [onSelect]);
+
+        // No layout yet (shouldn't happen post-paint) — skip the flourish
+        // rather than risk a NaN-positioned pin.
+        if (!gridSize.w || !gridSize.h) {
+            onSelectRef.current(cell);
+            return;
+        }
+
+        const cellW = gridSize.w / GRID_SIZE;
+        const cellH = gridSize.h / GRID_SIZE;
+        const cx = (col + 0.5) * cellW;
+        const cy = (row + 0.5) * cellH;
+        const pinSize = Math.min(Math.max(cellW * 1.15, 34), 60);
+        setDropped({ cell, cx, cy, pinSize });
+    }, [gridSize]);
+
+    // Run the drop once a tile is chosen, then advance after the hold.
+    useEffect(() => {
+        if (!dropped) return;
+        dropAnim.setValue(0);
+        Animated.spring(dropAnim, {
+            toValue: 1,
+            tension: 70,
+            friction: 6,
+            useNativeDriver: true,
+        }).start();
+        const t = setTimeout(() => onSelectRef.current(dropped.cell), PIN_DROP_MS);
+        return () => clearTimeout(t);
+    }, [dropped, dropAnim]);
+
+    const droppedId = dropped?.cell.coordinate.id ?? null;
 
     return (
-        <View style={gridStyles.touchGrid} pointerEvents="box-none">
+        <View
+            style={gridStyles.touchGrid}
+            pointerEvents={dropped ? 'none' : 'box-none'}
+            onLayout={(e) => setGridSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
+        >
             {grid.map((rowCells, rowIdx) => (
                 <View key={rowIdx} style={gridStyles.touchRow}>
                     {rowCells.map((cell, colIdx) => {
@@ -94,7 +158,10 @@ export function CheckInTouchGrid({ coordinates, emotions, selectedId, onSelect }
                         const pleasantness = colIdx <= 3 ? 'unpleasant' : 'pleasant';
                         const coordName = cell.coordinate.coordinateDisplay || cell.emotion.name;
                         const a11yLabel = `${coordName}, ${cell.emotion.name}, ${energy}, ${pleasantness}`;
-                        const isSelected = selectedId != null && cell.coordinate.id === selectedId;
+                        const isSelected =
+                            (selectedId != null && cell.coordinate.id === selectedId) ||
+                            cell.coordinate.id === droppedId ||
+                            cell.coordinate.id === pressedId;
                         return (
                             <TouchableOpacity
                                 key={colIdx}
@@ -102,7 +169,9 @@ export function CheckInTouchGrid({ coordinates, emotions, selectedId, onSelect }
                                     gridStyles.touchCell,
                                     isSelected && gridStyles.touchCellSelected,
                                 ]}
-                                onPress={() => handlePress(cell)}
+                                onPressIn={() => { if (!lockRef.current) setPressedId(cell.coordinate.id); }}
+                                onPressOut={() => { if (!lockRef.current) setPressedId(null); }}
+                                onPress={() => handlePress(cell, rowIdx, colIdx)}
                                 activeOpacity={0.9}
                                 accessibilityRole="button"
                                 accessibilityLabel={a11yLabel}
@@ -113,6 +182,51 @@ export function CheckInTouchGrid({ coordinates, emotions, selectedId, onSelect }
                     })}
                 </View>
             ))}
+
+            {/* Avatar "pin" that drops onto the tapped tile for ~1s before the
+             *  screen advances, so the user sees exactly what they picked. */}
+            {dropped && (
+                <Animated.View
+                    pointerEvents="none"
+                    style={[
+                        gridStyles.pin,
+                        {
+                            width: dropped.pinSize,
+                            height: dropped.pinSize,
+                            left: dropped.cx - dropped.pinSize / 2,
+                            top: dropped.cy - dropped.pinSize / 2,
+                            opacity: dropAnim.interpolate({
+                                inputRange: [0, 0.25, 1],
+                                outputRange: [0, 1, 1],
+                            }),
+                            transform: [
+                                {
+                                    translateY: dropAnim.interpolate({
+                                        inputRange: [0, 1],
+                                        outputRange: [-(dropped.cy + dropped.pinSize / 2), 0],
+                                    }),
+                                },
+                                {
+                                    scale: dropAnim.interpolate({
+                                        inputRange: [0, 1],
+                                        outputRange: [0.6, 1],
+                                    }),
+                                },
+                            ],
+                        },
+                    ]}
+                >
+                    <Avatar
+                        source={avatarSource}
+                        name={avatarName}
+                        hexColour={avatarHex}
+                        size={dropped.pinSize}
+                        border={{ width: 2.5, color: colors.surface }}
+                        shadow="md"
+                        decorative
+                    />
+                </Animated.View>
+            )}
         </View>
     );
 }
@@ -132,6 +246,10 @@ const gridStyles = StyleSheet.create({
     touchCellSelected: {
         backgroundColor: 'rgba(255,255,255,0.3)',
         borderRadius: 16,
+    },
+    pin: {
+        position: 'absolute',
+        zIndex: 10,
     },
 });
 

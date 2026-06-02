@@ -73,6 +73,7 @@ export default function GlobalPulseScreen() {
                             <CoordinatesGrid
                                 visualizationMode="group"
                                 densityData={densityData}
+                                showCountAsPercentage
                             />
                         </View>
                     </PulseGrid>

@@ -62,7 +62,6 @@ export default function AppNavigator() {
     const { isAuthenticated, isLoading, user, pendingPasswordSetup } = useAuth();
     const { hasCheckedInToday } = useCheckIn();
     const navRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
-    const checkinPushed = useRef(false);
     // Flipped true once NavigationContainer reports ready, so children that
     // need to call `navRef.current?.navigate(...)` from a useEffect can
     // re-run their effects when the navigator is finally usable.
@@ -154,6 +153,24 @@ export default function AppNavigator() {
         tryConsumePendingLink();
     }, [tryConsumePendingLesson, tryConsumePendingLink]);
 
+    // Route the user to Check-in whenever they owe one and it isn't already
+    // on screen. This is reactive — not a one-shot on cold launch — so a warm
+    // foreground resume the next day also routes correctly: once AuthContext
+    // refreshes the user on AppState 'active' and `hasCheckedInToday` flips
+    // false, `needsCheckIn` flips true and this pushes Check-in. The previous
+    // implementation pushed only inside `onReady` behind a ref that was never
+    // reset, so Android warm-resumes (JS kept alive, onReady never re-fires)
+    // stayed stuck on Home. (EP-1052)
+    useEffect(() => {
+        if (!navReady || !needsCheckIn) return;
+        const ref = navRef.current;
+        if (!ref?.isReady()) return;
+        const state = ref.getRootState();
+        const topRoute = state?.routes?.[state.routes.length - 1]?.name;
+        if (topRoute === 'CheckIn') return;
+        ref.navigate('CheckIn');
+    }, [navReady, needsCheckIn]);
+
     // When a deep link arrives and the user is not authenticated, save it
     // as a pending link so it survives the auth round-trip. The pending-link
     // consumer (`tryConsumePendingLink` above) waits for onboarding to be
@@ -196,12 +213,10 @@ export default function AppNavigator() {
             ref={navRef}
             linking={linking}
             onReady={() => {
+                // Flipping navReady drives the Check-in routing effect above,
+                // which pushes CheckIn on top of Main (so dismissing it pops
+                // back, sliding out right) whenever a check-in is owed.
                 setNavReady(true);
-                // Auto-push CheckIn on top of Main so dismissing it pops back (slides out right)
-                if (needsCheckIn && !checkinPushed.current) {
-                    checkinPushed.current = true;
-                    navRef.current?.navigate('CheckIn');
-                }
                 tryConsumePendingLesson();
                 tryConsumePendingLink();
             }}

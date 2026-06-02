@@ -1,15 +1,16 @@
-import React, { useState, useCallback, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, ActivityIndicator, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { MeshGradientSlider } from '../../components/checkin';
-import { CheckInTouchGrid } from '../../components/checkin/CheckInOverlay';
+import { CheckInTouchGrid, SelectedCell } from '../../components/checkin/CheckInOverlay';
 import PulseGrid from '../../components/visualization/PulseGrid';
+import EmotionDetailContent from '../../components/EmotionDetailContent';
 import { RootStackParamList } from '../../types/navigation';
 import { useSafeEdges } from '../../contexts/MHFRContext';
-import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
+import { colors, fonts, fontSizes, borderRadius, spacing, buttonStyles } from '../../theme';
 import { useCheckIns } from '../../hooks/useCheckIns';
 import { useEmotionStates, MappedEmotion } from '../../hooks/useEmotionStates';
 import { useScreenAnnouncement } from '../../hooks/useScreenAnnouncement';
@@ -23,6 +24,11 @@ import { trackSupportRequestCreated } from '../../lib/analyticsEvents';
 import { invalidate, CACHE_KEYS } from '../../lib/fetchCache';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CheckIn'>;
+
+function capitalize(s: string): string {
+    if (!s) return '';
+    return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+}
 
 export default function CheckInScreen({ route, navigation }: Props) {
     const isSupportRequest = route.params?.isSupportRequest ?? false;
@@ -41,6 +47,29 @@ export default function CheckInScreen({ route, navigation }: Props) {
     const inFlightRef = useRef(false);
     const safeEdges = useSafeEdges(['top']);
     const { createCheckIn } = useCheckIns();
+
+    // Grid path: a tapped tile is held here as a pending selection so we can
+    // show the emotion-detail card (matching the slider) before committing.
+    // `gridAttempt` is bumped on "pick another" to remount the grid, clearing
+    // its internal drop/lock state so a fresh tap works.
+    const [pendingCell, setPendingCell] = useState<SelectedCell | null>(null);
+    const [gridAttempt, setGridAttempt] = useState(0);
+    const detailOpacity = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        if (!pendingCell) return;
+        detailOpacity.setValue(0);
+        Animated.timing(detailOpacity, { toValue: 1, duration: 250, useNativeDriver: true }).start();
+    }, [pendingCell, detailOpacity]);
+
+    const pickAnother = useCallback(() => {
+        setPendingCell(null);
+        setGridAttempt((n) => n + 1);
+    }, []);
+
+    // The grid's emotion-detail step is a focused, full-screen confirm — hide
+    // the Slider/Grid toggle while it's up so it doesn't float over the card.
+    const showGridDetail = viewMode === 'grid' && !!pendingCell;
 
     const handleComplete = useCallback(
         async (emotion: MappedEmotion, coordinateId: number, needsAttention?: boolean) => {
@@ -190,30 +219,32 @@ export default function CheckInScreen({ route, navigation }: Props) {
                         <ArrowLeft size={22} color={colors.textPrimary} />
                     </TouchableOpacity>
                 )}
-                <View style={styles.tabBar} accessibilityRole="tablist">
-                    <TouchableOpacity
-                        onPress={() => setViewMode('slider')}
-                        style={[styles.tab, viewMode === 'slider' && styles.activeTab]}
-                        accessibilityRole="tab"
-                        accessibilityLabel="Slider view"
-                        accessibilityState={{ selected: viewMode === 'slider' }}
-                    >
-                        <Text style={[styles.tabText, viewMode === 'slider' && styles.activeTabText]}>
-                            Slider
-                        </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        onPress={() => setViewMode('grid')}
-                        style={[styles.tab, viewMode === 'grid' && styles.activeTab]}
-                        accessibilityRole="tab"
-                        accessibilityLabel="Grid view"
-                        accessibilityState={{ selected: viewMode === 'grid' }}
-                    >
-                        <Text style={[styles.tabText, viewMode === 'grid' && styles.activeTabText]}>
-                            Grid
-                        </Text>
-                    </TouchableOpacity>
-                </View>
+                {!showGridDetail && (
+                    <View style={styles.tabBar} accessibilityRole="tablist">
+                        <TouchableOpacity
+                            onPress={() => setViewMode('slider')}
+                            style={[styles.tab, viewMode === 'slider' && styles.activeTab]}
+                            accessibilityRole="tab"
+                            accessibilityLabel="Slider view"
+                            accessibilityState={{ selected: viewMode === 'slider' }}
+                        >
+                            <Text style={[styles.tabText, viewMode === 'slider' && styles.activeTabText]}>
+                                Slider
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => setViewMode('grid')}
+                            style={[styles.tab, viewMode === 'grid' && styles.activeTab]}
+                            accessibilityRole="tab"
+                            accessibilityLabel="Grid view"
+                            accessibilityState={{ selected: viewMode === 'grid' }}
+                        >
+                            <Text style={[styles.tabText, viewMode === 'grid' && styles.activeTabText]}>
+                                Grid
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
             </View>
 
             {viewMode === 'grid' ? (
@@ -222,14 +253,14 @@ export default function CheckInScreen({ route, navigation }: Props) {
                     <View style={styles.gridWrapper}>
                         <PulseGrid mode="checkin" isInteractive={false}>
                             <CheckInTouchGrid
+                                key={gridAttempt}
                                 coordinates={coordinates}
                                 emotions={emotionStates}
                                 selectedId={null}
-                                onSelect={(cell) => handleComplete(
-                                    cell.emotion,
-                                    cell.coordinate.id,
-                                    !!cell.coordinate.needs_attention,
-                                )}
+                                avatarSource={user?.avatarUrl}
+                                avatarName={user?.name}
+                                avatarHex={user?.profileHexColour}
+                                onSelect={(cell) => setPendingCell(cell)}
                             />
                         </PulseGrid>
                     </View>
@@ -242,6 +273,58 @@ export default function CheckInScreen({ route, navigation }: Props) {
                         onComplete={handleComplete}
                     />
                 </View>
+            )}
+
+            {/* Emotion-detail confirm step for the grid path — mirrors the
+             *  slider: a tapped tile previews the emotion (with "Pick another"
+             *  to go back) and only "Check in as X" commits. */}
+            {viewMode === 'grid' && pendingCell && (
+                <Animated.View style={[styles.detailLayer, { opacity: detailOpacity }]}>
+                    <ScrollView
+                        style={styles.detailScroll}
+                        contentContainerStyle={styles.detailScrollContent}
+                        showsVerticalScrollIndicator={false}
+                    >
+                        <EmotionDetailContent
+                            emotion={pendingCell.emotion}
+                            clusterEmotions={emotionStates.filter(
+                                (e) =>
+                                    e.energy === pendingCell.emotion.energy &&
+                                    e.pleasantness === pendingCell.emotion.pleasantness,
+                            )}
+                        />
+                    </ScrollView>
+
+                    <View style={styles.detailFooter}>
+                        <TouchableOpacity
+                            style={[buttonStyles.primary.container, isSubmitting && buttonStyles.primary.disabled]}
+                            onPress={() => handleComplete(
+                                pendingCell.emotion,
+                                pendingCell.coordinate.id,
+                                !!pendingCell.coordinate.needs_attention,
+                            )}
+                            disabled={isSubmitting}
+                            activeOpacity={0.8}
+                        >
+                            {isSubmitting ? (
+                                <ActivityIndicator color={colors.textOnPrimary} />
+                            ) : (
+                                <Text style={buttonStyles.primary.text}>
+                                    Check in as {capitalize(pendingCell.emotion.name)}
+                                </Text>
+                            )}
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            onPress={pickAnother}
+                            disabled={isSubmitting}
+                            style={styles.pickAnotherButton}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={styles.pickAnotherText}>{'‹ Pick another emotion'}</Text>
+                        </TouchableOpacity>
+                    </View>
+                </Animated.View>
             )}
 
             {isSubmitting && (
@@ -324,5 +407,32 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255,255,255,0.7)',
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    detailLayer: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: colors.background,
+    },
+    detailScroll: {
+        flex: 1,
+    },
+    detailScrollContent: {
+        paddingHorizontal: spacing.lg,
+        paddingTop: spacing.lg,
+        paddingBottom: spacing.sm,
+    },
+    detailFooter: {
+        paddingHorizontal: spacing.lg,
+        paddingTop: spacing.sm,
+        paddingBottom: spacing.lg,
+    },
+    pickAnotherButton: {
+        alignItems: 'center',
+        paddingVertical: 14,
+        marginTop: spacing.sm,
+    },
+    pickAnotherText: {
+        color: colors.textSecondary,
+        fontFamily: fonts.bodyMedium,
+        fontSize: fontSizes.md,
     },
 });

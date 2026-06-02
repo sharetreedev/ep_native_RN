@@ -96,23 +96,31 @@ function buildCarouselSlides(
   });
 
   // Slide 2 — Last 7 Days
-  const w2 = stats.w2;
+  // w1 = "I've been feeling" (the recent week); w2 = "previously I was
+  // feeling" (the week before). Render as soon as the recent week exists —
+  // the comparison line is shown only when w2 is also present, so a user
+  // with just one week of history still sees their current trend instead of
+  // an empty "check in for 7 days" slide.
   const w1 = stats.w1;
-  if (w2?.emotion_states && w1?.emotion_states) {
-    const w1Emotion = capitalize(w1.emotion_states.Display);
+  const w2 = stats.w2;
+  const has7DayData = !!w1?.emotion_states;
+  if (has7DayData) {
+    const w2Emotion = w2?.emotion_states ? capitalize(w2.emotion_states.Display) : undefined;
     slides.push({
       id: '7days',
       title: 'Over the last 7 days',
       prefix: "I've been feeling",
-      emotion: capitalize(w2.emotion_states.Display) || 'Unknown',
-      emotionColor: w2.emotion_states.themeColour ?? w2.emotion_states.emotionColour ?? colors.primary,
-      sublinePrefix: w1Emotion ? 'previously I was' : undefined,
-      sublineEmotion: w1Emotion || undefined,
-      sublineEmotionColor: w1.emotion_states.themeColour ?? w1.emotion_states.emotionColour,
-      directionLabel: stats.direction_w1_w2?.directionLabel,
+      emotion: capitalize(w1.emotion_states.Display) || 'Unknown',
+      emotionColor: w1.emotion_states.themeColour ?? w1.emotion_states.emotionColour ?? colors.primary,
+      sublinePrefix: w2Emotion ? 'previously I was' : undefined,
+      sublineEmotion: w2Emotion || undefined,
+      sublineEmotionColor: w2?.emotion_states?.themeColour ?? w2?.emotion_states?.emotionColour,
+      // The arrow describes the shift between the two periods, so only show
+      // it when there's a previous period to compare against.
+      directionLabel: w2Emotion ? stats.direction_w1_w2?.directionLabel : undefined,
       auroraColors: dailyAurora,
       emotionOnNewLine: true,
-      shiftSignificance: stats.shift_w1_w2?.significance,
+      shiftSignificance: w2Emotion ? stats.shift_w1_w2?.significance : undefined,
     });
   } else {
     slides.push({
@@ -128,29 +136,29 @@ function buildCarouselSlides(
   }
 
   // Slide 3 — Last 30 Days
-  // Gate on the 7-day slide having data too: the backend currently echoes
-  // a seeded m2/m1 even when the user hasn't been around 30 days, which
-  // previously made 30-day light up while 7-day was still locked. If we
-  // don't yet have a real 7-day picture, we definitely don't have 30.
-  const m2 = stats.m2;
+  // m1 = "I've been feeling" (recent 30d); m2 = "previously I was feeling"
+  // (the 30 days before). Gate on having a real 7-day picture too: the
+  // backend can echo a seeded m1/m2 for users who haven't been around 30
+  // days, so we don't light up 30-day before 7-day has real data. As with
+  // the 7-day slide, the "previously" line shows only when m2 is present.
   const m1 = stats.m1;
-  const has7DayData = !!(w2?.emotion_states && w1?.emotion_states);
-  const has30DayData = !!(m2?.emotion_states && m1?.emotion_states);
+  const m2 = stats.m2;
+  const has30DayData = !!m1?.emotion_states;
   if (has7DayData && has30DayData) {
-    const m1Emotion = capitalize(m1.emotion_states.Display);
+    const m2Emotion = m2?.emotion_states ? capitalize(m2.emotion_states.Display) : undefined;
     slides.push({
       id: '30days',
       title: 'Over the last 30 days',
       prefix: "I've been feeling",
-      emotion: capitalize(m2.emotion_states.Display) || 'Unknown',
-      emotionColor: m2.emotion_states.themeColour ?? m2.emotion_states.emotionColour ?? colors.primary,
-      sublinePrefix: m1Emotion ? 'previously I was' : undefined,
-      sublineEmotion: m1Emotion || undefined,
-      sublineEmotionColor: m1.emotion_states.themeColour ?? m1.emotion_states.emotionColour,
-      directionLabel: stats.direction_m1_m2?.directionLabel,
+      emotion: capitalize(m1.emotion_states.Display) || 'Unknown',
+      emotionColor: m1.emotion_states.themeColour ?? m1.emotion_states.emotionColour ?? colors.primary,
+      sublinePrefix: m2Emotion ? 'previously I was' : undefined,
+      sublineEmotion: m2Emotion || undefined,
+      sublineEmotionColor: m2?.emotion_states?.themeColour ?? m2?.emotion_states?.emotionColour,
+      directionLabel: m2Emotion ? stats.direction_m1_m2?.directionLabel : undefined,
       auroraColors: dailyAurora,
       emotionOnNewLine: true,
-      shiftSignificance: stats.shift_m1_m2?.significance,
+      shiftSignificance: m2Emotion ? stats.shift_m1_m2?.significance : undefined,
     });
   } else {
     slides.push({

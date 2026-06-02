@@ -58,7 +58,7 @@ export default function GroupsGridPage({
   return (
     <View style={[styles.page, { height: containerHeight }]}>
       <View style={styles.subHeader}>
-        <View>
+        <View style={styles.subHeaderLeft}>
           <Text style={styles.subLabel}>Last 24 hours</Text>
           {selectedGroupInfo && (
             <TouchableOpacity
@@ -72,14 +72,17 @@ export default function GroupsGridPage({
                 size="xs"
                 style={{ marginRight: 8 }}
               />
-              <Text style={styles.selectedGroupName}>{selectedGroupInfo.name}</Text>
+              <Text style={styles.selectedGroupName} numberOfLines={1} ellipsizeMode="tail">
+                {selectedGroupInfo.name}
+              </Text>
               {favouriteGroups.length > 1 && (
-                <ChevronDown color={colors.textMuted} size={16} style={{ marginLeft: 6 }} />
+                <ChevronDown color={colors.textMuted} size={16} style={{ marginLeft: 6, flexShrink: 0 }} />
               )}
             </TouchableOpacity>
           )}
         </View>
         <TouchableOpacity
+          style={styles.viewTrendsBtn}
           onPress={() => {
             if (selectedGroupInfo) {
               onViewTrends(selectedGroupInfo);
@@ -135,14 +138,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     marginTop: 8,
   },
+  subHeaderLeft: { flex: 1, minWidth: 0 },
   subLabel: { fontSize: fontSizes.sm, fontFamily: fonts.bodyBold, color: colors.textMuted },
   viewTrends: { fontFamily: fonts.bodyMedium, color: colors.textSecondary },
+  viewTrendsBtn: { flexShrink: 0, marginLeft: 12 },
   selectedGroupRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 4,
   },
   selectedGroupName: {
+    flexShrink: 1,
     fontFamily: fonts.heading,
     fontSize: fontSizes.xl,
     color: colors.textPrimary,

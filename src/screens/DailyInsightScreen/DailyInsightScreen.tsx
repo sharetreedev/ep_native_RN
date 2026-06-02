@@ -159,7 +159,7 @@ export default function DailyInsightScreen({ navigation, route }: Props) {
   const rawLastCheckin = stats?.days_since_last_pulse || 'No data';
   const lastCheckinLabel = rawLastCheckin.charAt(0).toUpperCase() + rawLastCheckin.slice(1);
   const checkinRate = stats?.checkin_frequency
-    ? `${stats.checkin_frequency.toFixed(1)}x`
+    ? `${stats.checkin_frequency.toFixed(1)}x a week`
     : 'N/A';
   const totalCheckins = stats?.checkInCount ?? 'N/A';
   const modeEmotion = stats?.checkInMode?.emotionText;

@@ -461,6 +461,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
             // Otherwise keep retrying on next foreground
           }
+        } else if (token) {
+          // Live session resumed from background — refresh the user so
+          // day-rollover state (lastCheckInDate / last7CheckIns) is current.
+          // Without this, a warm Android resume keeps yesterday's in-memory
+          // user, `hasCheckedInToday` never recomputes, and the navigator
+          // leaves the user on Home instead of routing back to Check-in. The
+          // fresh user object lets CheckInContext re-evaluate the window and
+          // AppNavigator re-push Check-in. (EP-1052)
+          refreshUser();
         }
       }
     });

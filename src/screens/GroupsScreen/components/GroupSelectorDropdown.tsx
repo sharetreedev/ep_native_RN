@@ -52,7 +52,11 @@ export default function GroupSelectorDropdown({
                     size="sm"
                     style={{ marginRight: 12 }}
                   />
-                  <Text style={[styles.dropdownName, isActive && styles.dropdownNameActive]}>
+                  <Text
+                    style={[styles.dropdownName, isActive && styles.dropdownNameActive]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
                     {name}
                   </Text>
                 </TouchableOpacity>
@@ -102,6 +106,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryLight,
   },
   dropdownName: {
+    flex: 1,
     fontFamily: fonts.bodyMedium,
     fontSize: fontSizes.base,
     color: colors.textPrimary,
