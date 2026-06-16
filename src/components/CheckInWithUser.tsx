@@ -8,19 +8,36 @@ import {
   TextInput,
   ActivityIndicator,
   StyleSheet,
+  Linking,
+  Platform,
+  Alert,
 } from 'react-native';
 import { MessageCircleMore, X } from 'lucide-react-native';
 import { colors, fonts, fontSizes, borderRadius } from '../theme';
+import { logger } from '../lib/logger';
+
+// Appended to every reminder so the recipient always gets a deep link back
+// into the app — kept in sync with the on-screen footer preview below.
+const MESSAGE_FOOTER =
+  'Take a moment to check in and let them know how you are. → Open App: https://app.emotionalpulse.ai';
 
 interface CheckInWithUserProps {
   firstName: string;
   fullName?: string;
   currentUserFirstName?: string;
   pairsUserId: number;
-  onSendReminder: (pairsUserId: number, message: string) => Promise<void>;
+  /** Recipient's mobile number — required to open the native SMS draft. */
+  phoneNumber?: string | null;
+  /**
+   * Legacy server-side (Twilio) reminder sender. No longer called — reminders
+   * now open the user's own Messages app to avoid per-SMS Twilio cost. Kept
+   * optional so existing call sites compile and a future "reminder sent" log
+   * can be wired back in without re-plumbing.
+   */
+  onSendReminder?: (pairsUserId: number, message: string) => Promise<void>;
 }
 
-export default function CheckInWithUser({ firstName, fullName, currentUserFirstName, pairsUserId, onSendReminder }: CheckInWithUserProps) {
+export default function CheckInWithUser({ firstName, fullName, currentUserFirstName, phoneNumber }: CheckInWithUserProps) {
   const defaultMessage = `Hey ${firstName}, I noticed you haven't checked in on the Emotional Pulse App for a while. How have you been feeling? - ${currentUserFirstName || ''}`.trim();
   const [modalVisible, setModalVisible] = useState(false);
   const [message, setMessage] = useState(defaultMessage);
@@ -33,11 +50,31 @@ export default function CheckInWithUser({ firstName, fullName, currentUserFirstN
 
   const handleSend = async () => {
     if (!message.trim()) return;
+
+    const recipient = (phoneNumber || '').replace(/[^\d+]/g, '');
+    if (!recipient) {
+      Alert.alert('No phone number', `We don't have a mobile number for ${fullName || firstName}, so we can't open a message.`);
+      return;
+    }
+
     setSending(true);
     try {
-      await onSendReminder(pairsUserId, message.trim());
+      const body = `${message.trim()}\n\n${MESSAGE_FOOTER}`;
+      // iOS expects `&body=`, Android expects `?body=` after the number.
+      const separator = Platform.OS === 'ios' ? '&' : '?';
+      const url = `sms:${recipient}${separator}body=${encodeURIComponent(body)}`;
+
+      const supported = await Linking.canOpenURL(url);
+      if (!supported) {
+        Alert.alert('Messaging unavailable', 'This device can’t send text messages.');
+        return;
+      }
+      await Linking.openURL(url);
       setMessage(defaultMessage);
       setModalVisible(false);
+    } catch (err) {
+      logger.error(err);
+      Alert.alert('Could not open Messages', 'Something went wrong opening your messaging app. Please try again.');
     } finally {
       setSending(false);
     }
@@ -104,7 +141,7 @@ export default function CheckInWithUser({ firstName, fullName, currentUserFirstN
                 {sending ? (
                   <ActivityIndicator size="small" color={colors.textOnPrimary} />
                 ) : (
-                  <Text style={styles.sendText}>Send Message</Text>
+                  <Text style={styles.sendText}>Open in Messages</Text>
                 )}
               </TouchableOpacity>
             </View>

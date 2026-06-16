@@ -398,6 +398,7 @@ export default function UserProfileScreen() {
                   fullName={pairDisplayName}
                   currentUserFirstName={currentUser?.firstName || currentUser?.name?.split(' ')[0]}
                   pairsUserId={Number(userId)}
+                  phoneNumber={pairPhone}
                   onSendReminder={sendCheckinReminder}
                 />
               </View>

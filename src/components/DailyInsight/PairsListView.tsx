@@ -126,6 +126,7 @@ function PairsListView({
                 fullName={name}
                 currentUserFirstName={currentUserFirstName}
                 pairsUserId={otherUserId}
+                phoneNumber={otherUser?.phoneNumber}
                 onSendReminder={onSendReminder}
               />
             )}

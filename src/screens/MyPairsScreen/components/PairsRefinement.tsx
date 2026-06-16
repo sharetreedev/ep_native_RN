@@ -193,6 +193,7 @@ function PairsRefinement({
                                     fullName={name}
                                     currentUserFirstName={currentUser?.firstName || currentUser?.name?.split(' ')[0]}
                                     pairsUserId={otherUserId}
+                                    phoneNumber={otherUser?.phoneNumber}
                                     onSendReminder={onSendReminder}
                                 />
                             )}
