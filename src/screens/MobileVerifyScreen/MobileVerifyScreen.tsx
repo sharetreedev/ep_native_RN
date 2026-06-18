@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Alert, ScrollView, Image } from 'react-native';
 import LoadingAnimation from '../../components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,6 +17,18 @@ export default function MobileVerifyScreen() {
   const { userId, phone, countryIso } = useRoute<RouteParams>().params;
   const { loginWithMobile } = useAuth();
   const [isVerifying, setVerifying] = useState(false);
+
+  // Lock the "Resend Code" button for 30s after the code is sent (on mount and
+  // after each resend) to avoid back-to-back resends triggering repeat SMS.
+  const [cooldown, setCooldown] = useState(30);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => {
+      setCooldown((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
 
   const handleCodeComplete = useCallback(
     async (code: string) => {
@@ -38,13 +50,15 @@ export default function MobileVerifyScreen() {
   );
 
   const handleResend = useCallback(async () => {
+    if (cooldown > 0) return;
     try {
       await xanoAuth.signInWithMobile(phone, countryIso);
+      setCooldown(30);
       Alert.alert('Code Sent', 'A new verification code has been sent to your phone.');
     } catch {
       Alert.alert('Error', 'Failed to resend code.');
     }
-  }, [phone, countryIso]);
+  }, [phone, countryIso, cooldown]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -67,9 +81,10 @@ export default function MobileVerifyScreen() {
           {isVerifying && <LoadingAnimation size={60} style={styles.spinner} />}
 
           <Button
-            title="Resend Code"
+            title={cooldown > 0 ? `Resend Code (${cooldown}s)` : 'Resend Code'}
             variant="secondary"
             onPress={handleResend}
+            disabled={cooldown > 0}
             style={styles.resendButton}
           />
         </View>
