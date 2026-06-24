@@ -13,6 +13,7 @@ import {
   Alert,
 } from 'react-native';
 import { MessageCircleMore, X } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fonts, fontSizes, borderRadius } from '../theme';
 import { logger } from '../lib/logger';
 
@@ -38,6 +39,7 @@ interface CheckInWithUserProps {
 }
 
 export default function CheckInWithUser({ firstName, fullName, currentUserFirstName, phoneNumber }: CheckInWithUserProps) {
+  const insets = useSafeAreaInsets();
   const defaultMessage = `Hey ${firstName}, I noticed you haven't checked in on the Emotional Pulse App for a while. How have you been feeling? - ${currentUserFirstName || ''}`.trim();
   const [modalVisible, setModalVisible] = useState(false);
   const [message, setMessage] = useState(defaultMessage);
@@ -64,11 +66,13 @@ export default function CheckInWithUser({ firstName, fullName, currentUserFirstN
       const separator = Platform.OS === 'ios' ? '&' : '?';
       const url = `sms:${recipient}${separator}body=${encodeURIComponent(body)}`;
 
-      const supported = await Linking.canOpenURL(url);
-      if (!supported) {
-        Alert.alert('Messaging unavailable', 'This device can’t send text messages.');
-        return;
-      }
+      // NOTE: We intentionally do NOT gate on Linking.canOpenURL here.
+      // On Android 11+ package-visibility rules make canOpenURL('sms:…')
+      // return false unless the `sms` scheme is declared in the manifest
+      // <queries>, producing a false "messaging unavailable" even on phones
+      // that can text fine. Declaring the query needs a native rebuild (not
+      // OTA-shippable), so we open directly and let the catch below handle
+      // the rare device that genuinely has no messaging app.
       await Linking.openURL(url);
       setMessage(defaultMessage);
       setModalVisible(false);
@@ -96,6 +100,13 @@ export default function CheckInWithUser({ firstName, fullName, currentUserFirstN
         transparent
         visible={modalVisible}
         onRequestClose={handleClose}
+        // Android-only: without these the modal window stops at the system
+        // bars, so the dimmed backdrop leaves a strip under the status bar
+        // and a gap above the nav/gesture bar. Drawing edge-to-edge lets the
+        // backdrop cover the full screen and the card sit flush to the bottom
+        // edge (the insets.bottom padding below keeps content off the bar).
+        statusBarTranslucent
+        navigationBarTranslucent
       >
         <TouchableOpacity
           style={styles.overlay}
@@ -103,7 +114,7 @@ export default function CheckInWithUser({ firstName, fullName, currentUserFirstN
           onPress={handleClose}
         >
           <TouchableWithoutFeedback>
-            <View style={styles.card}>
+            <View style={[styles.card, { paddingBottom: 24 + insets.bottom }]}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderLeft}>
                   <MessageCircleMore color={colors.primary} size={20} />
@@ -176,7 +187,11 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.surface,
-    padding: 24,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    // paddingBottom is applied inline as 24 + safe-area inset so the sheet
+    // clears the Android gesture/nav bar (edge-to-edge) and the iOS home
+    // indicator. The inset is 0 when there's no bar, so it stays at 24.
     borderTopLeftRadius: borderRadius.lg,
     borderTopRightRadius: borderRadius.lg,
   },
