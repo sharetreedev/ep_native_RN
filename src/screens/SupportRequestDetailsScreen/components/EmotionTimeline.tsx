@@ -15,6 +15,13 @@ interface TimelineEntry {
   timestamp: number | null;
 }
 
+// Trigger and resolved rows for the same emotion can land a few ms apart, so
+// timestamps within this window are treated as the same point on the timeline.
+const DEDUP_TOLERANCE_MS = 60_000;
+
+const hasRealColour = (c: string | null | undefined): c is string =>
+  !!c && c.trim().length > 0;
+
 function formatTimeAgo(ts: number | null): string {
   if (!ts) return '';
   return formatDistanceToNow(new Date(ts), { addSuffix: true });
@@ -24,26 +31,55 @@ function EmotionTimeline({ supportRequest: sr }: EmotionTimelineProps) {
   // updated_Emotions_List is the authoritative timeline: the backend writes
   // the trigger check-in as the first entry and the resolved check-in as the
   // last entry, so trigger_Emotion / resolved_Emotion would just duplicate
-  // rows here. The list also occasionally contains blank entries or two rows
-  // with the same emotion + identical timestamp, which we filter out.
+  // rows here.
   const emotionTimeline = useMemo<TimelineEntry[]>(() => {
-    const entries: TimelineEntry[] = (sr.updated_Emotions_List ?? [])
+    type WorkingEntry = {
+      id: number | null;
+      name: string;
+      rawColour: string;
+      timestamp: number | null;
+    };
+
+    const entries: WorkingEntry[] = (sr.updated_Emotions_List ?? [])
       .filter((e) => e.Display && e.timestamp != null)
       .map((e) => ({
+        id: e.emotion_states_id ?? null,
         name: e.Display,
-        colour: e.emotionColour || colors.textPlaceholder,
+        rawColour: e.emotionColour ?? '',
         timestamp: e.timestamp,
       }));
 
     entries.sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
 
-    const seen = new Set<string>();
-    return entries.filter((e) => {
-      const key = `${e.name}|${e.timestamp}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+    // Collapse near-duplicate rows. The support request is logged a few ms
+    // after the trigger check-in, so the trigger emotion appears twice with
+    // slightly different timestamps — an exact name|timestamp key never
+    // collapses them. Dedup by emotion_states_id (falling back to name) within
+    // a ~60s window, and keep whichever copy carries a real colour so the grey
+    // placeholder is never shown next to its properly-coloured twin.
+    const kept: WorkingEntry[] = [];
+    for (const entry of entries) {
+      const dup = kept.find((k) => {
+        const sameEmotion =
+          k.id != null && entry.id != null ? k.id === entry.id : k.name === entry.name;
+        if (!sameEmotion) return false;
+        if (k.timestamp == null || entry.timestamp == null) return true;
+        return Math.abs(k.timestamp - entry.timestamp) <= DEDUP_TOLERANCE_MS;
+      });
+      if (dup) {
+        if (!hasRealColour(dup.rawColour) && hasRealColour(entry.rawColour)) {
+          dup.rawColour = entry.rawColour;
+        }
+        continue;
+      }
+      kept.push(entry);
+    }
+
+    return kept.map((k) => ({
+      name: k.name,
+      colour: hasRealColour(k.rawColour) ? k.rawColour : colors.textPlaceholder,
+      timestamp: k.timestamp,
+    }));
   }, [sr.updated_Emotions_List]);
 
   return (
