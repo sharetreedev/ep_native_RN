@@ -7,11 +7,15 @@ import { RootStackParamList } from '../../types/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCourses } from '../../hooks/useCourses';
 import { useScreenAnnouncement } from '../../hooks/useScreenAnnouncement';
-import { Pencil, Bell, Info, User, ArrowLeft, Settings, LifeBuoy } from 'lucide-react-native';
+import { Pencil, Bell, Info, User, ArrowLeft, Settings, LifeBuoy, FileText, ShieldCheck } from 'lucide-react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { colors, fonts, fontSizes, spacing } from '../../theme';
 import { presentIntercom } from '../../lib/intercom';
 import Avatar from '../../components/Avatar';
 import { useSafeEdges } from '../../contexts/MHFRContext';
+
+const TERMS_URL = 'https://app.emotionalpulse.ai/terms';
+const PRIVACY_URL = 'https://app.emotionalpulse.ai/privacy';
 
 export default function AccountScreen() {
   useScreenAnnouncement('Account');
@@ -83,13 +87,33 @@ export default function AccountScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.menuItemNoBorder}
+            style={styles.menuItem}
             onPress={presentIntercom}
             accessibilityRole="button"
             accessibilityLabel="Contact support"
           >
             <LifeBuoy color={colors.textSecondary} size={20} />
             <Text style={styles.menuItemText}>Contact Support</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => WebBrowser.openBrowserAsync(TERMS_URL)}
+            accessibilityRole="button"
+            accessibilityLabel="Terms of Service"
+          >
+            <FileText color={colors.textSecondary} size={20} />
+            <Text style={styles.menuItemText}>Terms of Service</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItemNoBorder}
+            onPress={() => WebBrowser.openBrowserAsync(PRIVACY_URL)}
+            accessibilityRole="button"
+            accessibilityLabel="Privacy Policy"
+          >
+            <ShieldCheck color={colors.textSecondary} size={20} />
+            <Text style={styles.menuItemText}>Privacy Policy</Text>
           </TouchableOpacity>
         </View>
 
