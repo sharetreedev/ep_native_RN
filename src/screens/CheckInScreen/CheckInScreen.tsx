@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, ActivityIndicator, Animated } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
@@ -46,6 +46,7 @@ export default function CheckInScreen({ route, navigation }: Props) {
     // call fires.
     const inFlightRef = useRef(false);
     const safeEdges = useSafeEdges(['top']);
+    const insets = useSafeAreaInsets();
     const { createCheckIn } = useCheckIns();
 
     // Grid path: a tapped tile is held here as a pending selection so we can
@@ -279,7 +280,7 @@ export default function CheckInScreen({ route, navigation }: Props) {
              *  slider: a tapped tile previews the emotion (with "Pick another"
              *  to go back) and only "Check in as X" commits. */}
             {viewMode === 'grid' && pendingCell && (
-                <Animated.View style={[styles.detailLayer, { opacity: detailOpacity }]}>
+                <Animated.View style={[styles.detailLayer, { opacity: detailOpacity, paddingTop: insets.top }]}>
                     <ScrollView
                         style={styles.detailScroll}
                         contentContainerStyle={styles.detailScrollContent}
@@ -295,7 +296,7 @@ export default function CheckInScreen({ route, navigation }: Props) {
                         />
                     </ScrollView>
 
-                    <View style={styles.detailFooter}>
+                    <View style={[styles.detailFooter, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
                         <TouchableOpacity
                             style={[buttonStyles.primary.container, isSubmitting && buttonStyles.primary.disabled]}
                             onPress={() => handleComplete(
