@@ -24,6 +24,24 @@ function formatCheckInDate(timestamp: number): string {
 const ENERGY_COLOUR = '#B8907A';       // terracotta
 const PLEASANTNESS_COLOUR = '#91A27D'; // primary green
 
+// Check-in coordinates live on an 8×8 grid: each axis takes the discrete
+// values -4,-3,-2,-1,1,2,3,4 (no 0). We lock the chart's Y domain to [-4, 4]
+// so the left-hand axis labels are always the clean integers -4,-2,0,2,4 and
+// a given height means the same energy / pleasantness level on every render
+// (chart-kit otherwise auto-scales to each batch's min/max). chart-kit has no
+// yMin/yMax prop, so we anchor the domain with an invisible dataset carrying
+// the two extremes — getDatas() flattens every dataset when computing both the
+// labels and the point positions, so this fixes the scale without drawing
+// anything (transparent stroke, no dots).
+const Y_DOMAIN_MIN = -4;
+const Y_DOMAIN_MAX = 4;
+const Y_AXIS_ANCHOR = {
+  data: [Y_DOMAIN_MAX, Y_DOMAIN_MIN],
+  color: () => 'transparent',
+  strokeWidth: 0,
+  withDots: false,
+};
+
 interface LastCheckInCardProps {
   recentEmotion?: XanoRecentCheckInEmotion | null;
   last7CheckIns?: XanoLast7CheckIn[] | null;
@@ -77,6 +95,7 @@ export default function LastCheckInCard({ recentEmotion, last7CheckIns = [], onT
         datasets: [
           { data: [0, 0, 0, 0, 0, 0, 0], color: () => ENERGY_COLOUR, strokeWidth: 2.5 },
           { data: [0, 0, 0, 0, 0, 0, 0], color: () => PLEASANTNESS_COLOUR, strokeWidth: 2.5 },
+          Y_AXIS_ANCHOR,
         ],
       };
     }
@@ -85,6 +104,7 @@ export default function LastCheckInCard({ recentEmotion, last7CheckIns = [], onT
       datasets: [
         { data: sortedCheckIns.map((c) => Number(c.yAxis)), color: () => ENERGY_COLOUR, strokeWidth: 2.5 },
         { data: sortedCheckIns.map((c) => Number(c.xAxis)), color: () => PLEASANTNESS_COLOUR, strokeWidth: 2.5 },
+        Y_AXIS_ANCHOR,
       ],
     };
   }, [sortedCheckIns]);
@@ -104,8 +124,13 @@ export default function LastCheckInCard({ recentEmotion, last7CheckIns = [], onT
     setTimeout(() => setTooltip(null), 2500);
   };
 
-  // Extra width so lines bleed off both edges
-  const chartOverflow = 48;
+  // Width of chart-kit's left gutter (its mis-named `paddingRight` constant)
+  // where the Y-axis labels sit. We override the 64px default down to 28 via
+  // `styles.chart.paddingRight` so the labels sit nearly flush with the card's
+  // left edge (aligned with the title/legend) instead of floating inset. This
+  // value MUST match that style override, and the date decorator below
+  // positions against the same origin so the dates stay aligned with the dots.
+  const Y_AXIS_GUTTER = 28;
 
   return (
     <View style={styles.outer}>
@@ -137,19 +162,21 @@ export default function LastCheckInCard({ recentEmotion, last7CheckIns = [], onT
             <>
               <LineChart
                 data={chartData}
-                width={chartWidth + chartOverflow}
+                width={chartWidth}
                 height={120}
                 withDots={true}
                 withInnerLines={false}
                 withOuterLines={false}
                 withVerticalLines={false}
-                withHorizontalLines={false}
+                withHorizontalLines={true}
                 withVerticalLabels={false}
-                withHorizontalLabels={false}
+                withHorizontalLabels={true}
+                segments={4}
                 yAxisLabel=""
                 yAxisSuffix=""
                 yAxisInterval={1}
-                formatYLabel={() => ''}
+                fromZero={false}
+                formatYLabel={(v) => String(Math.round(Number(v)))}
                 onDataPointClick={handleDataPointClick}
                 chartConfig={{
                   backgroundColor: 'transparent',
@@ -167,6 +194,10 @@ export default function LastCheckInCard({ recentEmotion, last7CheckIns = [], onT
                   color: (opacity = 1) => `rgba(107, 114, 128, ${opacity})`,
                   labelColor: () => colors.textMuted,
                   style: { borderRadius: 0 },
+                  propsForBackgroundLines: {
+                    stroke: 'rgba(0,0,0,0.06)',
+                    strokeDasharray: '',
+                  },
                   propsForLabels: {
                     fontSize: 10,
                     fontFamily: fonts.body,
@@ -178,8 +209,8 @@ export default function LastCheckInCard({ recentEmotion, last7CheckIns = [], onT
                 }}
                 decorator={() => {
                   if (sortedCheckIns.length === 0) return null;
-                  const pRight = 64;
-                  const svgW = chartWidth + chartOverflow;
+                  const pRight = Y_AXIS_GUTTER;
+                  const svgW = chartWidth;
                   return (
                     <>
                       {sortedCheckIns.map((c, i) => {
@@ -297,12 +328,13 @@ const styles = StyleSheet.create({
   },
   chartWrap: {
     position: 'relative',
-    marginHorizontal: -16,
     overflow: 'visible',
   },
   chart: {
     borderRadius: 0,
-    marginHorizontal: -24,
+    // Overrides chart-kit's 64px default left gutter — keep in sync with
+    // Y_AXIS_GUTTER so the Y labels and date decorator share the same origin.
+    paddingRight: 28,
   },
   // ── Tooltip ──
   tooltip: {
