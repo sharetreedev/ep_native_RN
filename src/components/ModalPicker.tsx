@@ -1,13 +1,16 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal,
   TouchableOpacity,
   View,
   Text,
+  TextInput,
   FlatList,
   StyleSheet,
   Animated,
   Dimensions,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { colors, fonts, fontSizes, spacing, borderRadius } from '../theme';
 
@@ -26,6 +29,20 @@ interface ModalPickerProps<T extends ModalPickerItem> {
   animationType?: 'fade' | 'slide' | 'fadeSlide';
   maxHeight?: number;
   emptyText?: string;
+  /** Show a search field above the list that filters by label. Default false. */
+  searchable?: boolean;
+  /** Placeholder for the search field when `searchable`. */
+  searchPlaceholder?: string;
+  /**
+   * Optional right-aligned content per row (e.g. a dial code), rendered before
+   * the selected-row checkmark.
+   */
+  renderTrailing?: (item: T) => React.ReactNode;
+  /**
+   * Text a row is matched against when `searchable`. Defaults to the label.
+   * Override to search across extra fields (e.g. dial code + ISO).
+   */
+  getSearchText?: (item: T) => string;
 }
 
 export default function ModalPicker<T extends ModalPickerItem>({
@@ -38,8 +55,13 @@ export default function ModalPicker<T extends ModalPickerItem>({
   animationType = 'fade',
   maxHeight = 400,
   emptyText = 'No options available',
+  searchable = false,
+  searchPlaceholder = 'Search',
+  renderTrailing,
+  getSearchText,
 }: ModalPickerProps<T>) {
   const slideAnim = useRef(new Animated.Value(0)).current;
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     if (animationType === 'fadeSlide' && visible) {
@@ -52,6 +74,19 @@ export default function ModalPicker<T extends ModalPickerItem>({
       }).start();
     }
   }, [visible, animationType, slideAnim]);
+
+  // Clear the query whenever the sheet closes so it reopens fresh.
+  useEffect(() => {
+    if (!visible) setSearch('');
+  }, [visible]);
+
+  const filteredData = useMemo(() => {
+    if (!searchable) return data;
+    const query = search.trim().toLowerCase();
+    if (!query) return data;
+    const textOf = getSearchText ?? ((item: T) => item.label);
+    return data.filter((item) => textOf(item).toLowerCase().includes(query));
+  }, [searchable, search, data, getSearchText]);
 
   const handleDismiss = () => {
     if (animationType === 'fadeSlide') {
@@ -81,15 +116,43 @@ export default function ModalPicker<T extends ModalPickerItem>({
     : [styles.pickerContainer, { maxHeight }];
 
   return (
-    <Modal visible={visible} transparent animationType={modalAnimationType}>
-      <TouchableOpacity
+    <Modal
+      visible={visible}
+      transparent
+      animationType={modalAnimationType}
+      onRequestClose={handleDismiss}
+    >
+      <KeyboardAvoidingView
         style={styles.overlay}
-        activeOpacity={1}
-        onPress={handleDismiss}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ContentWrapper style={contentStyle}>
+        {/* Full-bleed dismiss layer: a tap anywhere outside the sheet closes it. */}
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={handleDismiss}
+        />
+        {/* Claim touches so taps inside the sheet (padding, gaps, empty list
+            area) don't bubble to the dismiss layer and close it mid-selection. */}
+        <ContentWrapper style={contentStyle} onStartShouldSetResponder={() => true}>
+          {searchable && (
+            <TextInput
+              style={styles.searchInput}
+              placeholder={searchPlaceholder}
+              placeholderTextColor={colors.textPlaceholder}
+              value={search}
+              onChangeText={setSearch}
+              autoCorrect={false}
+              autoCapitalize="none"
+              returnKeyType="search"
+              accessibilityLabel={searchPlaceholder}
+              clearButtonMode="while-editing"
+            />
+          )}
           <FlatList
-            data={data}
+            data={filteredData}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             keyExtractor={keyExtractor ?? ((item) => String(item.value))}
             renderItem={({ item }) => (
               <TouchableOpacity
@@ -97,19 +160,24 @@ export default function ModalPicker<T extends ModalPickerItem>({
                 onPress={() => onSelect(item)}
               >
                 <Text style={styles.pickerLabel}>{item.label}</Text>
-                {item.value === selectedValue && (
-                  <Text style={styles.pickerCheck}>✓</Text>
-                )}
+                <View style={styles.pickerRowRight}>
+                  {renderTrailing?.(item)}
+                  {String(item.value) === String(selectedValue) && (
+                    <Text style={styles.pickerCheck}>✓</Text>
+                  )}
+                </View>
               </TouchableOpacity>
             )}
             ListEmptyComponent={
               <View style={styles.emptyPicker}>
-                <Text style={styles.emptyPickerText}>{emptyText}</Text>
+                <Text style={styles.emptyPickerText}>
+                  {searchable && search.trim() ? 'No matches' : emptyText}
+                </Text>
               </View>
             }
           />
         </ContentWrapper>
-      </TouchableOpacity>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -127,16 +195,34 @@ const styles = StyleSheet.create({
     paddingTop: spacing.base,
     paddingBottom: spacing['2xl'],
   },
+  searchInput: {
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.md,
+    fontSize: fontSizes.base,
+    fontFamily: fonts.body,
+    color: colors.textPrimary,
+  },
   pickerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.xl,
+  },
+  pickerRowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   pickerLabel: {
     fontSize: fontSizes.base,
     fontFamily: fonts.body,
     color: colors.textPrimary,
+    flexShrink: 1,
   },
   pickerCheck: {
     fontSize: fontSizes.base,

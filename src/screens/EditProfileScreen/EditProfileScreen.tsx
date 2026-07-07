@@ -177,6 +177,8 @@ export default function EditProfileScreen() {
         visible={countryPickerVisible}
         onDismiss={() => setCountryPickerVisible(false)}
         data={COUNTRIES}
+        searchable
+        searchPlaceholder="Search countries"
         selectedValue={country}
         onSelect={(item) => {
           setCountry(item.value as string);

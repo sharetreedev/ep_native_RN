@@ -58,3 +58,23 @@ export function userToday(timezone?: string | null): string {
 export function userDaysAgo(daysAgo: number, timezone?: string | null): string {
   return userDateOf(Date.now() - daysAgo * 24 * 60 * 60 * 1000, timezone);
 }
+
+/**
+ * Human "last check-in" label — "Today" / "Yesterday" / "N days ago" — for a
+ * check-in date, evaluated in the user's timezone. Accepts a `YYYY-MM-DD`
+ * string, an ISO datetime, or epoch ms (anything `userDateOf` understands).
+ * The check-in day and today are both compared at UTC midnight so the result
+ * is an exact count of calendar days. Returns null for missing/unparseable
+ * input (callers typically render "No data").
+ */
+export function lastCheckInLabel(input: DateInput | null | undefined, timezone?: string | null): string | null {
+  if (input === null || input === undefined || input === '') return null;
+  const day = userDateOf(input, timezone);
+  const then = Date.parse(`${day}T00:00:00Z`);
+  const now = Date.parse(`${userToday(timezone)}T00:00:00Z`);
+  if (isNaN(then) || isNaN(now)) return null;
+  const days = Math.round((now - then) / 86_400_000);
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  return `${days} days ago`;
+}
