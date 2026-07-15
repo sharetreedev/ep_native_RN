@@ -11,6 +11,6 @@ Personal social circle view, showing the emotional states of those closest to th
 - **Member Insights**: Tap on a Pair in the list to view their detailed profile and emotional history.
 
 ## Navigation
-- `InvitePairIntro`: Start the flow to invite a new Pair.
+- `InvitePairType`: Start the flow to invite a new Pair (choose pair type).
 - `UserProfile`: View detailed trends and check-in history for a specific Pair.
 - `EmotionDetail`: Long press an emotion on the grid to see insights.

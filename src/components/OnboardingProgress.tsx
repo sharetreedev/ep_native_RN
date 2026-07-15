@@ -68,7 +68,7 @@ function OnboardingProgress({ user, enrollment, onNavigate, onEnrollCourse }: On
         description: (user.pairs?.length ?? 0) > 0 ? `You have ${user.pairs!.length} pair${user.pairs!.length > 1 ? 's' : ''}` : 'Connect with someone to share your journey',
         completed: (user.pairs?.length ?? 0) > 0,
         iconName: 'blend',
-        onPress: () => onNavigate('InvitePairIntro'),
+        onPress: () => onNavigate('InvitePairType'),
         themeIndex: 2,
       },
       {

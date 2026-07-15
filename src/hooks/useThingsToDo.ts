@@ -132,7 +132,7 @@ export function useThingsToDo() {
         subText: 'Share your journey with someone you trust',
         bgColor: ACTION_COLOR.blend,
         icon: 'blend',
-        onPress: () => navigation.navigate('InvitePairIntro'),
+        onPress: () => navigation.navigate('InvitePairType'),
       });
     }
     if (!enrollment) {

@@ -1,5 +1,73 @@
 # Development Setup
 
+## iOS Simulator (macOS)
+
+Run the full app in the iOS Simulator with a local **development build**. Expo Go
+will **not** work — the app ships native modules (OneSignal, Sentry, Intercom,
+Amplitude, Apple Auth) that Expo Go can't load. Everything below is scripted; the
+manual detail is here so you understand what the script does and can debug it.
+
+### One-time machine prerequisites
+
+1. **Xcode** (from the App Store) + command-line tools: `xcode-select --install`
+2. **An iOS Simulator runtime.** Xcode ships the SDK but not always a runtime.
+   Install one (~7 GB):
+   ```bash
+   xcodebuild -downloadPlatform iOS
+   ```
+   Verify: `xcrun simctl list runtimes` should list an iOS runtime.
+3. **CocoaPods** — use Homebrew's, the macOS system Ruby is too old:
+   ```bash
+   brew install cocoapods
+   ```
+4. **Node 22 LTS** (same pin the rest of the toolchain uses).
+
+### Build & run
+
+```bash
+./scripts/ios-simulator.sh            # build + install the dev client (first run ~10 min)
+npx expo start --dev-client           # then start Metro for day-to-day work
+```
+
+That's it. The first command builds the native app and installs it on a
+simulator; the second serves your JS. After that, **JS/TSX edits hot-reload
+instantly** — you only re-run the build script when a **native** dependency
+changes.
+
+Reconnect an already-installed app to a freshly-started Metro:
+```bash
+xcrun simctl openurl booted "exp+mobile://expo-development-client/?url=http://localhost:8081"
+```
+Screenshot the simulator for a PR/bug report: `xcrun simctl io booted screenshot shot.png`
+
+### Two gotchas the script handles for you
+
+- **Sentry won't compile locally** — `Module '_SentryPrivate' not found`. This is a
+  sentry-cocoa + New Architecture + CocoaPods-static-linking issue that only bites
+  on local Xcode (EAS's pinned Xcode is fine). The script temporarily adds
+  `@sentry/react-native` to `expo.autolinking.exclude` in `package.json`, builds
+  with `--no-bundler`, then **restores `package.json` on exit**. Sentry is
+  `enabled: !__DEV__` so it's inert in dev anyway.
+  > ⚠️ **Never commit an `expo.autolinking.exclude` for Sentry.** `package.json` is
+  > tracked — committing that would disable crash reporting for real users on
+  > EAS/production. The script keeps the edit transient for exactly this reason.
+- **`.env.local` data source** — `src/api/client.ts` hard-throws at launch if
+  `EXPO_PUBLIC_XANO_DATA_SOURCE` is unset. The script creates `.env.local` with
+  `EXPO_PUBLIC_XANO_DATA_SOURCE=test` if it's missing. `.env.local` is git-ignored.
+  Changing it requires restarting Metro with `-c` (env vars are inlined at bundle time).
+
+### iOS troubleshooting
+
+- **`pod: command not found`** — CocoaPods isn't on PATH. `brew install cocoapods`;
+  the script prepends `/opt/homebrew/bin`.
+- **No simulator to run on** — install a runtime (prerequisite 2 above).
+- **`_SentryPrivate` error appears anyway** — you ran `npx expo run:ios` directly
+  instead of `./scripts/ios-simulator.sh`. Use the script.
+- **App loads then red-screens with a Xano env error** — `.env.local` is missing or
+  Metro was started before it existed; create it and restart Metro with `-c`.
+
+---
+
 ## Running on a physical Android device (Dev Client)
 
 The dev client lets you test code changes instantly on a physical device using the `test` data source, without needing OTA updates.

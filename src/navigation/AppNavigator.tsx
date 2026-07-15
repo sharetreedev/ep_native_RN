@@ -28,7 +28,6 @@ import EmergencyServicesScreen from '../screens/EmergencyServicesScreen/Emergenc
 import SupportRequestsScreen from '../screens/SupportRequestsScreen/SupportRequestsScreen';
 import UserProfileScreen from '../screens/UserProfileScreen/UserProfileScreen';
 import LessonScreen from '../screens/LessonScreen/LessonScreen';
-import InvitePairIntroScreen from '../screens/InvitePairIntroScreen/InvitePairIntroScreen';
 import InvitePairTypeScreen from '../screens/InvitePairTypeScreen/InvitePairTypeScreen';
 import InvitePairActionsScreen from '../screens/InvitePairActionsScreen/InvitePairActionsScreen';
 import EmotionDetailScreen from '../screens/EmotionDetailScreen/EmotionDetailScreen';
@@ -275,7 +274,6 @@ export default function AppNavigator() {
                             <Stack.Screen name="CourseDetails" component={CourseDetailsScreen} />
                             <Stack.Screen name="CourseEnroll" component={CourseEnrollScreen} />
                             <Stack.Screen name="Enrollments" component={EnrollmentsScreen} />
-                            <Stack.Screen name="InvitePairIntro" component={InvitePairIntroScreen} />
                             <Stack.Screen name="InvitePairType" component={InvitePairTypeScreen} />
                             <Stack.Screen name="InvitePairActions" component={InvitePairActionsScreen} />
                             <Stack.Screen name="EmotionDetail" component={EmotionDetailScreen} options={{ presentation: 'modal' }} />

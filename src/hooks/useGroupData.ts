@@ -113,6 +113,27 @@ export function useGroupData() {
     return result;
   }, [wrap, user?.id]);
 
+  // Toggle a group's favourite flag. Optimistic (no global loading spinner) so
+  // the star + selector update instantly; reverts if the request fails.
+  const setGroupFavourite = useCallback(async (forestMapId: number, isFavourite: boolean) => {
+    const apply = (fav: boolean) => setState(prev => ({
+      ...prev,
+      activeGroups: prev.activeGroups.map((g: any) =>
+        g?.forest?.id === forestMapId
+          ? { ...g, forest: { ...g.forest, isFavourite: fav } }
+          : g,
+      ),
+    }));
+    apply(isFavourite);
+    try {
+      await xanoGroups.setFavourite(forestMapId, isFavourite);
+      invalidate(CACHE_KEYS.GROUPS);
+    } catch (e) {
+      logger.warn('[useGroupData] setGroupFavourite failed, reverting:', e);
+      apply(!isFavourite);
+    }
+  }, []);
+
   const getForestMap = useCallback((groupId?: number) =>
     wrap(() => xanoGroup.getForestMap(groupId)), [wrap]);
 
@@ -131,6 +152,7 @@ export function useGroupData() {
     createGroup,
     acceptInvite,
     declineInvite,
+    setGroupFavourite,
     getForestMap,
     getGroupById,
     getGroupRunningStats,

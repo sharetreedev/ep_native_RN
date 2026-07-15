@@ -20,7 +20,7 @@ export default function GroupsScreen() {
   useScreenAnnouncement('Groups');
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [containerHeight, setContainerHeight] = useState(0);
-  const { activeGroups, invites, isLoading, fetchAll, acceptInvite, declineInvite } = useGroups();
+  const { activeGroups, invites, isLoading, fetchAll, acceptInvite, declineInvite, setGroupFavourite } = useGroups();
   const { coordinates } = useStateCoordinates();
   const [refreshing, setRefreshing] = useState(false);
   const hasLoadedOnce = useRef(false);
@@ -186,6 +186,7 @@ export default function GroupsScreen() {
         onGroupPress={handleListItemPress}
         onAcceptInvite={acceptInvite}
         onDeclineInvite={declineInvite}
+        onToggleFavourite={setGroupFavourite}
       />
     );
   };

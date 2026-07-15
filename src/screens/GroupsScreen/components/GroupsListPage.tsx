@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import LoadingAnimation from '../../../components/LoadingAnimation';
-import { ChevronUp } from 'lucide-react-native';
+import { ChevronUp, Star } from 'lucide-react-native';
 import Avatar from '../../../components/Avatar';
 import ProfileTabs from '../../../components/ProfileTabs';
 import { colors, fonts, fontSizes, spacing, borderRadius } from '../../../theme';
@@ -30,6 +30,7 @@ interface GroupsListPageProps {
   onGroupPress: (payload: GroupListItemPayload) => void;
   onAcceptInvite: (forestMapId: number) => Promise<unknown>;
   onDeclineInvite: (forestMapId: number) => Promise<unknown>;
+  onToggleFavourite: (forestMapId: number, isFavourite: boolean) => void;
 }
 
 const inviteGroupName = (invite: any): string =>
@@ -57,6 +58,7 @@ export default function GroupsListPage({
   onGroupPress,
   onAcceptInvite,
   onDeclineInvite,
+  onToggleFavourite,
 }: GroupsListPageProps) {
   const [tab, setTab] = useState<Tab>('Current');
   const [pendingId, setPendingId] = useState<number | null>(null);
@@ -103,13 +105,14 @@ export default function GroupsListPage({
               const role = rawRole.replace(/\b\w/g, (c: string) => c.toUpperCase());
               const memberCount = groupInfo?.member_count as number | undefined;
               const forestId = group.forest?.id;
+              const isFavourite = !!group.forest?.isFavourite;
               const initial = groupName.charAt(0).toUpperCase();
               const isLast = index === activeGroups.length - 1;
               const groupId = groupInfo?.id ?? group.groupId ?? group.id;
 
               return (
                 <TouchableOpacity
-                  key={`group-${group.id ?? index}`}
+                  key={`group-${forestId ?? group.id ?? index}`}
                   style={[styles.listItem, !isLast && styles.listItemBorder]}
                   onPress={() => {
                     const rs = group.group?.running_stats ?? groupInfo?.running_stats ?? group.running_stats ?? null;
@@ -142,7 +145,24 @@ export default function GroupsListPage({
                       ) : null}
                     </View>
                   </View>
-                  <Text style={styles.listItemChevron}>›</Text>
+                  <View style={styles.listItemRight}>
+                    {forestId != null && (
+                      <TouchableOpacity
+                        onPress={() => onToggleFavourite(forestId, !isFavourite)}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        style={styles.favBtn}
+                        accessibilityRole="button"
+                        accessibilityLabel={isFavourite ? `Remove ${groupName} from favourites` : `Add ${groupName} to favourites`}
+                      >
+                        <Star
+                          size={20}
+                          color={isFavourite ? colors.primary : colors.textPlaceholder}
+                          fill={isFavourite ? colors.primary : 'transparent'}
+                        />
+                      </TouchableOpacity>
+                    )}
+                    <Text style={styles.listItemChevron}>›</Text>
+                  </View>
                 </TouchableOpacity>
               );
             })}
@@ -237,6 +257,8 @@ const styles = StyleSheet.create({
   listItemLeft: { flexDirection: 'row', alignItems: 'center', flexShrink: 1, flex: 1 },
   listItemName: { fontFamily: fonts.bodyBold, fontSize: fontSizes.base, color: colors.textPrimary },
   listItemRole: { fontSize: fontSizes.sm, fontFamily: fonts.bodyMedium, color: colors.textSecondary },
+  listItemRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  favBtn: { padding: 2 },
   listItemChevron: { color: colors.textPlaceholder },
   inviteActions: {
     flexDirection: 'row',

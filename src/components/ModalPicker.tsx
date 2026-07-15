@@ -1,9 +1,10 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal,
   TouchableOpacity,
   View,
   Text,
+  TextInput,
   FlatList,
   StyleSheet,
   Animated,
@@ -26,6 +27,10 @@ interface ModalPickerProps<T extends ModalPickerItem> {
   animationType?: 'fade' | 'slide' | 'fadeSlide';
   maxHeight?: number;
   emptyText?: string;
+  /** Show a search box that filters options by label. Default false. */
+  searchable?: boolean;
+  /** Placeholder for the search box (only when `searchable`). */
+  searchPlaceholder?: string;
 }
 
 export default function ModalPicker<T extends ModalPickerItem>({
@@ -38,8 +43,23 @@ export default function ModalPicker<T extends ModalPickerItem>({
   animationType = 'fade',
   maxHeight = 400,
   emptyText = 'No options available',
+  searchable = false,
+  searchPlaceholder = 'Search',
 }: ModalPickerProps<T>) {
   const slideAnim = useRef(new Animated.Value(0)).current;
+  const [search, setSearch] = useState('');
+
+  const filteredData = useMemo(() => {
+    if (!searchable) return data;
+    const query = search.trim().toLowerCase();
+    if (!query) return data;
+    return data.filter((item) => item.label.toLowerCase().includes(query));
+  }, [data, search, searchable]);
+
+  // Clear the query whenever the picker is hidden so it reopens fresh.
+  useEffect(() => {
+    if (!visible) setSearch('');
+  }, [visible]);
 
   useEffect(() => {
     if (animationType === 'fadeSlide' && visible) {
@@ -76,9 +96,13 @@ export default function ModalPicker<T extends ModalPickerItem>({
     : 0;
 
   const ContentWrapper = useFadeSlide ? Animated.View : View;
+  // A searchable picker uses a fixed height so the sheet doesn't resize as the
+  // result count changes while typing; the list scrolls within it. Non-search
+  // pickers keep shrink-to-fit (maxHeight) since their options are few.
+  const sizeStyle = searchable ? { height: maxHeight } : { maxHeight };
   const contentStyle = useFadeSlide
-    ? [styles.pickerContainer, { maxHeight, transform: [{ translateY: slideTranslate }] }]
-    : [styles.pickerContainer, { maxHeight }];
+    ? [styles.pickerContainer, sizeStyle, { transform: [{ translateY: slideTranslate }] }]
+    : [styles.pickerContainer, sizeStyle];
 
   return (
     <Modal visible={visible} transparent animationType={modalAnimationType}>
@@ -88,8 +112,21 @@ export default function ModalPicker<T extends ModalPickerItem>({
         onPress={handleDismiss}
       >
         <ContentWrapper style={contentStyle}>
+          {searchable && (
+            <TextInput
+              style={styles.searchInput}
+              value={search}
+              onChangeText={setSearch}
+              placeholder={searchPlaceholder}
+              placeholderTextColor={colors.textPlaceholder}
+              autoCorrect={false}
+              autoCapitalize="none"
+            />
+          )}
           <FlatList
-            data={data}
+            data={filteredData}
+            style={searchable ? styles.list : undefined}
+            keyboardShouldPersistTaps="handled"
             keyExtractor={keyExtractor ?? ((item) => String(item.value))}
             renderItem={({ item }) => (
               <TouchableOpacity
@@ -126,6 +163,22 @@ const styles = StyleSheet.create({
     borderTopRightRadius: borderRadius.xl,
     paddingTop: spacing.base,
     paddingBottom: spacing['2xl'],
+  },
+  list: {
+    flex: 1,
+  },
+  searchInput: {
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    borderRadius: borderRadius.button,
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
+    fontSize: fontSizes.base,
+    fontFamily: fonts.body,
+    color: colors.textPrimary,
+    backgroundColor: colors.surface,
   },
   pickerRow: {
     flexDirection: 'row',

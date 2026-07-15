@@ -82,7 +82,7 @@ export default function MyPairsScreen() {
     }, [navigation]);
 
     const handleInvitePress = useCallback(() => {
-        navigation.navigate('InvitePairIntro');
+        navigation.navigate('InvitePairType');
     }, [navigation]);
 
     const handlePairPress = useCallback((userId: string, pairsId: number) => {

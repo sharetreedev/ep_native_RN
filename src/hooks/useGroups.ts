@@ -22,6 +22,7 @@ interface UseGroupsResult {
   ) => Promise<XanoGroup | null>;
   acceptInvite: (forestMapId: number) => Promise<XanoUserGroup | null>;
   declineInvite: (forestMapId: number) => Promise<XanoUserGroup | null>;
+  setGroupFavourite: (forestMapId: number, isFavourite: boolean) => Promise<void>;
   inviteViaEmail: (groupId: number, inviteeEmail: string) => Promise<{ success: string; message: string; data: string } | null>;
   inviteUsers: (params: {
     emails: string;
@@ -47,7 +48,7 @@ interface UseGroupsResult {
  * mutate, and invite members to groups.
  */
 export function useGroups(): UseGroupsResult {
-  const { activeGroups, invites, isLoading, error, fetchAll, createGroup, acceptInvite, declineInvite, getForestMap, getGroupById, getGroupRunningStats } = useGroupData();
+  const { activeGroups, invites, isLoading, error, fetchAll, createGroup, acceptInvite, declineInvite, setGroupFavourite, getForestMap, getGroupById, getGroupRunningStats } = useGroupData();
   const { inviteViaEmail, inviteUsers } = useGroupInvites();
   const { getMembers, updateGroupName, updateProfilePic, updateBanner } = useGroupProfile();
 
@@ -60,6 +61,7 @@ export function useGroups(): UseGroupsResult {
     createGroup,
     acceptInvite,
     declineInvite,
+    setGroupFavourite,
     inviteViaEmail,
     inviteUsers,
     getForestMap,

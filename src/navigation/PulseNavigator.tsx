@@ -98,7 +98,7 @@ export default function PulseNavigator() {
 
     // Contextual action button config
     const actions = [
-        { label: 'Invite', onPress: () => rootNav.navigate('InvitePairIntro') },
+        { label: 'Invite', onPress: () => rootNav.navigate('InvitePairType') },
         { label: 'Create', onPress: () => rootNav.navigate('CreateGroup') },
         null, // Global — no action
     ];

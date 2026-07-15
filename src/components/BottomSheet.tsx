@@ -3,11 +3,13 @@ import {
   Animated,
   Dimensions,
   Modal,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { borderRadius, colors, fonts, fontSizes, spacing } from '../theme';
 
 interface BottomSheetProps {
@@ -19,6 +21,13 @@ interface BottomSheetProps {
   showHandle?: boolean;
   /** Tap on the dimmed backdrop to dismiss. Default true. */
   dismissOnBackdropPress?: boolean;
+  /**
+   * Cap the sheet to the available screen height and let its content scroll when
+   * it would otherwise overflow. Content still fits without scrolling at normal
+   * sizes; this only kicks in when tall content (e.g. large accessibility font
+   * sizes) would push the sheet past the top of the screen. Default false.
+   */
+  scrollable?: boolean;
   children: React.ReactNode;
 }
 
@@ -33,8 +42,10 @@ export default function BottomSheet({
   title,
   showHandle = true,
   dismissOnBackdropPress = true,
+  scrollable = false,
   children,
 }: BottomSheetProps) {
+  const insets = useSafeAreaInsets();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(Dimensions.get('window').height)).current;
 
@@ -81,11 +92,27 @@ export default function BottomSheet({
           <Animated.View style={[styles.backdrop, { opacity: fadeAnim }]} />
         </TouchableWithoutFeedback>
         <Animated.View
-          style={[styles.sheet, { transform: [{ translateY: slideAnim }] }]}
+          style={[
+            styles.sheet,
+            // Cap to the space below the top safe-area inset so a tall sheet can
+            // never push its content off the top of the screen.
+            scrollable && { maxHeight: Dimensions.get('window').height - insets.top - spacing.base },
+            { transform: [{ translateY: slideAnim }] },
+          ]}
         >
           {showHandle && <View style={styles.handle} />}
           {title && <Text style={styles.title}>{title}</Text>}
-          {children}
+          {scrollable ? (
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+              contentContainerStyle={styles.scrollContent}
+            >
+              {children}
+            </ScrollView>
+          ) : (
+            children
+          )}
         </Animated.View>
       </View>
     </Modal>
@@ -105,6 +132,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.sm,
     paddingBottom: spacing['2xl'],
+  },
+  scrollContent: {
+    paddingBottom: spacing.xs,
   },
   handle: {
     width: 36,

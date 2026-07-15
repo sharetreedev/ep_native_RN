@@ -208,6 +208,8 @@ export default function AppleNameCaptureScreen() {
         onDismiss={() => setCountryPickerVisible(false)}
         data={COUNTRIES}
         selectedValue={country}
+        searchable
+        searchPlaceholder="Search country"
         onSelect={(item) => {
           setCountry(item.value as string);
           setCountryPickerVisible(false);

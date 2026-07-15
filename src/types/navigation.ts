@@ -32,7 +32,6 @@ export type RootStackParamList = {
     SupportRequestDetails: { supportRequest: XanoSupportRequest };
     RiskAssessment: { supportRequest: XanoSupportRequest };
     UserProfile: { userId: string; pairsId?: number; isNotPair?: boolean };
-    InvitePairIntro: undefined;
     InvitePairType: undefined;
     InvitePairActions: { pairType: 'DUAL' | 'PULL' };
     EmotionDetail: { emotion: Emotion };

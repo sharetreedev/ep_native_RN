@@ -176,6 +176,24 @@ export const groups = {
       `/group/respond/${groupForestMapId}`,
       { reqStatus, userID: userId },
     ),
+
+  /**
+   * Toggle whether a group is one of the user's favourites (favourites are
+   * pinned to the group selector). Uses the canonical `group/respond` PATCH.
+   *
+   * Previously routed to the deprecated `/group_forest_map/{id}` on
+   * `api:wImR3IV3` because the canonical endpoint's patch data stripped
+   * `false` (trailing `filter_empty:""`), so it could favourite but never
+   * *un*-favourite. That anti-pattern was removed on the backend (EP-1069) —
+   * the patch data is now just `$input|pick:($raw_input|keys)`, which
+   * preserves booleans — so un-favouriting persists on the canonical route.
+   */
+  setFavourite: (groupForestMapId: number, isFavourite: boolean) =>
+    request<XanoUserGroup>(
+      'PATCH',
+      `/group/respond/${groupForestMapId}`,
+      { isFavourite },
+    ),
 };
 
 // ─────────────────────────────────────────────────────────────────────────

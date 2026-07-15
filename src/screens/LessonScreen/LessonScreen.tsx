@@ -5,10 +5,12 @@ import { Play, Pause, SkipBack, SkipForward, Volume2, ArrowLeft } from 'lucide-r
 import { useNavigation, useRoute, useFocusEffect, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Audio, AVPlaybackStatus } from 'expo-av';
+import { RotateCcw } from 'lucide-react-native';
 import { colors, fonts, fontSizes, borderRadius, spacing, buttonStyles } from '../../theme';
 import { RootStackParamList } from '../../types/navigation';
 import { useCourses } from '../../hooks/useCourses';
 import { useSafeEdges } from '../../contexts/MHFRContext';
+import { logger } from '../../lib/logger';
 
 const SKIP_SECONDS = 15;
 
@@ -25,6 +27,8 @@ export default function LessonScreen() {
   const [positionMs, setPositionMs] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const maxPositionRef = useRef(0);
   const [hasReached80, setHasReached80] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
@@ -96,30 +100,45 @@ export default function LessonScreen() {
     }, [])
   );
 
-  // Load audio when screen mounts with an audio URL
+  // Load audio when screen mounts with an audio URL (re-runs on manual retry).
   useEffect(() => {
     if (!audioUrl) return;
 
-    let sound: Audio.Sound;
+    let sound: Audio.Sound | undefined;
+    let cancelled = false;
+    setIsLoaded(false);
+    setLoadError(false);
 
     const load = async () => {
-      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
-      const { sound: s } = await Audio.Sound.createAsync(
-        { uri: audioUrl },
-        { shouldPlay: false },
-        onPlaybackStatusUpdate,
-      );
-      sound = s;
-      soundRef.current = s;
-      setIsLoaded(true);
+      try {
+        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+        const { sound: s } = await Audio.Sound.createAsync(
+          { uri: audioUrl },
+          { shouldPlay: false },
+          onPlaybackStatusUpdate,
+        );
+        // If the screen unmounted / audioUrl changed mid-load, discard the
+        // sound we just created rather than leaking or setting stale state.
+        if (cancelled) {
+          s.unloadAsync();
+          return;
+        }
+        sound = s;
+        soundRef.current = s;
+        setIsLoaded(true);
+      } catch (e) {
+        if (!cancelled) setLoadError(true);
+        logger.warn('[LessonScreen] audio load failed:', e);
+      }
     };
 
     load();
 
     return () => {
+      cancelled = true;
       if (sound) sound.unloadAsync();
     };
-  }, [audioUrl]);
+  }, [audioUrl, reloadKey]);
 
   const onPlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
     if (!status.isLoaded) return;
@@ -151,6 +170,13 @@ export default function LessonScreen() {
       await soundRef.current.playAsync();
     }
   };
+
+  const handleRetryLoad = useCallback(() => setReloadKey((k) => k + 1), []);
+
+  // Player states: audio present + still loading, load failed (offer retry),
+  // or no audio attached to the lesson at all.
+  const isLoadingAudio = !!audioUrl && !isLoaded && !loadError;
+  const hasNoAudio = !audioUrl;
 
   const skip = async (seconds: number) => {
     if (!soundRef.current || !isLoaded) return;
@@ -272,8 +298,17 @@ export default function LessonScreen() {
             <TouchableOpacity onPress={() => skip(-SKIP_SECONDS)}>
               <SkipBack color={colors.textPrimary} size={28} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.playButton} onPress={togglePlay}>
-              {isPlaying ? (
+            <TouchableOpacity
+              style={styles.playButton}
+              onPress={loadError ? handleRetryLoad : togglePlay}
+              disabled={isLoadingAudio || hasNoAudio}
+              accessibilityLabel={loadError ? 'Retry loading audio' : isPlaying ? 'Pause' : 'Play'}
+            >
+              {isLoadingAudio ? (
+                <ActivityIndicator size="small" color={colors.textOnPrimary} />
+              ) : loadError ? (
+                <RotateCcw color={colors.textOnPrimary} size={30} />
+              ) : isPlaying ? (
                 <Pause color={colors.textOnPrimary} size={32} />
               ) : (
                 <Play color={colors.textOnPrimary} size={32} />
@@ -309,9 +344,13 @@ export default function LessonScreen() {
             </Text>
           )}
         </TouchableOpacity>
-        {!isCompleted && (
+        {loadError ? (
+          <Text style={styles.audioProblemHint}>Couldn&apos;t load the audio. Tap the button above to try again.</Text>
+        ) : hasNoAudio ? (
+          <Text style={styles.audioProblemHint}>Audio isn&apos;t available for this lesson.</Text>
+        ) : !isCompleted ? (
           <Text style={styles.completeHint}>To complete the lesson, make sure you finish the audio</Text>
-        )}
+        ) : null}
       </View>
     </SafeAreaView>
   );
@@ -502,6 +541,13 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: fontSizes.sm,
     color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  audioProblemHint: {
+    fontFamily: fonts.body,
+    fontSize: fontSizes.sm,
+    color: colors.destructive,
     textAlign: 'center',
     marginTop: 10,
   },

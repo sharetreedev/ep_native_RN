@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ImageBackground,
   StyleSheet,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -101,6 +102,15 @@ export default function UserProfileScreen() {
   const pairAvatarUrl = otherUser?.profilePic_url || null;
   const pairPhone = otherUser?.phoneNumber;
   const pairTypeLabel = pairData?.pairType === 'DUAL' ? 'Trusted Pair' : pairData?.pairType === 'PULL' ? 'Support Pair' : 'Pair';
+
+  // Tapping the pair's phone number opens the native dialer, pre-filled.
+  const handleCallPair = useCallback(() => {
+    if (!pairPhone) return;
+    const url = `tel:${pairPhone.replace(/\s/g, '')}`;
+    Linking.canOpenURL(url).then((supported) => {
+      if (supported) Linking.openURL(url);
+    });
+  }, [pairPhone]);
 
   // Running stats — from pair's other_user or current user's own stats
   const runningStats = isPair ? otherUser?.running_stats : selfRunningStats;
@@ -407,9 +417,14 @@ export default function UserProfileScreen() {
 
           <View style={styles.tags}>
             {isPair && pairPhone ? (
-              <View style={styles.tag}>
+              <TouchableOpacity
+                style={styles.tag}
+                onPress={handleCallPair}
+                accessibilityRole="button"
+                accessibilityLabel={`Call ${pairFirstName}`}
+              >
                 <Text style={styles.tagText}>{pairPhone}</Text>
-              </View>
+              </TouchableOpacity>
             ) : !isPair ? (
               <View style={styles.tag}>
                 <Text style={styles.tagText}>{currentUser?.phoneNumber || '+1 555-0100'}</Text>
