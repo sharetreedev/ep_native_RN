@@ -1,12 +1,12 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as Linking from 'expo-linking';
 import { RootStackParamList } from '../types/navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { useCheckIn } from '../contexts/CheckInContext';
-import { colors } from '../theme';
+import { colors, spacing, fonts, fontSizes } from '../theme';
 import { consumePendingLesson, peekPendingLesson } from './pendingLesson';
 import { linking } from './linking';
 import { setPendingLink, consumePendingLink, peekPendingLink } from './pendingLink';
@@ -203,6 +203,9 @@ export default function AppNavigator() {
         return (
             <View style={styles.loadingContainer}>
                 <LoadingAnimation />
+                <Text style={styles.loadingText}>
+                    Take a moment to pause and reflect on how you truly feel.
+                </Text>
             </View>
         );
     }
@@ -317,5 +320,14 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         backgroundColor: colors.background,
+    },
+    loadingText: {
+        marginTop: spacing.lg,
+        paddingHorizontal: spacing.xl,
+        textAlign: 'center',
+        fontFamily: fonts.body,
+        fontSize: fontSizes.base,
+        lineHeight: 22,
+        color: colors.textSecondary,
     },
 });
