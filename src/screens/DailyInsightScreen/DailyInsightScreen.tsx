@@ -24,7 +24,7 @@ import PairsListView from '../../components/DailyInsight/PairsListView';
 import { useSafeEdges } from '../../contexts/MHFRContext';
 import { colors, fonts, fontSizes, spacing, buttonStyles } from '../../theme';
 import { reportError } from '../../lib/logger';
-import { userDateOf, userDaysAgo } from '../../lib/userDate';
+import { userDateOf, userDaysAgo, lastCheckInLabel } from '../../lib/userDate';
 
 import type { XanoTimelineCheckIn } from '../../api';
 
@@ -156,8 +156,9 @@ export default function DailyInsightScreen({ navigation, route }: Props) {
   const stats = runningStatsHook.stats as any;
   const prevCheckin = stats?.prev_checkin_location;
   const currentCheckin = stats?.current_checkin_location;
-  const rawLastCheckin = stats?.days_since_last_pulse || 'No data';
-  const lastCheckinLabel = rawLastCheckin.charAt(0).toUpperCase() + rawLastCheckin.slice(1);
+  // "Last Check-In" — from the user's authoritative last check-in date, matching
+  // the identical card on the profile screen (both render UserOutlookTab).
+  const lastCheckinLabel = lastCheckInLabel(user?.lastCheckInDate, user?.timezone) ?? 'No data';
   const checkinRate = stats?.checkin_frequency
     ? `${stats.checkin_frequency.toFixed(1)}x a week`
     : 'N/A';

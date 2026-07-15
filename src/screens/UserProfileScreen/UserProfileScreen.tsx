@@ -38,7 +38,7 @@ import Avatar from '../../components/Avatar';
 import UserOutlookTab from './components/UserOutlookTab';
 import { styles, AVATAR_SIZE, HEADER_HEIGHT } from './styles';
 import { logger } from '../../lib/logger';
-import { userDaysAgo } from '../../lib/userDate';
+import { userDaysAgo, lastCheckInLabel } from '../../lib/userDate';
 
 // Local banner image
 const bannerImage = require('../../../assets/ep-app-imagery.webp');
@@ -126,8 +126,28 @@ export default function UserProfileScreen() {
   const currentCheckin = runningStats?.current_checkin_location;
 
   // Extract stats
-  const rawLastCheckin = runningStats?.days_since_last_pulse || 'No data';
-  const lastCheckinLabel = rawLastCheckin.charAt(0).toUpperCase() + rawLastCheckin.slice(1);
+  // "Last Check-In" — the date of the user's most recent check-in
+  // ("Today" / "Yesterday" / "N days ago"), from each user's authoritative
+  // `lastCheckInDate` (self: current user; pair: the pair member). Not capped
+  // to the 7-day timeline window. Replaces running_stats.days_since_last_pulse,
+  // which could disagree with the actual check-in history (and showed "No data"
+  // for pairs whose last check-in was >7 days ago).
+  const lastCheckinLabel = useMemo(
+    () =>
+      lastCheckInLabel(
+        isPair
+          ? otherUser?.lastCheckInDate ?? otherUser?.last_check_in_date
+          : currentUser?.lastCheckInDate,
+        currentUser?.timezone,
+      ) ?? 'No data',
+    [
+      isPair,
+      otherUser?.lastCheckInDate,
+      otherUser?.last_check_in_date,
+      currentUser?.lastCheckInDate,
+      currentUser?.timezone,
+    ],
+  );
   const checkinRate = runningStats?.checkin_frequency
     ? `${runningStats.checkin_frequency.toFixed(1)}x a week`
     : 'N/A';
