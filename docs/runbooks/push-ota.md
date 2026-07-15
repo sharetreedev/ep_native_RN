@@ -25,9 +25,13 @@ Replace `production` with `preview` or `development` if you're shipping somewher
 
 What this does:
 
-1. Verifies `EXPO_PUBLIC_XANO_DATA_SOURCE` is set on the target EAS environment (`production` / `preview` / `development`)
-2. Unsets any locally-exported `EXPO_PUBLIC_XANO_DATA_SOURCE` so it can't bleed into the bundle
-3. Calls `eas update --channel <env> --environment <env>` — EAS pulls env vars from its server-side store, not your local `.env`
+1. **Git pre-flight:**
+   - Blocks if your local HEAD is behind `origin/main` (publishing would roll back merged work — `git pull --ff-only origin main` to fix).
+   - **Live-release guard:** cross-references the `EP-####` tokens in the *currently-live* update's message against `origin/main`'s history. If the live release references work that isn't on `main` — i.e. it was OTA'd but **never merged to main** (the [EP-1125-1128 incident](rollback-ota.md) class) — it stops, because publishing from `main` would silently roll that work back. `update:list --json` doesn't expose each update's source commit, so this is a heuristic on EP numbers; get the missing work onto `main`, or pass `--skip-history-check` only if you're certain it's intentional.
+   - Warns on a dirty working tree (`--allow-dirty` to skip).
+2. Verifies `EXPO_PUBLIC_XANO_DATA_SOURCE` is set on the target EAS environment (`production` / `preview` / `development`)
+3. Unsets any locally-exported `EXPO_PUBLIC_XANO_DATA_SOURCE` so it can't bleed into the bundle
+4. Calls `eas update --channel <env> --environment <env>` — EAS pulls env vars from its server-side store, not your local `.env`
 
 > **Do not call `eas update` directly.** It will use whatever's in your `.env` (currently `EXPO_PUBLIC_XANO_DATA_SOURCE=test`) and bake that into the bundle. The safety check in [`src/api/client.ts`](../../src/api/client.ts) would crash the app on user devices — better than corrupting data, but disruptive. The wrapper avoids this entirely.
 

@@ -42,10 +42,12 @@ esac
 # Peel off our own flags before forwarding the rest to eas-cli, which would
 # reject anything it doesn't recognise.
 ALLOW_DIRTY=false
+SKIP_HISTORY_CHECK=false
 FORWARD_ARGS=()
 for arg in "$@"; do
   case "$arg" in
     --allow-dirty) ALLOW_DIRTY=true ;;
+    --skip-history-check) SKIP_HISTORY_CHECK=true ;;
     *) FORWARD_ARGS+=("$arg") ;;
   esac
 done
@@ -78,6 +80,44 @@ if git rev-parse --git-dir > /dev/null 2>&1; then
     fi
   else
     echo "⚠️  No origin/main ref found — skipping ancestry check." >&2
+  fi
+
+  # ─── Live-release guard (the EP-1125-1128 class) ──────────────────────────
+  # The ancestry check above only sees origin/main. It CANNOT see work that was
+  # OTA'd to this channel but never merged to main — EAS stores a source commit
+  # per update, but `update:list --json` doesn't expose it, so a commit-based
+  # ancestry check isn't possible. Heuristic instead: read the EP-#### tokens
+  # from the update currently live on this channel and confirm each appears in
+  # origin/main's history. If the live release references work that isn't on
+  # main, publishing from main would silently roll it back.
+  if [[ "$SKIP_HISTORY_CHECK" != "true" ]] && git rev-parse --verify --quiet origin/main > /dev/null; then
+    echo "🔍 Cross-checking the live '$ENV' release against origin/main history..."
+    # Extract EP-#### tokens from the live update's message, expanding the
+    # team's shorthand lists ("EP-1100/1118/1060", "EP-1125-1128") into every
+    # individual EP-#### so the check doesn't miss the trailing ones.
+    LIVE_EPS="$($EAS update:list --branch "$ENV" --limit 1 --json --non-interactive 2>/dev/null \
+      | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{let msg="";try{const j=JSON.parse(s);const it=Array.isArray(j)?j:(j.currentPage||[]);msg=String((it[0]&&it[0].message)||"")}catch(e){}const eps=new Set();const re=/EP-(\d+(?:\s*[\/,\-]\s*\d+)*)/g;let m;while((m=re.exec(msg))){m[1].split(/[\/,\-\s]+/).filter(Boolean).forEach(n=>eps.add("EP-"+n))}process.stdout.write([...eps].join("\n"))})' 2>/dev/null || true)"
+    if [[ -n "$LIVE_EPS" ]]; then
+      MISSING=""
+      for ep in $LIVE_EPS; do
+        if ! git log origin/main --grep="$ep" --oneline 2>/dev/null | grep -q .; then
+          MISSING="$MISSING $ep"
+        fi
+      done
+      if [[ -n "$MISSING" ]]; then
+        echo "⚠️  The live '$ENV' release references work NOT found on origin/main:$MISSING" >&2
+        echo "   That work was likely OTA'd without merging to main. Publishing from main" >&2
+        echo "   now would roll it back (the EP-1125-1128 class of incident)." >&2
+        echo "   Get it onto main first, or pass --skip-history-check to override." >&2
+        if [[ -t 0 ]]; then
+          read -r -p "   Publish anyway? [y/N] " reply
+          [[ "$reply" =~ ^[Yy]$ ]] || { echo "Aborted." >&2; exit 1; }
+        else
+          echo "❌ Non-interactive shell — aborting. Re-run with --skip-history-check to override." >&2
+          exit 1
+        fi
+      fi
+    fi
   fi
 
   DIRTY="$(git status --porcelain)"
