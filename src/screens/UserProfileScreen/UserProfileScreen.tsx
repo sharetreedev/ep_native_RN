@@ -7,6 +7,7 @@ import {
   ImageBackground,
   StyleSheet,
   Linking,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -104,12 +105,21 @@ export default function UserProfileScreen() {
   const pairTypeLabel = pairData?.pairType === 'DUAL' ? 'Trusted Pair' : pairData?.pairType === 'PULL' ? 'Support Pair' : 'Pair';
 
   // Tapping the pair's phone number opens the native dialer, pre-filled.
-  const handleCallPair = useCallback(() => {
+  const handleCallPair = useCallback(async () => {
     if (!pairPhone) return;
     const url = `tel:${pairPhone.replace(/\s/g, '')}`;
-    Linking.canOpenURL(url).then((supported) => {
-      if (supported) Linking.openURL(url);
-    });
+    try {
+      // Don't gate on Linking.canOpenURL — on Android 11+ package-visibility
+      // rules it returns false for `tel:` unless the scheme is declared in the
+      // manifest <queries> (a native rebuild, not OTA-shippable), producing a
+      // false "can't call" on phones that dial fine. Open directly and let the
+      // catch handle a device that genuinely has no dialer. (Mirrors the sms:
+      // handling in CheckInWithUser.)
+      await Linking.openURL(url);
+    } catch (err) {
+      logger.error(err);
+      Alert.alert('Could not start call', 'Something went wrong opening your phone app.');
+    }
   }, [pairPhone]);
 
   // Running stats — from pair's other_user or current user's own stats
