@@ -100,7 +100,10 @@ if git rev-parse --git-dir > /dev/null 2>&1; then
     if [[ -n "$LIVE_EPS" ]]; then
       MISSING=""
       for ep in $LIVE_EPS; do
-        if ! git log origin/main --grep="$ep" --oneline 2>/dev/null | grep -q .; then
+        # Capture in a var rather than piping to `grep -q` — under `set -o
+        # pipefail`, grep -q closing the pipe early gives git-log a SIGPIPE (141)
+        # and the pipeline reports failure, producing false "missing" hits.
+        if [ -z "$(git log origin/main --grep="$ep" --format=%H -1 2>/dev/null)" ]; then
           MISSING="$MISSING $ep"
         fi
       done
