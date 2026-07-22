@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-import { pickImage } from '../../lib/imagePicker';
+import { pickImage, toUploadFile, type PickedImage } from '../../lib/imagePicker';
 import { ArrowLeft, MoreHorizontal, UserPlus } from 'lucide-react-native';
 import { RootStackParamList } from '../../types/navigation';
 import { useGroups } from '../../hooks/useGroups';
@@ -59,9 +59,9 @@ export default function GroupProfileScreen() {
   const [editedName, setEditedName] = useState(paramGroupName || '');
   const [saving, setSaving] = useState(false);
   const [profilePicVisible, setProfilePicVisible] = useState(false);
-  const [pickedProfilePicUri, setPickedProfilePicUri] = useState<string | null>(null);
+  const [pickedProfilePic, setPickedProfilePic] = useState<PickedImage | null>(null);
   const [bannerModalVisible, setBannerModalVisible] = useState(false);
-  const [pickedBannerUri, setPickedBannerUri] = useState<string | null>(null);
+  const [pickedBanner, setPickedBanner] = useState<PickedImage | null>(null);
 
   // Track locally updated values
   const [localGroupName, setLocalGroupName] = useState(paramGroupName);
@@ -141,20 +141,18 @@ export default function GroupProfileScreen() {
   };
 
   const handlePickProfilePic = async () => {
-    const uri = await pickImage({ aspect: [1, 1] });
-    if (uri) setPickedProfilePicUri(uri);
+    const picked = await pickImage({ aspect: [1, 1] });
+    if (picked) setPickedProfilePic(picked);
   };
 
   const handleSaveProfilePic = async () => {
-    if (!pickedProfilePicUri) return;
-    const ext = pickedProfilePicUri.split('.').pop()?.toLowerCase() || 'jpeg';
-    const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+    if (!pickedProfilePic) return;
     setSaving(true);
-    const res = await updateProfilePic(groupId, { uri: pickedProfilePicUri, name: `group_profile.${ext}`, type: mime });
+    const res = await updateProfilePic(groupId, toUploadFile(pickedProfilePic, 'group_profile'));
     setSaving(false);
     if (res) {
-      setLocalImageUrl(pickedProfilePicUri);
-      setPickedProfilePicUri(null);
+      setLocalImageUrl(pickedProfilePic.uri);
+      setPickedProfilePic(null);
       setProfilePicVisible(false);
     } else {
       Alert.alert('Error', 'Failed to update profile picture.');
@@ -162,20 +160,18 @@ export default function GroupProfileScreen() {
   };
 
   const handlePickBanner = async () => {
-    const uri = await pickImage({ aspect: [16, 9] });
-    if (uri) setPickedBannerUri(uri);
+    const picked = await pickImage({ aspect: [16, 9] });
+    if (picked) setPickedBanner(picked);
   };
 
   const handleSaveBanner = async () => {
-    if (!pickedBannerUri) return;
-    const ext = pickedBannerUri.split('.').pop()?.toLowerCase() || 'jpeg';
-    const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+    if (!pickedBanner) return;
     setSaving(true);
-    const res = await updateBanner(groupId, { uri: pickedBannerUri, name: `group_banner.${ext}`, type: mime });
+    const res = await updateBanner(groupId, toUploadFile(pickedBanner, 'group_banner'));
     setSaving(false);
     if (res) {
-      setLocalBannerUri(pickedBannerUri);
-      setPickedBannerUri(null);
+      setLocalBannerUri(pickedBanner.uri);
+      setPickedBanner(null);
       setBannerModalVisible(false);
     } else {
       Alert.alert('Error', 'Failed to update banner.');
@@ -289,20 +285,20 @@ export default function GroupProfileScreen() {
         menuVisible={menuVisible}
         onCloseMenu={() => setMenuVisible(false)}
         onEditName={() => { setMenuVisible(false); setEditedName(groupName); setEditNameVisible(true); }}
-        onEditProfilePic={() => { setMenuVisible(false); setPickedProfilePicUri(null); setProfilePicVisible(true); }}
-        onEditBanner={() => { setMenuVisible(false); setPickedBannerUri(null); setBannerModalVisible(true); }}
+        onEditProfilePic={() => { setMenuVisible(false); setPickedProfilePic(null); setProfilePicVisible(true); }}
+        onEditBanner={() => { setMenuVisible(false); setPickedBanner(null); setBannerModalVisible(true); }}
         editNameVisible={editNameVisible}
         editedName={editedName}
         onEditedNameChange={setEditedName}
         onCloseEditName={() => setEditNameVisible(false)}
         onSaveGroupName={handleSaveGroupName}
         profilePicVisible={profilePicVisible}
-        pickedProfilePicUri={pickedProfilePicUri}
+        pickedProfilePicUri={pickedProfilePic?.uri ?? null}
         onCloseProfilePic={() => setProfilePicVisible(false)}
         onPickProfilePic={handlePickProfilePic}
         onSaveProfilePic={handleSaveProfilePic}
         bannerModalVisible={bannerModalVisible}
-        pickedBannerUri={pickedBannerUri}
+        pickedBannerUri={pickedBanner?.uri ?? null}
         onCloseBanner={() => setBannerModalVisible(false)}
         onPickBanner={handlePickBanner}
         onSaveBanner={handleSaveBanner}

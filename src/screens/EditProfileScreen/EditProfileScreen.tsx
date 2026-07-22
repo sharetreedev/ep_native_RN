@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ArrowLeft, Pencil, BadgeCheck, ChevronDown } from 'lucide-react-native';
-import { pickImage } from '../../lib/imagePicker';
+import { pickImage, toUploadFile, type PickedImage } from '../../lib/imagePicker';
 import { RootStackParamList } from '../../types/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUser } from '../../hooks/useUser';
@@ -39,16 +39,16 @@ export default function EditProfileScreen() {
   const [email] = useState(user?.email || '');
   const [country, setCountry] = useState(user?.country || '');
   const [avatarUri, setAvatarUri] = useState(user?.avatarUrl || '');
-  const [avatarFileUri, setAvatarFileUri] = useState('');
+  const [avatarFile, setAvatarFile] = useState<PickedImage | null>(null);
   const [countryPickerVisible, setCountryPickerVisible] = useState(false);
 
   const selectedCountryLabel = COUNTRIES.find((c) => c.value === country)?.label || '';
 
   const handlePickImage = useCallback(async () => {
-    const uri = await pickImage({ aspect: [1, 1] });
-    if (uri) {
-      setAvatarUri(uri);
-      setAvatarFileUri(uri);
+    const picked = await pickImage({ aspect: [1, 1] });
+    if (picked) {
+      setAvatarUri(picked.uri);
+      setAvatarFile(picked);
     }
   }, []);
 
@@ -61,7 +61,7 @@ export default function EditProfileScreen() {
         fullName,
         phoneNumber: phone.trim(),
         country,
-        ...(avatarFileUri ? { profilePicFile: { uri: avatarFileUri } } : {}),
+        ...(avatarFile ? { profilePicFile: toUploadFile(avatarFile, 'profile') } : {}),
       });
       await refreshUser();
       Alert.alert('Success', 'Profile updated successfully.');

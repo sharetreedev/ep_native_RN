@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { ArrowLeft, Camera, Plus, X } from 'lucide-react-native';
-import { pickImage } from '../../lib/imagePicker';
+import { pickImage, toUploadFile, type PickedImage } from '../../lib/imagePicker';
 import { useGroups } from '../../hooks/useGroups';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
 import { useSafeEdges } from '../../contexts/MHFRContext';
@@ -29,7 +29,7 @@ export default function CreateGroupScreen() {
 
   const [step, setStep] = useState(1);
   const [groupName, setGroupName] = useState('');
-  const [groupImage, setGroupImage] = useState<string>('');
+  const [groupImage, setGroupImage] = useState<PickedImage | null>(null);
   const [emailInput, setEmailInput] = useState('');
   const [emails, setEmails] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -37,8 +37,8 @@ export default function CreateGroupScreen() {
   const canProceed = step === 1 ? groupName.trim().length > 0 : true;
 
   const handlePickImage = useCallback(async () => {
-    const uri = await pickImage({ aspect: [1, 1] });
-    if (uri) setGroupImage(uri);
+    const picked = await pickImage({ aspect: [1, 1] });
+    if (picked) setGroupImage(picked);
   }, []);
 
   const handleAddEmail = useCallback(() => {
@@ -80,13 +80,7 @@ export default function CreateGroupScreen() {
       // When the user picked a local image, send it via multipart as the
       // `group_image_file` input — the script runs storage.create_image and
       // populates the Groups row's image URL from the uploaded binary.
-      const imageFile = groupImage
-        ? (() => {
-            const ext = groupImage.split('.').pop()?.split(';')[0]?.toLowerCase() || 'jpeg';
-            const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
-            return { uri: groupImage, name: `group_image.${ext}`, type: mime };
-          })()
-        : undefined;
+      const imageFile = groupImage ? toUploadFile(groupImage, 'group_image') : undefined;
       const group = await createGroup(groupName.trim(), '', [], imageFile);
       if (group) {
         if (!options?.skipInvites) {
@@ -141,7 +135,7 @@ export default function CreateGroupScreen() {
       <Text style={styles.stepHint}>This helps members identify the group at a glance. You can skip this for now.</Text>
       <TouchableOpacity style={styles.imagePicker} onPress={handlePickImage} activeOpacity={0.7}>
         {groupImage ? (
-          <Image source={{ uri: groupImage }} style={styles.imagePreview} />
+          <Image source={{ uri: groupImage.uri }} style={styles.imagePreview} />
         ) : (
           <View style={styles.imagePlaceholder}>
             <View style={styles.cameraCircle}>
@@ -152,7 +146,7 @@ export default function CreateGroupScreen() {
         )}
       </TouchableOpacity>
       {groupImage ? (
-        <TouchableOpacity style={styles.removeImageButton} onPress={() => setGroupImage('')}>
+        <TouchableOpacity style={styles.removeImageButton} onPress={() => setGroupImage(null)}>
           <Text style={styles.removeImageText}>Remove</Text>
         </TouchableOpacity>
       ) : null}

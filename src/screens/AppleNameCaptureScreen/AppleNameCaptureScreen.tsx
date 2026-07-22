@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Pencil, ChevronDown } from 'lucide-react-native';
-import { pickImage } from '../../lib/imagePicker';
+import { pickImage, toUploadFile, type PickedImage } from '../../lib/imagePicker';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUser } from '../../hooks/useUser';
 import { useScreenAnnouncement } from '../../hooks/useScreenAnnouncement';
@@ -38,7 +38,7 @@ export default function AppleNameCaptureScreen() {
   const [country, setCountry] = useState(user?.country ?? '');
   const [countryPickerVisible, setCountryPickerVisible] = useState(false);
   const [avatarUri, setAvatarUri] = useState(user?.avatarUrl ?? '');
-  const [avatarFileUri, setAvatarFileUri] = useState('');
+  const [avatarFile, setAvatarFile] = useState<PickedImage | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const trimmedFirst = firstName.trim();
@@ -47,10 +47,10 @@ export default function AppleNameCaptureScreen() {
   const canSubmit = trimmedFirst.length > 0 && country.length > 0 && !submitting;
 
   const handlePickImage = useCallback(async () => {
-    const uri = await pickImage({ aspect: [1, 1] });
-    if (uri) {
-      setAvatarUri(uri);
-      setAvatarFileUri(uri);
+    const picked = await pickImage({ aspect: [1, 1] });
+    if (picked) {
+      setAvatarUri(picked.uri);
+      setAvatarFile(picked);
     }
   }, []);
 
@@ -64,7 +64,7 @@ export default function AppleNameCaptureScreen() {
         lastName: trimmedLast,
         fullName,
         country,
-        ...(avatarFileUri ? { profilePicFile: { uri: avatarFileUri } } : {}),
+        ...(avatarFile ? { profilePicFile: toUploadFile(avatarFile, 'profile') } : {}),
       });
       await refreshUser();
     } catch {
