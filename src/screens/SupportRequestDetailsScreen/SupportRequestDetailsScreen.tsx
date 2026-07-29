@@ -11,7 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { ArrowLeft, Phone, Users } from 'lucide-react-native';
+import { ArrowLeft, Phone, PhoneCall, Users } from 'lucide-react-native';
 import { formatDistanceToNow } from 'date-fns';
 import { RootStackParamList } from '../../types/navigation';
 import { useAuth } from '../../contexts/AuthContext';
@@ -104,14 +104,26 @@ export default function SupportRequestDetailsScreen() {
     })
     .filter(Boolean) as { id: number; name: string }[];
 
+  // EP-1137: a Proactive EAP request comes from an AI wellbeing call, so there is no
+  // check-in behind it and no emotion was ever captured.
+  const isProactiveEAP = sr.trigger_source === 'proactive_eap';
+  const subjectHasNoAccount = sr.subject_has_account === false;
+
   // Action text for MHFR support guide
   const triggerName =
     sr.trigger_Emotion?.emotion_item?.Display ?? sr.trigger_Emotion?.emotion_name ?? '';
   const displayName = requestUser?.fullName ?? 'This person';
   const emotionLabel = triggerName ? triggerName.toUpperCase() : 'distressed';
+  // Never assert an emotion we did not measure. The default copy claims the person
+  // "is feeling distressed", which is a fair reading of an in-app check-in but a
+  // fabrication for a phone check-in — they asked for support, they did not log a
+  // feeling. Putting words in someone's mouth is not acceptable in a mental-health
+  // context, and it also misleads the responder about what they are walking into.
   const actionText =
     sr.support_Action ||
-    `${displayName} is feeling ${emotionLabel} and would like someone to get in touch with them.`;
+    (isProactiveEAP
+      ? `${displayName} asked for support during a wellbeing check-in call and would like someone to get in touch with them.`
+      : `${displayName} is feeling ${emotionLabel} and would like someone to get in touch with them.`);
 
   return (
     <SafeAreaView style={styles.safe} edges={safeEdges}>
@@ -153,6 +165,24 @@ export default function SupportRequestDetailsScreen() {
               </Text>
             </View>
           </View>
+
+          {/* ── Source pill (EP-1137) ──
+              Only shown for Proactive EAP. A responder needs to know this came from
+              an AI wellbeing CALL, not an in-app check-in — otherwise the absent
+              emotion data and empty pulse timeline read as something broken. */}
+          {isProactiveEAP ? (
+            <View style={styles.sourceRow}>
+              <View style={styles.sourcePill}>
+                <PhoneCall size={13} color={colors.primary} />
+                <Text style={styles.sourceLabel}>Proactive EAP check-in call</Text>
+              </View>
+              {subjectHasNoAccount ? (
+                <View style={[styles.sourcePill, styles.sourcePillMuted]}>
+                  <Text style={styles.sourceLabelMuted}>Not yet on the app</Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
 
         </View>
 
@@ -303,6 +333,37 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.full,
     borderWidth: 1,
     marginLeft: spacing.sm,
+  },
+  sourceRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  sourcePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(145, 162, 125, 0.15)',
+  },
+  sourcePillMuted: {
+    borderColor: colors.textPlaceholder,
+    backgroundColor: 'transparent',
+  },
+  sourceLabel: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.xs,
+    color: colors.primary,
+  },
+  sourceLabelMuted: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: fontSizes.xs,
+    color: colors.textPlaceholder,
   },
   statusOpen: {
     backgroundColor: colors.alertLight,
