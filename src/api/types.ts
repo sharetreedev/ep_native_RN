@@ -585,6 +585,19 @@ export interface XanoUpdatedEmotion {
   emotionColour: string;
 }
 
+/**
+ * Contact details for whoever raised a support request.
+ *
+ * EP-1137: the backend now ALWAYS populates this with the same four keys, and
+ * resolves the source itself — from the person's account when they have one, or
+ * from a contact snapshot stored on the request when they don't (a Proactive EAP
+ * check-in can raise a request for someone who was invited but hasn't signed up).
+ *
+ * Values are '' rather than null when unknown, so no null-guards are needed.
+ * Do NOT add a fallback that reads contact_phone / contact_first_name /
+ * contact_email off the request — those are the backend's source for this object
+ * and are deliberately not returned. This is the only place to read from.
+ */
 export interface XanoSupportRequestUser {
   fullName: string;
   email: string | null;
@@ -626,5 +639,26 @@ export interface XanoSupportRequest {
   Contact_History: { users_id: number; timestamp: number | null }[];
   updated_Emotions_List: XanoUpdatedEmotion[];
   resolved_Emotion: XanoResolvedEmotion;
-  requesting_user_details: XanoSupportRequestUser | null;
+  /** Always populated by the backend — see XanoSupportRequestUser. */
+  requesting_user_details: XanoSupportRequestUser;
+
+  /**
+   * EP-1137: how the request was raised.
+   *   'checkin'       — in-app emotion check-in (the historical path)
+   *   'proactive_eap' — an AI wellbeing check-in CALL; there is NO check-in behind
+   *                     it, so trigger_Emotion / trigger_Checkin_id are absent and
+   *                     the emotion chip has nothing to render. That is expected,
+   *                     not a failure.
+   *   'manual'        — raised by hand
+   * Legacy rows may be null and should be read as 'checkin'.
+   */
+  trigger_source: 'checkin' | 'proactive_eap' | 'manual' | null;
+
+  /**
+   * False when the requester has no Emotional Pulse account yet (invited but not
+   * signed up). Their contact details still resolve normally; they just have no
+   * pulse history, avatar or app presence. Provided so the UI can say so
+   * deliberately rather than inferring it from missing fields.
+   */
+  subject_has_account?: boolean;
 }

@@ -47,6 +47,10 @@ export default function AppleNameCaptureScreen() {
   const canSubmit = trimmedFirst.length > 0 && country.length > 0 && !submitting;
 
   const handlePickImage = useCallback(async () => {
+    // Crop editor stays ON: it re-encodes to JPEG, and without it iOS hands us
+    // HEIC, which Xano's storage.create_image rejects ("Invalid file extension").
+    // Re-enable allowsEditing:false once expo-image-manipulator lands in a binary
+    // build and we can transcode ourselves — it cannot be done over OTA.
     const picked = await pickImage({ aspect: [1, 1] });
     if (picked) {
       setAvatarUri(picked.uri);

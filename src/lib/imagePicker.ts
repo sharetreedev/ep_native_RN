@@ -1,11 +1,26 @@
 import * as ImagePicker from 'expo-image-picker';
 import { ActionSheetIOS, Alert, Platform } from 'react-native';
+import { logger } from './logger';
 
 export interface PickImageOptions {
-  /** Crop aspect ratio passed to expo-image-picker. */
+  /** Crop aspect ratio passed to expo-image-picker. Only applies when
+   *  `allowsEditing` is true. */
   aspect?: [number, number];
   /** 0–1, defaults to 0.8 (matches existing call sites). */
   quality?: number;
+  /**
+   * Show the built-in crop/rotate editor after selection. Defaults to true.
+   *
+   * ⚠️ Setting this to `false` uploads the asset AS-IS, which on iOS is very often
+   * **HEIC** — and Xano's `storage.create_image` rejects it with
+   * "Invalid file extension." The crop editor was doubling as a format normaliser:
+   * it re-encodes to JPEG on the way out, which is why uploads worked with it on.
+   *
+   * There is no OTA-safe way to transcode — `expo-image-manipulator` is a native
+   * module, so enabling this properly needs it added and a NEW BINARY BUILD, not an
+   * OTA. Until then, leave editing on for any path that uploads to Xano.
+   */
+  allowsEditing?: boolean;
 }
 
 /**
@@ -44,20 +59,22 @@ export async function pickImage(opts: PickImageOptions = {}): Promise<PickedImag
       );
       return null;
     }
+    const allowsEditing = opts.allowsEditing ?? true;
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: 'images',
-      allowsEditing: true,
-      aspect: opts.aspect,
+      allowsEditing,
+      aspect: allowsEditing ? opts.aspect : undefined,
       quality: opts.quality ?? 0.8,
     });
     if (result.canceled || !result.assets[0]) return null;
     return toPickedImage(result.assets[0]);
   }
 
+  const allowsEditing = opts.allowsEditing ?? true;
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: 'images',
-    allowsEditing: true,
-    aspect: opts.aspect,
+    allowsEditing,
+    aspect: allowsEditing ? opts.aspect : undefined,
     quality: opts.quality ?? 0.8,
   });
   if (result.canceled || !result.assets[0]) return null;
@@ -111,7 +128,28 @@ export function toUploadFile(
   const ext =
     (img.mimeType && MIME_TO_EXT[img.mimeType]) ||
     (uriExt && /^[a-z0-9]{2,5}$/.test(uriExt) ? uriExt : 'jpg');
-  const name = img.fileName ?? `${fallbackBaseName}.${ext}`;
+  // Build the name from the picker's BASE name but always re-apply OUR resolved
+  // extension. Previously this used `img.fileName` verbatim, which reintroduced
+  // whatever the OS reported — including uppercase iOS extensions like
+  // "IMG_0004.HEIC" — bypassing all the lowercase normalisation above and sending
+  // Xano a filename whose extension didn't match the declared content type.
+  // Xano's storage.create_image validates the extension and rejects a mismatch
+  // with "Invalid file extension."
+  const base = img.fileName
+    ? img.fileName.replace(/\.[^.]+$/, '') || fallbackBaseName
+    : fallbackBaseName;
+  const name = `${base}.${ext}`;
+
+  // Dev-only: logger.info is a no-op outside __DEV__. Kept because the upload's
+  // declared type/extension is invisible in the network log and is exactly what
+  // storage.create_image rejects on.
+  logger.info('[toUploadFile]', JSON.stringify({
+    sent_name: name,
+    sent_type: type,
+    picker_mimeType: img.mimeType ?? null,
+    picker_fileName: img.fileName ?? null,
+    uri_ext: uriExt ?? null,
+  }));
   return { uri: img.uri, name, type };
 }
 
