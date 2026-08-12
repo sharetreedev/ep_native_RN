@@ -4,15 +4,19 @@
     "slug": "mobile",
     "owner": "sharetrees-organization",
     "scheme": "emotionalpulse",
-    "version": "3.1.2",
+    "version": "3.2.0",
     "orientation": "portrait",
     "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "light",
     "ios": {
+      "icon": "./assets/app-icon.png",
       "supportsTablet": true,
       "bundleIdentifier": "com.vative.stemotionalpulse",
       "appleTeamId": "PL8F7LAM2G",
       "associatedDomains": ["applinks:app.emotionalpulse.ai"],
+      "entitlements": {
+        "com.apple.developer.usernotifications.time-sensitive": true
+      },
       "infoPlist": {
         "CFBundleDisplayName": "Emotional Pulse",
         "ITSAppUsesNonExemptEncryption": false,
@@ -215,7 +219,8 @@
       [
         "onesignal-expo-plugin",
         {
-          "mode": "production"
+          "mode": "production",
+          "sounds": ["./assets/notification.wav"]
         }
       ],
       [
