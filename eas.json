@@ -27,7 +27,10 @@
       "ios": {
         "appleId": "dylan@calibremedia.com.au",
         "ascAppId": "1560353741",
-        "appleTeamId": "PL8F7LAM2G"
+        "appleTeamId": "PL8F7LAM2G",
+        "ascApiKeyPath": "./AuthKey_T43J42T3TA.p8",
+        "ascApiKeyId": "T43J42T3TA",
+        "ascApiKeyIssuerId": "69a6de8d-616a-47e3-e053-5b8c7c11a4d1"
       },
       "android": {
         "serviceAccountKeyPath": "./google-play-service-account.json",
