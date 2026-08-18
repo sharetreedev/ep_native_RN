@@ -12,4 +12,5 @@ before publishing.
 | `fix/analytics-groupids` branch | committed locally, NOT merged, NOT published | Rescued 18 Aug from the archived `ep_native_RN-main` duplicate (orig. 16 Jun): Amplitude was receiving `[undefined,…]` groupIds. Review → merge → include in next OTA. | 18 Aug |
 | EP-1069 groups.ts revert | ⚠ local-only, NOT deployed | Held to avoid prod OTA footgun while v1 backend fix is held. | ⚠ |
 | EP-1194 gitignore hardening + ASC key config | committed to `main` 13 Aug | | 13 Aug |
+| **v3.2.0 store release** | **LIVE on both stores** — iOS approved + Android promoted to production, published manually by Maurice from the store consoles | On-device Time-Sensitive verification still open (see runbook) | 18 Aug |
 | Last OTA publish | ⚠ unknown — run `eas update:list` | | |

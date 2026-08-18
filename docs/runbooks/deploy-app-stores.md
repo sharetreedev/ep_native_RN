@@ -84,12 +84,14 @@ runbook when native code, entitlements, icons, or bundled assets change.
 - **Git quirk seen here:** local `main` once tracked the wrong upstream
   (`origin/ep-1128-…`) — check `git branch -vv` before `git pull` on main.
 
-## Loose ends from the v3.2.0 release (check before assuming done)
+## v3.2.0 release outcome
 
-- Time-Sensitive entitlement's effect on already-quieted devices: only verifiable
-  on-device post-approval; fallback = in-app "re-enable notifications" prompt
+**Both stores published** — Maurice promoted Android internal → production and
+completed the iOS release manually in the store consoles (confirmed 18 Aug 2026).
+
+Still genuinely open:
+- Time-Sensitive entitlement's effect on already-quieted devices: verify on a real
+  device now that 3.2.0 is live; fallback = in-app "re-enable notifications" prompt
   (follow-up ticket was proposed, not created).
-- Android internal → production promotion in Play Console.
-- On-device verification of v3.2.0 (custom sound, banner, icon); the Android build
-  was never device-tested.
-- App Store review outcome (submitted ~12 Aug) — verify it was approved.
+- On-device verification of v3.2.0 polish items (custom sound, banner, icon); the
+  Android build was never device-tested pre-release.
