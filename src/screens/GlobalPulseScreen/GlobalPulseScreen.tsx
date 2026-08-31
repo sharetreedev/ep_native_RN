@@ -1,12 +1,13 @@
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { View, Text, ScrollView, RefreshControl, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, fonts, fontSizes } from '../../theme';
-import { checkIns } from '../../api';
+import { checkIns, XanoGlobalPulse } from '../../api';
 import PulseGrid from '../../components/visualization/PulseGrid';
 import CoordinatesGrid from '../../components/visualization/CoordinatesGrid';
 import { useStateCoordinates } from '../../hooks/useStateCoordinates';
+import { useCoordinateMapping } from '../../hooks/useCoordinateMapping';
 import { useCachedFetch } from '../../hooks/useCachedFetch';
 import { CACHE_KEYS } from '../../lib/fetchCache';
 import PulseLoader from '../../components/PulseLoader';
@@ -14,18 +15,13 @@ import { logger } from '../../lib/logger';
 
 export default function GlobalPulseScreen() {
     const [refreshing, setRefreshing] = useState(false);
-    const [globalData, setGlobalData] = useState<Record<number, number>>({});
+    const [globalData, setGlobalData] = useState<XanoGlobalPulse[]>([]);
     const hasLoadedOnce = useRef(false);
     const { coordinates } = useStateCoordinates();
 
     const fetchData = useCallback(async () => {
         try {
-            const data = await checkIns.getGlobalPulse();
-            const countMap: Record<number, number> = {};
-            data.forEach((item: any) => {
-                countMap[item.stateCoordinates] = item.count;
-            });
-            setGlobalData(countMap);
+            setGlobalData(await checkIns.getGlobalPulse());
             hasLoadedOnce.current = true;
         } catch (error) {
             logger.error('[GlobalPulse] Failed to fetch:', error);
@@ -46,21 +42,12 @@ export default function GlobalPulseScreen() {
         setRefreshing(false);
     }, [forceFetchGlobal]);
 
-    // Build density points from state coordinates + global pulse counts
-    const densityData = useMemo(() => {
-        if (coordinates.length === 0) return [];
-        const counts = coordinates.map(c => globalData[c.id] ?? 0);
-        const maxCount = Math.max(...counts, 1);
-        return coordinates
-            .filter(c => c.xAxis != null && c.yAxis != null)
-            .map(c => ({
-                row: c.yAxis! + 4,
-                col: c.xAxis! + 4,
-                intensity: (globalData[c.id] ?? 0) / maxCount,
-                count: globalData[c.id] ?? 0,
-            }))
-            .filter(p => p.intensity > 0);
-    }, [coordinates, globalData]);
+    // Grid placement goes through the shared helper, same as Group/Pair/User
+    // pulse. Axis values are (-4..-1, 1..4) with no zero and an inverted Y, so
+    // the naive `axis + 4` offset this screen used to do both shifted every
+    // positive value and pushed the x=4 / y=4 bands off the 8x8 grid, silently
+    // dropping 15 of 64 coordinates from the aggregate (EP-1193).
+    const { densityData } = useCoordinateMapping(coordinates, globalData);
 
     if (!hasLoadedOnce.current) return <PulseLoader delay={150} />;
 
