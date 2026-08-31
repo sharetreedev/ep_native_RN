@@ -395,12 +395,14 @@ export interface XanoRunningStats {
 /**
  * One row of a coordinate-density tally: how many check-ins landed at a given
  * state-coordinate. Returned by group endpoints under `members_coordinates_count`,
- * `checkins_7day`, and `checkins30day`. Both `coordinate_id` and `id` appear
- * across endpoints — useCoordinateMapping treats either as the lookup key.
+ * `checkins_7day`, and `checkins30day`. `coordinate_id`, `id` and (on
+ * `get_global_pulse`) `stateCoordinates` all appear across endpoints —
+ * useCoordinateMapping treats any of them as the lookup key.
  */
 export interface XanoCoordinateCount {
   coordinate_id?: number;
   id?: number;
+  stateCoordinates?: number;
   count?: number;
 }
 
