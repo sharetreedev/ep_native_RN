@@ -14,8 +14,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Generates a 2fa code and sends via email to user requesting for authentication
-         * @description Generates a 2fa code and sends via email to user requesting for authentication
+         * Generates a 2fa code and sends it to the user over the requested channel.
+         * @description Generates a 2fa code and sends it to the user over the requested channel.
          *     <br /><br />
          *     <b>Authentication:</b> required
          */
@@ -104,10 +104,10 @@ export interface paths {
         /**
          * Apple Sign-In authentication endpoint
          *     Authenticate user via Apple ID identity token
-         *     Step 7 — Return the response
+         *     Step 7 — Return the response (Native Mobile APP)
          * @description Apple Sign-In authentication endpoint
          *     Authenticate user via Apple ID identity token
-         *     Step 7 — Return the response
+         *     Step 7 — Return the response (Native Mobile APP)
          *     <br /><br />
          *     <b>Authentication:</b> not required
          */
@@ -389,7 +389,33 @@ export interface paths {
         put?: never;
         /**
          * Signup and retrieve an authentication token
+         *
+         *      EP-1262: this is the endpoint the SMS-pump used to plant an arbitrary
+         *      phoneNumber on a throwaway account before calling 2fa/signinwithmobile. That
+         *      send is now gated on the user existing, which is the actual fix.
+         *
+         *      A per-IP `redis.ratelimit` was tried here and REMOVED — Redis / data-caching
+         *      functions are gated by Xano plan tier and this instance 403s any endpoint
+         *      using them ("Not supported. Please upgrade your Xano instance."). It is a
+         *      RUNTIME gate: dry-run and import both pass. See api/authentication/auth/signup.
+         *
+         *      ⚠️ This endpoint remains UNPROTECTED by any CAPTCHA — the mobile app calls it
+         *      and a web widget can't work there. Option (b) on EP-1262 (App Attest / Play
+         *      Integrity) is the real answer.
          * @description Signup and retrieve an authentication token
+         *
+         *      EP-1262: this is the endpoint the SMS-pump used to plant an arbitrary
+         *      phoneNumber on a throwaway account before calling 2fa/signinwithmobile. That
+         *      send is now gated on the user existing, which is the actual fix.
+         *
+         *      A per-IP `redis.ratelimit` was tried here and REMOVED — Redis / data-caching
+         *      functions are gated by Xano plan tier and this instance 403s any endpoint
+         *      using them ("Not supported. Please upgrade your Xano instance."). It is a
+         *      RUNTIME gate: dry-run and import both pass. See api/authentication/auth/signup.
+         *
+         *      ⚠️ This endpoint remains UNPROTECTED by any CAPTCHA — the mobile app calls it
+         *      and a web widget can't work there. Option (b) on EP-1262 (App Attest / Play
+         *      Integrity) is the real answer.
          *     <br /><br />
          *     <b>Authentication:</b> not required
          */
@@ -978,10 +1004,42 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Edit Group Forest Map record
-         * @description Edit Group Forest Map record
+         * Accept / respond / edit a Group Forest Map record. Single point of entry.
+         *
+         *      Generic PATCH (edits whatever fields the client sends) PLUS:
+         *        - On reqStatus = ACCEPTED where the row has an invite_anchor_id:
+         *            cascade ALL rows sharing that anchor to ACCEPTED, backfilling the
+         *            signed-in user's id (auth.id) onto any row whose userID is empty.
+         *            Then trigger billing ONCE against the nearest billing-group ancestor
+         *            of the accepted row's group (fixes the prior jump-to-primary bug).
+         *        - On reqStatus = REMOVED: single-row only (leaving a team != leaving the
+         *            org), but billing uses the same nearest-billing-ancestor rule.
+         *
+         *      Authorization model: the invite token (held on the anchor row) is the
+         *      entitlement. The link page resolves the token and PATCHes the anchor's id,
+         *      so cascade keys off invite_anchor_id, never email — supporting the case
+         *      where someone is invited on one email but signs up on another.
+         *
+         *      Depends on: groups/ancestor_chain, billing/update_subscription
+         * @description Accept / respond / edit a Group Forest Map record. Single point of entry.
+         *
+         *      Generic PATCH (edits whatever fields the client sends) PLUS:
+         *        - On reqStatus = ACCEPTED where the row has an invite_anchor_id:
+         *            cascade ALL rows sharing that anchor to ACCEPTED, backfilling the
+         *            signed-in user's id (auth.id) onto any row whose userID is empty.
+         *            Then trigger billing ONCE against the nearest billing-group ancestor
+         *            of the accepted row's group (fixes the prior jump-to-primary bug).
+         *        - On reqStatus = REMOVED: single-row only (leaving a team != leaving the
+         *            org), but billing uses the same nearest-billing-ancestor rule.
+         *
+         *      Authorization model: the invite token (held on the anchor row) is the
+         *      entitlement. The link page resolves the token and PATCHes the anchor's id,
+         *      so cascade keys off invite_anchor_id, never email — supporting the case
+         *      where someone is invited on one email but signs up on another.
+         *
+         *      Depends on: groups/ancestor_chain, billing/update_subscription
          *     <br /><br />
-         *     <b>Authentication:</b> not required
+         *     <b>Authentication:</b> required
          */
         patch: operations["api/group/respond/{group_forest_map_id}|PATCH"];
         trace?: never;
@@ -1182,6 +1240,94 @@ export interface paths {
          *     <b>Authentication:</b> required
          */
         patch: operations["api/notification/mark_read|PATCH"];
+        trace?: never;
+    };
+    "/oauth/apple/continue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * This endpoint handles both Apple login and signup depending on the state of the user account.
+         * @description This endpoint handles both Apple login and signup depending on the state of the user account.
+         *     <br /><br />
+         *     <b>Authentication:</b> not required
+         */
+        post: operations["api/oauth/apple/continue|POST"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/apple/init": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * This endpoint is responsible for sending the user off to Apple's webpage to authenticate. Once complete, the user will be redirected to where this request was initiated and then depending on your requirements, the user will go down the login, signup, or continue path.
+         * @description This endpoint is responsible for sending the user off to Apple's webpage to authenticate. Once complete, the user will be redirected to where this request was initiated and then depending on your requirements, the user will go down the login, signup, or continue path.
+         *     <br /><br />
+         *     <b>Authentication:</b> not required
+         */
+        get: operations["api/oauth/apple/init|GET"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/apple/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * This endpoint handles login only. If the user has not already signed up through Apple, then this endpoint will throw an error message.
+         * @description This endpoint handles login only. If the user has not already signed up through Apple, then this endpoint will throw an error message.
+         *     <br /><br />
+         *     <b>Authentication:</b> not required
+         */
+        get: operations["api/oauth/apple/login|GET"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/apple/signup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * This endpoint handles signup only. If the user already has signed up through Apple, then this endpoint will throw an error message
+         * @description This endpoint handles signup only. If the user already has signed up through Apple, then this endpoint will throw an error message
+         *     <br /><br />
+         *     <b>Authentication:</b> not required
+         */
+        get: operations["api/oauth/apple/signup|GET"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/onboarding/complete": {
@@ -1728,8 +1874,24 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Gets Support Requests assigned to AUTH User
-         * @description Gets Support Requests assigned to AUTH User
+         * Gets Support Requests assigned to AUTH User.
+         *
+         *      THIS is the endpoint the MOBILE APP calls (src/api/support.ts:21). Its twin,
+         *      Support Requests group -> support_requests/get_mhfr_support_request, serves the
+         *      other clients. Both are now thin wrappers over
+         *      support_requests/mhfr_requests_for_user so they cannot drift — a fix applied to
+         *      only one of them previously left the app on the old behaviour entirely (EP-1137).
+         *
+         *      Do not reimplement the query here. Change the function.
+         * @description Gets Support Requests assigned to AUTH User.
+         *
+         *      THIS is the endpoint the MOBILE APP calls (src/api/support.ts:21). Its twin,
+         *      Support Requests group -> support_requests/get_mhfr_support_request, serves the
+         *      other clients. Both are now thin wrappers over
+         *      support_requests/mhfr_requests_for_user so they cannot drift — a fix applied to
+         *      only one of them previously left the app on the old behaviour entirely (EP-1137).
+         *
+         *      Do not reimplement the query here. Change the function.
          *     <br /><br />
          *     <b>Authentication:</b> required
          */
@@ -2048,12 +2210,36 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
-                    /** @enum {string} */
+                    /**
+                     * @description LEGACY (EP-1261). `type` and `delivery_method` describe the same thing —
+                     *     the delivery channel — so `delivery_method` is now authoritative and this
+                     *     is kept only so existing RN/WeWeb callers keep working (R-MIG-001).
+                     *     phone -> sms, email -> email. Retiring it is a separate migration.
+                     * @enum {string}
+                     */
                     type?: "email" | "phone";
+                    /**
+                     * @description EP-1261 — the one channel vocabulary shared with auth/2fa/signinwithmobile.
+                     *     Omitted falls back to `type`, so today's callers are unaffected.
+                     * @enum {string}
+                     */
+                    delivery_method?: "email" | "sms" | "whatsapp";
                 };
                 "multipart/form-data": {
-                    /** @enum {string} */
+                    /**
+                     * @description LEGACY (EP-1261). `type` and `delivery_method` describe the same thing —
+                     *     the delivery channel — so `delivery_method` is now authoritative and this
+                     *     is kept only so existing RN/WeWeb callers keep working (R-MIG-001).
+                     *     phone -> sms, email -> email. Retiring it is a separate migration.
+                     * @enum {string}
+                     */
                     type?: "email" | "phone";
+                    /**
+                     * @description EP-1261 — the one channel vocabulary shared with auth/2fa/signinwithmobile.
+                     *     Omitted falls back to `type`, so today's callers are unaffected.
+                     * @enum {string}
+                     */
+                    delivery_method?: "email" | "sms" | "whatsapp";
                 };
             };
         };
@@ -2067,6 +2253,7 @@ export interface operations {
                     "application/json": {
                         status?: string;
                         message?: string;
+                        delivery_method?: string;
                     };
                 };
             };
@@ -2126,10 +2313,24 @@ export interface operations {
                 "application/json": {
                     phone?: string;
                     country_iso?: string;
+                    /**
+                     * @description EP-1261 — opt-in delivery channel. Omitted == "sms", so every existing
+                     *     caller keeps today's behaviour. This is the login-blocking path for users
+                     *     outside AU/US/UK, where A2P SMS often never arrives.
+                     * @enum {string}
+                     */
+                    delivery_method?: "sms" | "whatsapp";
                 };
                 "multipart/form-data": {
                     phone?: string;
                     country_iso?: string;
+                    /**
+                     * @description EP-1261 — opt-in delivery channel. Omitted == "sms", so every existing
+                     *     caller keeps today's behaviour. This is the login-blocking path for users
+                     *     outside AU/US/UK, where A2P SMS often never arrives.
+                     * @enum {string}
+                     */
+                    delivery_method?: "sms" | "whatsapp";
                 };
             };
         };
@@ -2144,6 +2345,7 @@ export interface operations {
                         status?: string;
                         message?: string;
                         user_id?: string;
+                        delivery_method?: string;
                     };
                 };
             };
@@ -2463,14 +2665,33 @@ export interface operations {
                         email?: string | null;
                         phoneNumber?: string;
                         /**
+                         * @description EP-1130 — provenance of phoneNumber (see group_forest_map.phone_source).
+                         *     user_confirmed/signup must never be overwritten by admin_supplied/csv_import.
+                         * @enum {string}
+                         */
+                        phone_source?: "admin_supplied" | "csv_import" | "user_confirmed" | "signup";
+                        /**
                          * @default Free
                          * @enum {string}
                          */
                         access: "Free" | "Activator" | "Workplace";
+                        /** @default false */
+                        super_admin: boolean;
+                        /**
+                         * @description EP-1202 — internal ShareTree team member who staffs the MHFR call console. This is a
+                         *     ShareTree-STAFF flag, deliberately NOT the client-side responder role (Group Forest
+                         *     Map role "mhfr support", EP-1137): client MHFRs must never reach the console. Ticked
+                         *     per user like super_admin. Grants console access + cross-client visibility, since
+                         *     ShareTree operators call on behalf of every client (Scenarios 2/3).
+                         * @default false
+                         */
+                        st_mhfr: boolean;
                         /** Format: password */
                         password?: string | null;
                         fullName?: string;
                         profilePic_url?: string;
+                        /** @description Small (~256px) thumbnail of profilePic_url, for the pulse grid / lists. */
+                        profilePic_thumb_url?: string;
                         profile_hex_colour?: string;
                         /** Format: int64 */
                         recentStateCoordinates?: number;
@@ -2583,6 +2804,21 @@ export interface operations {
                         apple_user_id?: string;
                         correlation_id?: string;
                         Profile_Pic_File?: {
+                            /**
+                             * @default public
+                             * @enum {string}
+                             */
+                            access: "public" | "private";
+                            path?: string;
+                            name?: string;
+                            type?: string;
+                            /** Format: int64 */
+                            size?: number;
+                            mime?: string;
+                            meta?: Record<string, never>;
+                            url?: string | null;
+                        } | null;
+                        Profile_Pic_Thumb_File?: {
                             /**
                              * @default public
                              * @enum {string}
@@ -3149,6 +3385,8 @@ export interface operations {
                         access: "Free" | "Activator" | "Workplace";
                         fullName?: string;
                         profilePic_url?: string;
+                        /** @description Small (~256px) thumbnail of profilePic_url, for the pulse grid / lists. */
+                        profilePic_thumb_url?: string;
                         profile_hex_colour?: string;
                         /** Format: int64 */
                         recentStateCoordinates?: number;
@@ -3768,14 +4006,33 @@ export interface operations {
                         email?: string | null;
                         phoneNumber?: string;
                         /**
+                         * @description EP-1130 — provenance of phoneNumber (see group_forest_map.phone_source).
+                         *     user_confirmed/signup must never be overwritten by admin_supplied/csv_import.
+                         * @enum {string}
+                         */
+                        phone_source?: "admin_supplied" | "csv_import" | "user_confirmed" | "signup";
+                        /**
                          * @default Free
                          * @enum {string}
                          */
                         access: "Free" | "Activator" | "Workplace";
+                        /** @default false */
+                        super_admin: boolean;
+                        /**
+                         * @description EP-1202 — internal ShareTree team member who staffs the MHFR call console. This is a
+                         *     ShareTree-STAFF flag, deliberately NOT the client-side responder role (Group Forest
+                         *     Map role "mhfr support", EP-1137): client MHFRs must never reach the console. Ticked
+                         *     per user like super_admin. Grants console access + cross-client visibility, since
+                         *     ShareTree operators call on behalf of every client (Scenarios 2/3).
+                         * @default false
+                         */
+                        st_mhfr: boolean;
                         /** Format: password */
                         password?: string | null;
                         fullName?: string;
                         profilePic_url?: string;
+                        /** @description Small (~256px) thumbnail of profilePic_url, for the pulse grid / lists. */
+                        profilePic_thumb_url?: string;
                         profile_hex_colour?: string;
                         /** Format: int64 */
                         recentStateCoordinates?: number;
@@ -3888,6 +4145,21 @@ export interface operations {
                         apple_user_id?: string;
                         correlation_id?: string;
                         Profile_Pic_File?: {
+                            /**
+                             * @default public
+                             * @enum {string}
+                             */
+                            access: "public" | "private";
+                            path?: string;
+                            name?: string;
+                            type?: string;
+                            /** Format: int64 */
+                            size?: number;
+                            mime?: string;
+                            meta?: Record<string, never>;
+                            url?: string | null;
+                        } | null;
+                        Profile_Pic_Thumb_File?: {
                             /**
                              * @default public
                              * @enum {string}
@@ -5548,15 +5820,12 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    group_name: string;
-                    group_image?: string;
-                    list_of_users?: Record<string, never>[] | null;
-                };
                 "multipart/form-data": {
                     group_name: string;
                     group_image?: string;
                     list_of_users?: Record<string, never>[] | null;
+                    /** Format: binary */
+                    group_image_file?: string | null;
                 };
             };
         };
@@ -5586,7 +5855,8 @@ export interface operations {
                         /** @default false */
                         is_primary: boolean;
                         imageKey?: string;
-                        coverImageKey?: string;
+                        /** @description Small (~256px) thumbnail of imageKey, for the pulse grid / lists. */
+                        imageKey_thumb?: string;
                         /**
                          * @default WEEKDAYS
                          * @enum {string}
@@ -5640,6 +5910,21 @@ export interface operations {
                             website_link?: string;
                         }[];
                         image_file?: {
+                            /**
+                             * @default public
+                             * @enum {string}
+                             */
+                            access: "public" | "private";
+                            path?: string;
+                            name?: string;
+                            type?: string;
+                            /** Format: int64 */
+                            size?: number;
+                            mime?: string;
+                            meta?: Record<string, never>;
+                            url?: string | null;
+                        } | null;
+                        image_thumb_file?: {
                             /**
                              * @default public
                              * @enum {string}
@@ -5726,6 +6011,8 @@ export interface operations {
                         /** Format: int64 */
                         groupId?: number;
                         /** Format: int64 */
+                        primary_group_id?: number;
+                        /** Format: int64 */
                         userID?: number;
                         /** @enum {string} */
                         role?: "member" | "leader" | "mhfr support" | "owner" | "consultant" | "primary owner";
@@ -5772,10 +6059,77 @@ export interface operations {
                         /** Format: email */
                         invitee_email?: string;
                         invitee_mobile_number?: string;
+                        /**
+                         * @description EP-1130 — WHO supplied invitee_mobile_number, so a user-confirmed number is never
+                         *     silently reverted by an admin/CSV write ("user-entered wins" becomes checkable
+                         *     instead of fill-only-if-empty). admin_supplied = typed by an org admin; csv_import =
+                         *     bulk upload; user_confirmed = the person themselves (acceptance/profile); signup =
+                         *     provided at account creation.
+                         * @enum {string}
+                         */
+                        phone_source?: "admin_supplied" | "csv_import" | "user_confirmed" | "signup";
+                        /**
+                         * @description EP-1130 CA-7 escape hatch — the org confirmed this invitee has no reachable number.
+                         *     Removes the row from the completeness prompt and surfaces it on the unsuccessful-
+                         *     contacts register as never-reached (distinct from attempted-and-failed).
+                         * @default false
+                         */
+                        contact_unavailable: boolean;
+                        /** Format: timestamptz */
+                        contact_unavailable_at?: number;
+                        contact_unavailable_reason?: string;
+                        /**
+                         * @description Invitee first name (EP-1163): lets the Proactive EAP caller greet a PENDING invitee
+                         *     by name (no Users row yet) and personalises the invite email. Superseded by
+                         *     Users.firstName once the person signs up.
+                         */
+                        firstName?: string;
+                        /**
+                         * @description Invitee last name (EP-1263): with firstName, lets the Client Org Admin portal show a
+                         *     full name for members who have no Users row (Proactive-EAP-only members may never
+                         *     sign up). Superseded by Users.lastName once the person signs up.
+                         */
+                        lastName?: string;
+                        /**
+                         * @description EP-1263/EP-1266 — membership CHANNEL, orthogonal to the reqStatus lifecycle enum
+                         *     (not a second state machine, so R-DATA-015 is intact). true = the person was ADDED
+                         *     by an org admin for Proactive-EAP calls only and was never invited to the Emotional
+                         *     Pulse app: no invite/added email is sent on create, the EP-1155 signup-reminder cron
+                         *     and Groups/resend_invite skip the row, and the app's invite lists hide it. reqStatus
+                         *     stays PENDING (nothing was accepted). These rows get a far-future invite_expiry_date
+                         *     (membership does not lapse) so every legacy expiry-filtered query still matches.
+                         *     EP upsell later = set call_only false, reset invite_expiry_date to a normal window
+                         *     and send the invite reusing the existing anchor token -> normal accept flow.
+                         * @default false
+                         */
+                        call_only: boolean;
+                        /** Format: int64 */
+                        invite_anchor_id?: number;
+                        /**
+                         * Format: int64
+                         * @description EP-1155 signup-reminder state. Lives on the ANCHOR row (one per person per
+                         *     org) so a person gets at most one reminder per tick regardless of how many
+                         *     subgroups they were invited into. Reminders are terminal when the user
+                         *     signs up (an account exists), reminder_count reaches 5, or they opt out.
+                         */
+                        reminder_count?: number;
+                        /** Format: timestamptz */
+                        last_reminded_at?: number | null;
+                        /** @default false */
+                        reminder_opted_out: boolean;
+                        /** Format: timestamptz */
+                        reminder_opted_out_at?: number | null;
+                        /**
+                         * Format: timestamptz
+                         * @description EP-1178 pre-call notification. Sent ONCE per person per enrolment, before the first
+                         *     dispatch cycle reaches them, so the call is expected rather than a cold surprise.
+                         *     Lives on the anchor row for the same reason as the reminder state above: one send
+                         *     per person per org, however many subgroups they belong to.
+                         */
+                        precall_email_sent_at?: number | null;
                         group?: {
                             groupName?: string;
                             imageKey?: string;
-                            coverImageKey?: string;
                             /**
                              * @default WEEKDAYS
                              * @enum {string}
@@ -5965,6 +6319,8 @@ export interface operations {
                             /** Format: int64 */
                             groupId?: number;
                             /** Format: int64 */
+                            primary_group_id?: number;
+                            /** Format: int64 */
                             userID?: number;
                             /** @enum {string} */
                             role?: "member" | "leader" | "mhfr support" | "owner" | "consultant" | "primary owner";
@@ -6011,6 +6367,74 @@ export interface operations {
                             /** Format: email */
                             invitee_email?: string;
                             invitee_mobile_number?: string;
+                            /**
+                             * @description EP-1130 — WHO supplied invitee_mobile_number, so a user-confirmed number is never
+                             *     silently reverted by an admin/CSV write ("user-entered wins" becomes checkable
+                             *     instead of fill-only-if-empty). admin_supplied = typed by an org admin; csv_import =
+                             *     bulk upload; user_confirmed = the person themselves (acceptance/profile); signup =
+                             *     provided at account creation.
+                             * @enum {string}
+                             */
+                            phone_source?: "admin_supplied" | "csv_import" | "user_confirmed" | "signup";
+                            /**
+                             * @description EP-1130 CA-7 escape hatch — the org confirmed this invitee has no reachable number.
+                             *     Removes the row from the completeness prompt and surfaces it on the unsuccessful-
+                             *     contacts register as never-reached (distinct from attempted-and-failed).
+                             * @default false
+                             */
+                            contact_unavailable: boolean;
+                            /** Format: timestamptz */
+                            contact_unavailable_at?: number;
+                            contact_unavailable_reason?: string;
+                            /**
+                             * @description Invitee first name (EP-1163): lets the Proactive EAP caller greet a PENDING invitee
+                             *     by name (no Users row yet) and personalises the invite email. Superseded by
+                             *     Users.firstName once the person signs up.
+                             */
+                            firstName?: string;
+                            /**
+                             * @description Invitee last name (EP-1263): with firstName, lets the Client Org Admin portal show a
+                             *     full name for members who have no Users row (Proactive-EAP-only members may never
+                             *     sign up). Superseded by Users.lastName once the person signs up.
+                             */
+                            lastName?: string;
+                            /**
+                             * @description EP-1263/EP-1266 — membership CHANNEL, orthogonal to the reqStatus lifecycle enum
+                             *     (not a second state machine, so R-DATA-015 is intact). true = the person was ADDED
+                             *     by an org admin for Proactive-EAP calls only and was never invited to the Emotional
+                             *     Pulse app: no invite/added email is sent on create, the EP-1155 signup-reminder cron
+                             *     and Groups/resend_invite skip the row, and the app's invite lists hide it. reqStatus
+                             *     stays PENDING (nothing was accepted). These rows get a far-future invite_expiry_date
+                             *     (membership does not lapse) so every legacy expiry-filtered query still matches.
+                             *     EP upsell later = set call_only false, reset invite_expiry_date to a normal window
+                             *     and send the invite reusing the existing anchor token -> normal accept flow.
+                             * @default false
+                             */
+                            call_only: boolean;
+                            /** Format: int64 */
+                            invite_anchor_id?: number;
+                            /**
+                             * Format: int64
+                             * @description EP-1155 signup-reminder state. Lives on the ANCHOR row (one per person per
+                             *     org) so a person gets at most one reminder per tick regardless of how many
+                             *     subgroups they were invited into. Reminders are terminal when the user
+                             *     signs up (an account exists), reminder_count reaches 5, or they opt out.
+                             */
+                            reminder_count?: number;
+                            /** Format: timestamptz */
+                            last_reminded_at?: number | null;
+                            /** @default false */
+                            reminder_opted_out: boolean;
+                            /** Format: timestamptz */
+                            reminder_opted_out_at?: number | null;
+                            /**
+                             * Format: timestamptz
+                             * @description EP-1178 pre-call notification. Sent ONCE per person per enrolment, before the first
+                             *     dispatch cycle reaches them, so the call is expected rather than a cold surprise.
+                             *     Lives on the anchor row for the same reason as the reminder state above: one send
+                             *     per person per org, however many subgroups they belong to.
+                             */
+                            precall_email_sent_at?: number | null;
                         };
                         group?: {
                             /** Format: int64 */
@@ -6031,7 +6455,8 @@ export interface operations {
                             /** @default false */
                             is_primary: boolean;
                             imageKey?: string;
-                            coverImageKey?: string;
+                            /** @description Small (~256px) thumbnail of imageKey, for the pulse grid / lists. */
+                            imageKey_thumb?: string;
                             /**
                              * @default WEEKDAYS
                              * @enum {string}
@@ -6085,6 +6510,21 @@ export interface operations {
                                 website_link?: string;
                             }[];
                             image_file?: {
+                                /**
+                                 * @default public
+                                 * @enum {string}
+                                 */
+                                access: "public" | "private";
+                                path?: string;
+                                name?: string;
+                                type?: string;
+                                /** Format: int64 */
+                                size?: number;
+                                mime?: string;
+                                meta?: Record<string, never>;
+                                url?: string | null;
+                            } | null;
+                            image_thumb_file?: {
                                 /**
                                  * @default public
                                  * @enum {string}
@@ -6433,7 +6873,8 @@ export interface operations {
                         /** @default false */
                         is_primary: boolean;
                         imageKey?: string;
-                        coverImageKey?: string;
+                        /** @description Small (~256px) thumbnail of imageKey, for the pulse grid / lists. */
+                        imageKey_thumb?: string;
                         /**
                          * @default WEEKDAYS
                          * @enum {string}
@@ -6501,6 +6942,21 @@ export interface operations {
                             meta?: Record<string, never>;
                             url?: string | null;
                         } | null;
+                        image_thumb_file?: {
+                            /**
+                             * @default public
+                             * @enum {string}
+                             */
+                            access: "public" | "private";
+                            path?: string;
+                            name?: string;
+                            type?: string;
+                            /** Format: int64 */
+                            size?: number;
+                            mime?: string;
+                            meta?: Record<string, never>;
+                            url?: string | null;
+                        } | null;
                         subscription?: {
                             /** Format: int64 */
                             id?: number;
@@ -6528,6 +6984,8 @@ export interface operations {
                             users_id?: number;
                             /** Format: int64 */
                             plans_id?: number;
+                            /** Format: int64 */
+                            pe_eap_plan_prices_id?: number;
                             /** Format: int64 */
                             createdById?: number;
                             /** Format: int64 */
@@ -6599,6 +7057,8 @@ export interface operations {
                     /** Format: int64 */
                     groupId?: number;
                     /** Format: int64 */
+                    primary_group_id?: number;
+                    /** Format: int64 */
                     userID?: number;
                     /** @enum {string} */
                     role?: "member" | "leader" | "mhfr support" | "owner" | "consultant" | "primary owner";
@@ -6645,6 +7105,76 @@ export interface operations {
                     /** Format: email */
                     invitee_email?: string;
                     invitee_mobile_number?: string;
+                    /**
+                     * @description EP-1130 — WHO supplied invitee_mobile_number, so a user-confirmed number is never
+                     *     silently reverted by an admin/CSV write ("user-entered wins" becomes checkable
+                     *     instead of fill-only-if-empty). admin_supplied = typed by an org admin; csv_import =
+                     *     bulk upload; user_confirmed = the person themselves (acceptance/profile); signup =
+                     *     provided at account creation.
+                     * @enum {string}
+                     */
+                    phone_source?: "admin_supplied" | "csv_import" | "user_confirmed" | "signup";
+                    /**
+                     * @description EP-1130 CA-7 escape hatch — the org confirmed this invitee has no reachable number.
+                     *     Removes the row from the completeness prompt and surfaces it on the unsuccessful-
+                     *     contacts register as never-reached (distinct from attempted-and-failed).
+                     * @default false
+                     */
+                    contact_unavailable?: boolean;
+                    /** Format: timestamptz */
+                    contact_unavailable_at?: number;
+                    contact_unavailable_reason?: string;
+                    /**
+                     * @description Invitee first name (EP-1163): lets the Proactive EAP caller greet a PENDING invitee
+                     *     by name (no Users row yet) and personalises the invite email. Superseded by
+                     *     Users.firstName once the person signs up.
+                     */
+                    firstName?: string;
+                    /**
+                     * @description Invitee last name (EP-1263): with firstName, lets the Client Org Admin portal show a
+                     *     full name for members who have no Users row (Proactive-EAP-only members may never
+                     *     sign up). Superseded by Users.lastName once the person signs up.
+                     */
+                    lastName?: string;
+                    /**
+                     * @description EP-1263/EP-1266 — membership CHANNEL, orthogonal to the reqStatus lifecycle enum
+                     *     (not a second state machine, so R-DATA-015 is intact). true = the person was ADDED
+                     *     by an org admin for Proactive-EAP calls only and was never invited to the Emotional
+                     *     Pulse app: no invite/added email is sent on create, the EP-1155 signup-reminder cron
+                     *     and Groups/resend_invite skip the row, and the app's invite lists hide it. reqStatus
+                     *     stays PENDING (nothing was accepted). These rows get a far-future invite_expiry_date
+                     *     (membership does not lapse) so every legacy expiry-filtered query still matches.
+                     *     EP upsell later = set call_only false, reset invite_expiry_date to a normal window
+                     *     and send the invite reusing the existing anchor token -> normal accept flow.
+                     * @default false
+                     */
+                    call_only?: boolean;
+                    /** Format: int64 */
+                    invite_anchor_id?: number;
+                    /**
+                     * Format: int64
+                     * @description EP-1155 signup-reminder state. Lives on the ANCHOR row (one per person per
+                     *     org) so a person gets at most one reminder per tick regardless of how many
+                     *     subgroups they were invited into. Reminders are terminal when the user
+                     *     signs up (an account exists), reminder_count reaches 5, or they opt out.
+                     */
+                    reminder_count?: number;
+                    /** Format: timestamptz */
+                    last_reminded_at?: number | null;
+                    /** @default false */
+                    reminder_opted_out?: boolean;
+                    /** Format: timestamptz */
+                    reminder_opted_out_at?: number | null;
+                    /**
+                     * Format: timestamptz
+                     * @description EP-1178 pre-call notification. Sent ONCE per person per enrolment, before the first
+                     *     dispatch cycle reaches them, so the call is expected rather than a cold surprise.
+                     *     Lives on the anchor row for the same reason as the reminder state above: one send
+                     *     per person per org, however many subgroups they belong to.
+                     */
+                    precall_email_sent_at?: number | null;
+                    /** @default false */
+                    update_subscription?: boolean;
                 };
                 "multipart/form-data": {
                     /** @enum {string} */
@@ -6652,6 +7182,8 @@ export interface operations {
                     /** Format: int64 */
                     groupId?: number;
                     /** Format: int64 */
+                    primary_group_id?: number;
+                    /** Format: int64 */
                     userID?: number;
                     /** @enum {string} */
                     role?: "member" | "leader" | "mhfr support" | "owner" | "consultant" | "primary owner";
@@ -6698,6 +7230,76 @@ export interface operations {
                     /** Format: email */
                     invitee_email?: string;
                     invitee_mobile_number?: string;
+                    /**
+                     * @description EP-1130 — WHO supplied invitee_mobile_number, so a user-confirmed number is never
+                     *     silently reverted by an admin/CSV write ("user-entered wins" becomes checkable
+                     *     instead of fill-only-if-empty). admin_supplied = typed by an org admin; csv_import =
+                     *     bulk upload; user_confirmed = the person themselves (acceptance/profile); signup =
+                     *     provided at account creation.
+                     * @enum {string}
+                     */
+                    phone_source?: "admin_supplied" | "csv_import" | "user_confirmed" | "signup";
+                    /**
+                     * @description EP-1130 CA-7 escape hatch — the org confirmed this invitee has no reachable number.
+                     *     Removes the row from the completeness prompt and surfaces it on the unsuccessful-
+                     *     contacts register as never-reached (distinct from attempted-and-failed).
+                     * @default false
+                     */
+                    contact_unavailable?: boolean;
+                    /** Format: timestamptz */
+                    contact_unavailable_at?: number;
+                    contact_unavailable_reason?: string;
+                    /**
+                     * @description Invitee first name (EP-1163): lets the Proactive EAP caller greet a PENDING invitee
+                     *     by name (no Users row yet) and personalises the invite email. Superseded by
+                     *     Users.firstName once the person signs up.
+                     */
+                    firstName?: string;
+                    /**
+                     * @description Invitee last name (EP-1263): with firstName, lets the Client Org Admin portal show a
+                     *     full name for members who have no Users row (Proactive-EAP-only members may never
+                     *     sign up). Superseded by Users.lastName once the person signs up.
+                     */
+                    lastName?: string;
+                    /**
+                     * @description EP-1263/EP-1266 — membership CHANNEL, orthogonal to the reqStatus lifecycle enum
+                     *     (not a second state machine, so R-DATA-015 is intact). true = the person was ADDED
+                     *     by an org admin for Proactive-EAP calls only and was never invited to the Emotional
+                     *     Pulse app: no invite/added email is sent on create, the EP-1155 signup-reminder cron
+                     *     and Groups/resend_invite skip the row, and the app's invite lists hide it. reqStatus
+                     *     stays PENDING (nothing was accepted). These rows get a far-future invite_expiry_date
+                     *     (membership does not lapse) so every legacy expiry-filtered query still matches.
+                     *     EP upsell later = set call_only false, reset invite_expiry_date to a normal window
+                     *     and send the invite reusing the existing anchor token -> normal accept flow.
+                     * @default false
+                     */
+                    call_only?: boolean;
+                    /** Format: int64 */
+                    invite_anchor_id?: number;
+                    /**
+                     * Format: int64
+                     * @description EP-1155 signup-reminder state. Lives on the ANCHOR row (one per person per
+                     *     org) so a person gets at most one reminder per tick regardless of how many
+                     *     subgroups they were invited into. Reminders are terminal when the user
+                     *     signs up (an account exists), reminder_count reaches 5, or they opt out.
+                     */
+                    reminder_count?: number;
+                    /** Format: timestamptz */
+                    last_reminded_at?: number | null;
+                    /** @default false */
+                    reminder_opted_out?: boolean;
+                    /** Format: timestamptz */
+                    reminder_opted_out_at?: number | null;
+                    /**
+                     * Format: timestamptz
+                     * @description EP-1178 pre-call notification. Sent ONCE per person per enrolment, before the first
+                     *     dispatch cycle reaches them, so the call is expected rather than a cold surprise.
+                     *     Lives on the anchor row for the same reason as the reminder state above: one send
+                     *     per person per org, however many subgroups they belong to.
+                     */
+                    precall_email_sent_at?: number | null;
+                    /** @default false */
+                    update_subscription?: boolean;
                 };
             };
         };
@@ -6854,7 +7456,110 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": {
+                        /** Format: int64 */
+                        id?: number;
+                        groupName?: string;
+                        /** Format: timestamptz */
+                        createdAt?: number | null;
+                        /** Format: int64 */
+                        parentId?: number;
+                        /** Format: int64 */
+                        group_subscriptions_id?: number;
+                        /** @default false */
+                        billing_group: boolean;
+                        /** Format: int64 */
+                        primary_group_id?: number;
+                        /** Format: int64 */
+                        pay_by_group_id?: number;
+                        /** @default false */
+                        is_primary: boolean;
+                        imageKey?: string;
+                        /** @description Small (~256px) thumbnail of imageKey, for the pulse grid / lists. */
+                        imageKey_thumb?: string;
+                        /**
+                         * @default WEEKDAYS
+                         * @enum {string}
+                         */
+                        checkInOften: "DAILY" | "WEEKDAYS" | "WEEKLY" | "NONE";
+                        /**
+                         * Format: int64
+                         * @default 11
+                         */
+                        checkInHour: number;
+                        checkInDays?: number[];
+                        /** Format: int64 */
+                        checkInMinute?: number;
+                        /** @default false */
+                        insistent: boolean;
+                        /** @default 1 */
+                        isActive: boolean;
+                        /** Format: timestamptz */
+                        updatedAt?: number | null;
+                        deletedAt?: string;
+                        /** Format: int64 */
+                        ownerId?: number;
+                        /** Format: int64 */
+                        createdById?: number;
+                        /** Format: int64 */
+                        forestLimit?: number;
+                        isEnabledAutoAcceptJoinRequest?: string;
+                        adminMessage?: string;
+                        uniqueId?: string;
+                        inviteURL?: string;
+                        /** @default false */
+                        denyMembersToLeave: boolean;
+                        /** @default false */
+                        hasIncludedDependents: boolean;
+                        /** @default Australia/Melbourne */
+                        timezone: string;
+                        microsoftTeamsIds?: string;
+                        /** Format: int64 */
+                        member_count?: number;
+                        /** Format: int64 */
+                        sub_group_count?: number;
+                        /** Format: int64 */
+                        group_running_stats_id?: number;
+                        stripe_customer_id?: string;
+                        /** Format: int64 */
+                        aws_id?: number;
+                        custom_support_services?: {
+                            name?: string;
+                            type?: string;
+                            contact_number?: string;
+                            website_link?: string;
+                        }[];
+                        image_file?: {
+                            /**
+                             * @default public
+                             * @enum {string}
+                             */
+                            access: "public" | "private";
+                            path?: string;
+                            name?: string;
+                            type?: string;
+                            /** Format: int64 */
+                            size?: number;
+                            mime?: string;
+                            meta?: Record<string, never>;
+                            url?: string | null;
+                        } | null;
+                        image_thumb_file?: {
+                            /**
+                             * @default public
+                             * @enum {string}
+                             */
+                            access: "public" | "private";
+                            path?: string;
+                            name?: string;
+                            type?: string;
+                            /** Format: int64 */
+                            size?: number;
+                            mime?: string;
+                            meta?: Record<string, never>;
+                            url?: string | null;
+                        } | null;
+                    };
                 };
             };
             /** @description Input Error. Check the request payload for issues. */
@@ -7006,6 +7711,8 @@ export interface operations {
                         /** Format: int64 */
                         groupId?: number;
                         /** Format: int64 */
+                        primary_group_id?: number;
+                        /** Format: int64 */
                         userID?: number;
                         /** @enum {string} */
                         role?: "member" | "leader" | "mhfr support" | "owner" | "consultant" | "primary owner";
@@ -7052,6 +7759,74 @@ export interface operations {
                         /** Format: email */
                         invitee_email?: string;
                         invitee_mobile_number?: string;
+                        /**
+                         * @description EP-1130 — WHO supplied invitee_mobile_number, so a user-confirmed number is never
+                         *     silently reverted by an admin/CSV write ("user-entered wins" becomes checkable
+                         *     instead of fill-only-if-empty). admin_supplied = typed by an org admin; csv_import =
+                         *     bulk upload; user_confirmed = the person themselves (acceptance/profile); signup =
+                         *     provided at account creation.
+                         * @enum {string}
+                         */
+                        phone_source?: "admin_supplied" | "csv_import" | "user_confirmed" | "signup";
+                        /**
+                         * @description EP-1130 CA-7 escape hatch — the org confirmed this invitee has no reachable number.
+                         *     Removes the row from the completeness prompt and surfaces it on the unsuccessful-
+                         *     contacts register as never-reached (distinct from attempted-and-failed).
+                         * @default false
+                         */
+                        contact_unavailable: boolean;
+                        /** Format: timestamptz */
+                        contact_unavailable_at?: number;
+                        contact_unavailable_reason?: string;
+                        /**
+                         * @description Invitee first name (EP-1163): lets the Proactive EAP caller greet a PENDING invitee
+                         *     by name (no Users row yet) and personalises the invite email. Superseded by
+                         *     Users.firstName once the person signs up.
+                         */
+                        firstName?: string;
+                        /**
+                         * @description Invitee last name (EP-1263): with firstName, lets the Client Org Admin portal show a
+                         *     full name for members who have no Users row (Proactive-EAP-only members may never
+                         *     sign up). Superseded by Users.lastName once the person signs up.
+                         */
+                        lastName?: string;
+                        /**
+                         * @description EP-1263/EP-1266 — membership CHANNEL, orthogonal to the reqStatus lifecycle enum
+                         *     (not a second state machine, so R-DATA-015 is intact). true = the person was ADDED
+                         *     by an org admin for Proactive-EAP calls only and was never invited to the Emotional
+                         *     Pulse app: no invite/added email is sent on create, the EP-1155 signup-reminder cron
+                         *     and Groups/resend_invite skip the row, and the app's invite lists hide it. reqStatus
+                         *     stays PENDING (nothing was accepted). These rows get a far-future invite_expiry_date
+                         *     (membership does not lapse) so every legacy expiry-filtered query still matches.
+                         *     EP upsell later = set call_only false, reset invite_expiry_date to a normal window
+                         *     and send the invite reusing the existing anchor token -> normal accept flow.
+                         * @default false
+                         */
+                        call_only: boolean;
+                        /** Format: int64 */
+                        invite_anchor_id?: number;
+                        /**
+                         * Format: int64
+                         * @description EP-1155 signup-reminder state. Lives on the ANCHOR row (one per person per
+                         *     org) so a person gets at most one reminder per tick regardless of how many
+                         *     subgroups they were invited into. Reminders are terminal when the user
+                         *     signs up (an account exists), reminder_count reaches 5, or they opt out.
+                         */
+                        reminder_count?: number;
+                        /** Format: timestamptz */
+                        last_reminded_at?: number | null;
+                        /** @default false */
+                        reminder_opted_out: boolean;
+                        /** Format: timestamptz */
+                        reminder_opted_out_at?: number | null;
+                        /**
+                         * Format: timestamptz
+                         * @description EP-1178 pre-call notification. Sent ONCE per person per enrolment, before the first
+                         *     dispatch cycle reaches them, so the call is expected rather than a cold surprise.
+                         *     Lives on the anchor row for the same reason as the reminder state above: one send
+                         *     per person per org, however many subgroups they belong to.
+                         */
+                        precall_email_sent_at?: number | null;
                     };
                 };
             };
@@ -7133,6 +7908,8 @@ export interface operations {
                         /** Format: int64 */
                         groupId?: number;
                         /** Format: int64 */
+                        primary_group_id?: number;
+                        /** Format: int64 */
                         userID?: number;
                         /** @enum {string} */
                         role?: "member" | "leader" | "mhfr support" | "owner" | "consultant" | "primary owner";
@@ -7179,6 +7956,74 @@ export interface operations {
                         /** Format: email */
                         invitee_email?: string;
                         invitee_mobile_number?: string;
+                        /**
+                         * @description EP-1130 — WHO supplied invitee_mobile_number, so a user-confirmed number is never
+                         *     silently reverted by an admin/CSV write ("user-entered wins" becomes checkable
+                         *     instead of fill-only-if-empty). admin_supplied = typed by an org admin; csv_import =
+                         *     bulk upload; user_confirmed = the person themselves (acceptance/profile); signup =
+                         *     provided at account creation.
+                         * @enum {string}
+                         */
+                        phone_source?: "admin_supplied" | "csv_import" | "user_confirmed" | "signup";
+                        /**
+                         * @description EP-1130 CA-7 escape hatch — the org confirmed this invitee has no reachable number.
+                         *     Removes the row from the completeness prompt and surfaces it on the unsuccessful-
+                         *     contacts register as never-reached (distinct from attempted-and-failed).
+                         * @default false
+                         */
+                        contact_unavailable: boolean;
+                        /** Format: timestamptz */
+                        contact_unavailable_at?: number;
+                        contact_unavailable_reason?: string;
+                        /**
+                         * @description Invitee first name (EP-1163): lets the Proactive EAP caller greet a PENDING invitee
+                         *     by name (no Users row yet) and personalises the invite email. Superseded by
+                         *     Users.firstName once the person signs up.
+                         */
+                        firstName?: string;
+                        /**
+                         * @description Invitee last name (EP-1263): with firstName, lets the Client Org Admin portal show a
+                         *     full name for members who have no Users row (Proactive-EAP-only members may never
+                         *     sign up). Superseded by Users.lastName once the person signs up.
+                         */
+                        lastName?: string;
+                        /**
+                         * @description EP-1263/EP-1266 — membership CHANNEL, orthogonal to the reqStatus lifecycle enum
+                         *     (not a second state machine, so R-DATA-015 is intact). true = the person was ADDED
+                         *     by an org admin for Proactive-EAP calls only and was never invited to the Emotional
+                         *     Pulse app: no invite/added email is sent on create, the EP-1155 signup-reminder cron
+                         *     and Groups/resend_invite skip the row, and the app's invite lists hide it. reqStatus
+                         *     stays PENDING (nothing was accepted). These rows get a far-future invite_expiry_date
+                         *     (membership does not lapse) so every legacy expiry-filtered query still matches.
+                         *     EP upsell later = set call_only false, reset invite_expiry_date to a normal window
+                         *     and send the invite reusing the existing anchor token -> normal accept flow.
+                         * @default false
+                         */
+                        call_only: boolean;
+                        /** Format: int64 */
+                        invite_anchor_id?: number;
+                        /**
+                         * Format: int64
+                         * @description EP-1155 signup-reminder state. Lives on the ANCHOR row (one per person per
+                         *     org) so a person gets at most one reminder per tick regardless of how many
+                         *     subgroups they were invited into. Reminders are terminal when the user
+                         *     signs up (an account exists), reminder_count reaches 5, or they opt out.
+                         */
+                        reminder_count?: number;
+                        /** Format: timestamptz */
+                        last_reminded_at?: number | null;
+                        /** @default false */
+                        reminder_opted_out: boolean;
+                        /** Format: timestamptz */
+                        reminder_opted_out_at?: number | null;
+                        /**
+                         * Format: timestamptz
+                         * @description EP-1178 pre-call notification. Sent ONCE per person per enrolment, before the first
+                         *     dispatch cycle reaches them, so the call is expected rather than a cold surprise.
+                         *     Lives on the anchor row for the same reason as the reminder state above: one send
+                         *     per person per org, however many subgroups they belong to.
+                         */
+                        precall_email_sent_at?: number | null;
                     };
                 };
             };
@@ -7569,6 +8414,273 @@ export interface operations {
             };
         };
     };
+    "api/oauth/apple/continue|POST": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    code?: string;
+                    redirect_uri?: string;
+                };
+                "multipart/form-data": {
+                    code?: string;
+                    redirect_uri?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success! */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Input Error. Check the request payload for issues. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Access denied. Additional privileges are needed access the requested resource. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found. The requested resource does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate Limited. Too many requests. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "api/oauth/apple/init|GET": {
+        parameters: {
+            query?: {
+                redirect_uri?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success! */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Input Error. Check the request payload for issues. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Access denied. Additional privileges are needed access the requested resource. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found. The requested resource does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate Limited. Too many requests. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "api/oauth/apple/login|GET": {
+        parameters: {
+            query?: {
+                code?: string;
+                redirect_uri?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success! */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Input Error. Check the request payload for issues. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Access denied. Additional privileges are needed access the requested resource. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found. The requested resource does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate Limited. Too many requests. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "api/oauth/apple/signup|GET": {
+        parameters: {
+            query?: {
+                code?: string;
+                redirect_uri?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success! */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Input Error. Check the request payload for issues. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Access denied. Additional privileges are needed access the requested resource. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found. The requested resource does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate Limited. Too many requests. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     "api/onboarding/complete|POST": {
         parameters: {
             query?: never;
@@ -7600,14 +8712,33 @@ export interface operations {
                         email?: string | null;
                         phoneNumber?: string;
                         /**
+                         * @description EP-1130 — provenance of phoneNumber (see group_forest_map.phone_source).
+                         *     user_confirmed/signup must never be overwritten by admin_supplied/csv_import.
+                         * @enum {string}
+                         */
+                        phone_source?: "admin_supplied" | "csv_import" | "user_confirmed" | "signup";
+                        /**
                          * @default Free
                          * @enum {string}
                          */
                         access: "Free" | "Activator" | "Workplace";
+                        /** @default false */
+                        super_admin: boolean;
+                        /**
+                         * @description EP-1202 — internal ShareTree team member who staffs the MHFR call console. This is a
+                         *     ShareTree-STAFF flag, deliberately NOT the client-side responder role (Group Forest
+                         *     Map role "mhfr support", EP-1137): client MHFRs must never reach the console. Ticked
+                         *     per user like super_admin. Grants console access + cross-client visibility, since
+                         *     ShareTree operators call on behalf of every client (Scenarios 2/3).
+                         * @default false
+                         */
+                        st_mhfr: boolean;
                         /** Format: password */
                         password?: string | null;
                         fullName?: string;
                         profilePic_url?: string;
+                        /** @description Small (~256px) thumbnail of profilePic_url, for the pulse grid / lists. */
+                        profilePic_thumb_url?: string;
                         profile_hex_colour?: string;
                         /** Format: int64 */
                         recentStateCoordinates?: number;
@@ -7720,6 +8851,21 @@ export interface operations {
                         apple_user_id?: string;
                         correlation_id?: string;
                         Profile_Pic_File?: {
+                            /**
+                             * @default public
+                             * @enum {string}
+                             */
+                            access: "public" | "private";
+                            path?: string;
+                            name?: string;
+                            type?: string;
+                            /** Format: int64 */
+                            size?: number;
+                            mime?: string;
+                            meta?: Record<string, never>;
+                            url?: string | null;
+                        } | null;
+                        Profile_Pic_Thumb_File?: {
                             /**
                              * @default public
                              * @enum {string}
@@ -7826,14 +8972,33 @@ export interface operations {
                         email?: string | null;
                         phoneNumber?: string;
                         /**
+                         * @description EP-1130 — provenance of phoneNumber (see group_forest_map.phone_source).
+                         *     user_confirmed/signup must never be overwritten by admin_supplied/csv_import.
+                         * @enum {string}
+                         */
+                        phone_source?: "admin_supplied" | "csv_import" | "user_confirmed" | "signup";
+                        /**
                          * @default Free
                          * @enum {string}
                          */
                         access: "Free" | "Activator" | "Workplace";
+                        /** @default false */
+                        super_admin: boolean;
+                        /**
+                         * @description EP-1202 — internal ShareTree team member who staffs the MHFR call console. This is a
+                         *     ShareTree-STAFF flag, deliberately NOT the client-side responder role (Group Forest
+                         *     Map role "mhfr support", EP-1137): client MHFRs must never reach the console. Ticked
+                         *     per user like super_admin. Grants console access + cross-client visibility, since
+                         *     ShareTree operators call on behalf of every client (Scenarios 2/3).
+                         * @default false
+                         */
+                        st_mhfr: boolean;
                         /** Format: password */
                         password?: string | null;
                         fullName?: string;
                         profilePic_url?: string;
+                        /** @description Small (~256px) thumbnail of profilePic_url, for the pulse grid / lists. */
+                        profilePic_thumb_url?: string;
                         profile_hex_colour?: string;
                         /** Format: int64 */
                         recentStateCoordinates?: number;
@@ -7960,6 +9125,21 @@ export interface operations {
                             meta?: Record<string, never>;
                             url?: string | null;
                         } | null;
+                        Profile_Pic_Thumb_File?: {
+                            /**
+                             * @default public
+                             * @enum {string}
+                             */
+                            access: "public" | "private";
+                            path?: string;
+                            name?: string;
+                            type?: string;
+                            /** Format: int64 */
+                            size?: number;
+                            mime?: string;
+                            meta?: Record<string, never>;
+                            url?: string | null;
+                        } | null;
                         checkin_logs?: {
                             /** Format: int64 */
                             weekday?: number;
@@ -8052,14 +9232,33 @@ export interface operations {
                         email?: string | null;
                         phoneNumber?: string;
                         /**
+                         * @description EP-1130 — provenance of phoneNumber (see group_forest_map.phone_source).
+                         *     user_confirmed/signup must never be overwritten by admin_supplied/csv_import.
+                         * @enum {string}
+                         */
+                        phone_source?: "admin_supplied" | "csv_import" | "user_confirmed" | "signup";
+                        /**
                          * @default Free
                          * @enum {string}
                          */
                         access: "Free" | "Activator" | "Workplace";
+                        /** @default false */
+                        super_admin: boolean;
+                        /**
+                         * @description EP-1202 — internal ShareTree team member who staffs the MHFR call console. This is a
+                         *     ShareTree-STAFF flag, deliberately NOT the client-side responder role (Group Forest
+                         *     Map role "mhfr support", EP-1137): client MHFRs must never reach the console. Ticked
+                         *     per user like super_admin. Grants console access + cross-client visibility, since
+                         *     ShareTree operators call on behalf of every client (Scenarios 2/3).
+                         * @default false
+                         */
+                        st_mhfr: boolean;
                         /** Format: password */
                         password?: string | null;
                         fullName?: string;
                         profilePic_url?: string;
+                        /** @description Small (~256px) thumbnail of profilePic_url, for the pulse grid / lists. */
+                        profilePic_thumb_url?: string;
                         profile_hex_colour?: string;
                         /** Format: int64 */
                         recentStateCoordinates?: number;
@@ -8172,6 +9371,21 @@ export interface operations {
                         apple_user_id?: string;
                         correlation_id?: string;
                         Profile_Pic_File?: {
+                            /**
+                             * @default public
+                             * @enum {string}
+                             */
+                            access: "public" | "private";
+                            path?: string;
+                            name?: string;
+                            type?: string;
+                            /** Format: int64 */
+                            size?: number;
+                            mime?: string;
+                            meta?: Record<string, never>;
+                            url?: string | null;
+                        } | null;
+                        Profile_Pic_Thumb_File?: {
                             /**
                              * @default public
                              * @enum {string}
@@ -8289,14 +9503,33 @@ export interface operations {
                         email?: string | null;
                         phoneNumber?: string;
                         /**
+                         * @description EP-1130 — provenance of phoneNumber (see group_forest_map.phone_source).
+                         *     user_confirmed/signup must never be overwritten by admin_supplied/csv_import.
+                         * @enum {string}
+                         */
+                        phone_source?: "admin_supplied" | "csv_import" | "user_confirmed" | "signup";
+                        /**
                          * @default Free
                          * @enum {string}
                          */
                         access: "Free" | "Activator" | "Workplace";
+                        /** @default false */
+                        super_admin: boolean;
+                        /**
+                         * @description EP-1202 — internal ShareTree team member who staffs the MHFR call console. This is a
+                         *     ShareTree-STAFF flag, deliberately NOT the client-side responder role (Group Forest
+                         *     Map role "mhfr support", EP-1137): client MHFRs must never reach the console. Ticked
+                         *     per user like super_admin. Grants console access + cross-client visibility, since
+                         *     ShareTree operators call on behalf of every client (Scenarios 2/3).
+                         * @default false
+                         */
+                        st_mhfr: boolean;
                         /** Format: password */
                         password?: string | null;
                         fullName?: string;
                         profilePic_url?: string;
+                        /** @description Small (~256px) thumbnail of profilePic_url, for the pulse grid / lists. */
+                        profilePic_thumb_url?: string;
                         profile_hex_colour?: string;
                         /** Format: int64 */
                         recentStateCoordinates?: number;
@@ -8409,6 +9642,21 @@ export interface operations {
                         apple_user_id?: string;
                         correlation_id?: string;
                         Profile_Pic_File?: {
+                            /**
+                             * @default public
+                             * @enum {string}
+                             */
+                            access: "public" | "private";
+                            path?: string;
+                            name?: string;
+                            type?: string;
+                            /** Format: int64 */
+                            size?: number;
+                            mime?: string;
+                            meta?: Record<string, never>;
+                            url?: string | null;
+                        } | null;
+                        Profile_Pic_Thumb_File?: {
                             /**
                              * @default public
                              * @enum {string}
@@ -8515,14 +9763,33 @@ export interface operations {
                         email?: string | null;
                         phoneNumber?: string;
                         /**
+                         * @description EP-1130 — provenance of phoneNumber (see group_forest_map.phone_source).
+                         *     user_confirmed/signup must never be overwritten by admin_supplied/csv_import.
+                         * @enum {string}
+                         */
+                        phone_source?: "admin_supplied" | "csv_import" | "user_confirmed" | "signup";
+                        /**
                          * @default Free
                          * @enum {string}
                          */
                         access: "Free" | "Activator" | "Workplace";
+                        /** @default false */
+                        super_admin: boolean;
+                        /**
+                         * @description EP-1202 — internal ShareTree team member who staffs the MHFR call console. This is a
+                         *     ShareTree-STAFF flag, deliberately NOT the client-side responder role (Group Forest
+                         *     Map role "mhfr support", EP-1137): client MHFRs must never reach the console. Ticked
+                         *     per user like super_admin. Grants console access + cross-client visibility, since
+                         *     ShareTree operators call on behalf of every client (Scenarios 2/3).
+                         * @default false
+                         */
+                        st_mhfr: boolean;
                         /** Format: password */
                         password?: string | null;
                         fullName?: string;
                         profilePic_url?: string;
+                        /** @description Small (~256px) thumbnail of profilePic_url, for the pulse grid / lists. */
+                        profilePic_thumb_url?: string;
                         profile_hex_colour?: string;
                         /** Format: int64 */
                         recentStateCoordinates?: number;
@@ -8649,6 +9916,21 @@ export interface operations {
                             meta?: Record<string, never>;
                             url?: string | null;
                         } | null;
+                        Profile_Pic_Thumb_File?: {
+                            /**
+                             * @default public
+                             * @enum {string}
+                             */
+                            access: "public" | "private";
+                            path?: string;
+                            name?: string;
+                            type?: string;
+                            /** Format: int64 */
+                            size?: number;
+                            mime?: string;
+                            meta?: Record<string, never>;
+                            url?: string | null;
+                        } | null;
                         checkin_logs?: {
                             /** Format: int64 */
                             weekday?: number;
@@ -8741,14 +10023,33 @@ export interface operations {
                         email?: string | null;
                         phoneNumber?: string;
                         /**
+                         * @description EP-1130 — provenance of phoneNumber (see group_forest_map.phone_source).
+                         *     user_confirmed/signup must never be overwritten by admin_supplied/csv_import.
+                         * @enum {string}
+                         */
+                        phone_source?: "admin_supplied" | "csv_import" | "user_confirmed" | "signup";
+                        /**
                          * @default Free
                          * @enum {string}
                          */
                         access: "Free" | "Activator" | "Workplace";
+                        /** @default false */
+                        super_admin: boolean;
+                        /**
+                         * @description EP-1202 — internal ShareTree team member who staffs the MHFR call console. This is a
+                         *     ShareTree-STAFF flag, deliberately NOT the client-side responder role (Group Forest
+                         *     Map role "mhfr support", EP-1137): client MHFRs must never reach the console. Ticked
+                         *     per user like super_admin. Grants console access + cross-client visibility, since
+                         *     ShareTree operators call on behalf of every client (Scenarios 2/3).
+                         * @default false
+                         */
+                        st_mhfr: boolean;
                         /** Format: password */
                         password?: string | null;
                         fullName?: string;
                         profilePic_url?: string;
+                        /** @description Small (~256px) thumbnail of profilePic_url, for the pulse grid / lists. */
+                        profilePic_thumb_url?: string;
                         profile_hex_colour?: string;
                         /** Format: int64 */
                         recentStateCoordinates?: number;
@@ -8861,6 +10162,21 @@ export interface operations {
                         apple_user_id?: string;
                         correlation_id?: string;
                         Profile_Pic_File?: {
+                            /**
+                             * @default public
+                             * @enum {string}
+                             */
+                            access: "public" | "private";
+                            path?: string;
+                            name?: string;
+                            type?: string;
+                            /** Format: int64 */
+                            size?: number;
+                            mime?: string;
+                            meta?: Record<string, never>;
+                            url?: string | null;
+                        } | null;
+                        Profile_Pic_Thumb_File?: {
                             /**
                              * @default public
                              * @enum {string}
@@ -11169,14 +12485,84 @@ export interface operations {
                     users_id?: number;
                     /** Format: int64 */
                     trigger_Checkin_id?: number;
+                    /**
+                     * @description How this request was raised (EP-1137). Legacy rows are NULL and should be
+                     *     read as "checkin" — the historical path always had a trigger_Checkin_id.
+                     *     "proactive_eap" rows have NO trigger_Checkin_id and no trigger_Emotion:
+                     *     they come from an AI check-in call, not an in-app emotion check-in, so any
+                     *     consumer that assumes a check-in exists must branch on this field.
+                     * @enum {string|null}
+                     */
+                    trigger_source?: "checkin" | "proactive_eap" | "manual" | null;
+                    /**
+                     * Format: int64
+                     * @description Identity link for a pre-signup subject: the Group Forest Map invite anchor.
+                     *     Durable — the group/respond cascade stamps anchor.userID on acceptance, so
+                     *     a request raised pre-signup can be stitched to the real account later.
+                     *     NEVER write users_id = 0 as a substitute: the MHFR read filters
+                     *     `users_id in <ids>`, and a stray 0 in that list would expose every
+                     *     zero-user request across ALL organisations to one responder.
+                     */
+                    invite_anchor_id?: number;
+                    subject_group_ids?: number[];
+                    /**
+                     * @description Contact snapshot so a responder can actually make contact hours or days
+                     *     later without a Users row to join. Deliberate deviation from EP-1163's
+                     *     resolve-at-call-time / least-disclosure stance: there is no live resolve
+                     *     step at MHFR-contact time. contact_phone is PII and must be covered by
+                     *     retention and deletion handling.
+                     */
+                    contact_phone?: string;
+                    contact_first_name?: string;
+                    contact_email?: string;
                     correlation_id?: string;
+                    /**
+                     * Format: date
+                     * @description set when the record is nullified.
+                     */
+                    deleted_at?: string | null;
                 };
                 "multipart/form-data": {
                     /** Format: int64 */
                     users_id?: number;
                     /** Format: int64 */
                     trigger_Checkin_id?: number;
+                    /**
+                     * @description How this request was raised (EP-1137). Legacy rows are NULL and should be
+                     *     read as "checkin" — the historical path always had a trigger_Checkin_id.
+                     *     "proactive_eap" rows have NO trigger_Checkin_id and no trigger_Emotion:
+                     *     they come from an AI check-in call, not an in-app emotion check-in, so any
+                     *     consumer that assumes a check-in exists must branch on this field.
+                     * @enum {string|null}
+                     */
+                    trigger_source?: "checkin" | "proactive_eap" | "manual" | null;
+                    /**
+                     * Format: int64
+                     * @description Identity link for a pre-signup subject: the Group Forest Map invite anchor.
+                     *     Durable — the group/respond cascade stamps anchor.userID on acceptance, so
+                     *     a request raised pre-signup can be stitched to the real account later.
+                     *     NEVER write users_id = 0 as a substitute: the MHFR read filters
+                     *     `users_id in <ids>`, and a stray 0 in that list would expose every
+                     *     zero-user request across ALL organisations to one responder.
+                     */
+                    invite_anchor_id?: number;
+                    subject_group_ids?: number[];
+                    /**
+                     * @description Contact snapshot so a responder can actually make contact hours or days
+                     *     later without a Users row to join. Deliberate deviation from EP-1163's
+                     *     resolve-at-call-time / least-disclosure stance: there is no live resolve
+                     *     step at MHFR-contact time. contact_phone is PII and must be covered by
+                     *     retention and deletion handling.
+                     */
+                    contact_phone?: string;
+                    contact_first_name?: string;
+                    contact_email?: string;
                     correlation_id?: string;
+                    /**
+                     * Format: date
+                     * @description set when the record is nullified.
+                     */
+                    deleted_at?: string | null;
                 };
             };
         };
@@ -11196,6 +12582,36 @@ export interface operations {
                         status?: "OPEN" | "RESOLVED" | null;
                         /** Format: int64 */
                         trigger_Checkin_id?: number;
+                        /**
+                         * @description How this request was raised (EP-1137). Legacy rows are NULL and should be
+                         *     read as "checkin" — the historical path always had a trigger_Checkin_id.
+                         *     "proactive_eap" rows have NO trigger_Checkin_id and no trigger_Emotion:
+                         *     they come from an AI check-in call, not an in-app emotion check-in, so any
+                         *     consumer that assumes a check-in exists must branch on this field.
+                         * @enum {string|null}
+                         */
+                        trigger_source?: "checkin" | "proactive_eap" | "manual" | null;
+                        /**
+                         * Format: int64
+                         * @description Identity link for a pre-signup subject: the Group Forest Map invite anchor.
+                         *     Durable — the group/respond cascade stamps anchor.userID on acceptance, so
+                         *     a request raised pre-signup can be stitched to the real account later.
+                         *     NEVER write users_id = 0 as a substitute: the MHFR read filters
+                         *     `users_id in <ids>`, and a stray 0 in that list would expose every
+                         *     zero-user request across ALL organisations to one responder.
+                         */
+                        invite_anchor_id?: number;
+                        subject_group_ids?: number[];
+                        /**
+                         * @description Contact snapshot so a responder can actually make contact hours or days
+                         *     later without a Users row to join. Deliberate deviation from EP-1163's
+                         *     resolve-at-call-time / least-disclosure stance: there is no live resolve
+                         *     step at MHFR-contact time. contact_phone is PII and must be covered by
+                         *     retention and deletion handling.
+                         */
+                        contact_phone?: string;
+                        contact_first_name?: string;
+                        contact_email?: string;
                         /** Format: timestamptz */
                         logged_Date?: number | null;
                         is_Support_Requested?: boolean | null;
@@ -11239,6 +12655,11 @@ export interface operations {
                          */
                         created_at: number;
                         correlation_id?: string;
+                        /**
+                         * Format: date
+                         * @description set when the record is nullified.
+                         */
+                        deleted_at?: string | null;
                         trigger_Emotion?: {
                             emotion_name?: string;
                             /** Format: int64 */
@@ -11395,6 +12816,36 @@ export interface operations {
                         status?: "OPEN" | "RESOLVED" | null;
                         /** Format: int64 */
                         trigger_Checkin_id?: number;
+                        /**
+                         * @description How this request was raised (EP-1137). Legacy rows are NULL and should be
+                         *     read as "checkin" — the historical path always had a trigger_Checkin_id.
+                         *     "proactive_eap" rows have NO trigger_Checkin_id and no trigger_Emotion:
+                         *     they come from an AI check-in call, not an in-app emotion check-in, so any
+                         *     consumer that assumes a check-in exists must branch on this field.
+                         * @enum {string|null}
+                         */
+                        trigger_source?: "checkin" | "proactive_eap" | "manual" | null;
+                        /**
+                         * Format: int64
+                         * @description Identity link for a pre-signup subject: the Group Forest Map invite anchor.
+                         *     Durable — the group/respond cascade stamps anchor.userID on acceptance, so
+                         *     a request raised pre-signup can be stitched to the real account later.
+                         *     NEVER write users_id = 0 as a substitute: the MHFR read filters
+                         *     `users_id in <ids>`, and a stray 0 in that list would expose every
+                         *     zero-user request across ALL organisations to one responder.
+                         */
+                        invite_anchor_id?: number;
+                        subject_group_ids?: number[];
+                        /**
+                         * @description Contact snapshot so a responder can actually make contact hours or days
+                         *     later without a Users row to join. Deliberate deviation from EP-1163's
+                         *     resolve-at-call-time / least-disclosure stance: there is no live resolve
+                         *     step at MHFR-contact time. contact_phone is PII and must be covered by
+                         *     retention and deletion handling.
+                         */
+                        contact_phone?: string;
+                        contact_first_name?: string;
+                        contact_email?: string;
                         /** Format: timestamptz */
                         logged_Date?: number | null;
                         is_Support_Requested?: boolean | null;
@@ -11438,6 +12889,11 @@ export interface operations {
                          */
                         created_at: number;
                         correlation_id?: string;
+                        /**
+                         * Format: date
+                         * @description set when the record is nullified.
+                         */
+                        deleted_at?: string | null;
                         trigger_Emotion?: {
                             emotion_name?: string;
                             /** Format: int64 */
@@ -11590,6 +13046,36 @@ export interface operations {
                 "application/json": {
                     /** @enum {string|null} */
                     status?: "OPEN" | "RESOLVED" | null;
+                    /**
+                     * @description How this request was raised (EP-1137). Legacy rows are NULL and should be
+                     *     read as "checkin" — the historical path always had a trigger_Checkin_id.
+                     *     "proactive_eap" rows have NO trigger_Checkin_id and no trigger_Emotion:
+                     *     they come from an AI check-in call, not an in-app emotion check-in, so any
+                     *     consumer that assumes a check-in exists must branch on this field.
+                     * @enum {string|null}
+                     */
+                    trigger_source?: "checkin" | "proactive_eap" | "manual" | null;
+                    /**
+                     * Format: int64
+                     * @description Identity link for a pre-signup subject: the Group Forest Map invite anchor.
+                     *     Durable — the group/respond cascade stamps anchor.userID on acceptance, so
+                     *     a request raised pre-signup can be stitched to the real account later.
+                     *     NEVER write users_id = 0 as a substitute: the MHFR read filters
+                     *     `users_id in <ids>`, and a stray 0 in that list would expose every
+                     *     zero-user request across ALL organisations to one responder.
+                     */
+                    invite_anchor_id?: number;
+                    subject_group_ids?: number[];
+                    /**
+                     * @description Contact snapshot so a responder can actually make contact hours or days
+                     *     later without a Users row to join. Deliberate deviation from EP-1163's
+                     *     resolve-at-call-time / least-disclosure stance: there is no live resolve
+                     *     step at MHFR-contact time. contact_phone is PII and must be covered by
+                     *     retention and deletion handling.
+                     */
+                    contact_phone?: string;
+                    contact_first_name?: string;
+                    contact_email?: string;
                     is_Support_Requested?: boolean | null;
                     is_Self_Supported?: boolean | null;
                     is_Supported?: boolean | null;
@@ -11624,6 +13110,11 @@ export interface operations {
                     /** Format: timestamptz */
                     resolved_Date?: number | null;
                     correlation_id?: string;
+                    /**
+                     * Format: date
+                     * @description set when the record is nullified.
+                     */
+                    deleted_at?: string | null;
                     /** Format: int64 */
                     old_contact_attempt_count?: number;
                     numbers_viewed?: {
@@ -11678,6 +13169,36 @@ export interface operations {
                 "multipart/form-data": {
                     /** @enum {string|null} */
                     status?: "OPEN" | "RESOLVED" | null;
+                    /**
+                     * @description How this request was raised (EP-1137). Legacy rows are NULL and should be
+                     *     read as "checkin" — the historical path always had a trigger_Checkin_id.
+                     *     "proactive_eap" rows have NO trigger_Checkin_id and no trigger_Emotion:
+                     *     they come from an AI check-in call, not an in-app emotion check-in, so any
+                     *     consumer that assumes a check-in exists must branch on this field.
+                     * @enum {string|null}
+                     */
+                    trigger_source?: "checkin" | "proactive_eap" | "manual" | null;
+                    /**
+                     * Format: int64
+                     * @description Identity link for a pre-signup subject: the Group Forest Map invite anchor.
+                     *     Durable — the group/respond cascade stamps anchor.userID on acceptance, so
+                     *     a request raised pre-signup can be stitched to the real account later.
+                     *     NEVER write users_id = 0 as a substitute: the MHFR read filters
+                     *     `users_id in <ids>`, and a stray 0 in that list would expose every
+                     *     zero-user request across ALL organisations to one responder.
+                     */
+                    invite_anchor_id?: number;
+                    subject_group_ids?: number[];
+                    /**
+                     * @description Contact snapshot so a responder can actually make contact hours or days
+                     *     later without a Users row to join. Deliberate deviation from EP-1163's
+                     *     resolve-at-call-time / least-disclosure stance: there is no live resolve
+                     *     step at MHFR-contact time. contact_phone is PII and must be covered by
+                     *     retention and deletion handling.
+                     */
+                    contact_phone?: string;
+                    contact_first_name?: string;
+                    contact_email?: string;
                     is_Support_Requested?: boolean | null;
                     is_Self_Supported?: boolean | null;
                     is_Supported?: boolean | null;
@@ -11712,6 +13233,11 @@ export interface operations {
                     /** Format: timestamptz */
                     resolved_Date?: number | null;
                     correlation_id?: string;
+                    /**
+                     * Format: date
+                     * @description set when the record is nullified.
+                     */
+                    deleted_at?: string | null;
                     /** Format: int64 */
                     old_contact_attempt_count?: number;
                     numbers_viewed?: {
@@ -11782,6 +13308,36 @@ export interface operations {
                             status?: "OPEN" | "RESOLVED" | null;
                             /** Format: int64 */
                             trigger_Checkin_id?: number;
+                            /**
+                             * @description How this request was raised (EP-1137). Legacy rows are NULL and should be
+                             *     read as "checkin" — the historical path always had a trigger_Checkin_id.
+                             *     "proactive_eap" rows have NO trigger_Checkin_id and no trigger_Emotion:
+                             *     they come from an AI check-in call, not an in-app emotion check-in, so any
+                             *     consumer that assumes a check-in exists must branch on this field.
+                             * @enum {string|null}
+                             */
+                            trigger_source?: "checkin" | "proactive_eap" | "manual" | null;
+                            /**
+                             * Format: int64
+                             * @description Identity link for a pre-signup subject: the Group Forest Map invite anchor.
+                             *     Durable — the group/respond cascade stamps anchor.userID on acceptance, so
+                             *     a request raised pre-signup can be stitched to the real account later.
+                             *     NEVER write users_id = 0 as a substitute: the MHFR read filters
+                             *     `users_id in <ids>`, and a stray 0 in that list would expose every
+                             *     zero-user request across ALL organisations to one responder.
+                             */
+                            invite_anchor_id?: number;
+                            subject_group_ids?: number[];
+                            /**
+                             * @description Contact snapshot so a responder can actually make contact hours or days
+                             *     later without a Users row to join. Deliberate deviation from EP-1163's
+                             *     resolve-at-call-time / least-disclosure stance: there is no live resolve
+                             *     step at MHFR-contact time. contact_phone is PII and must be covered by
+                             *     retention and deletion handling.
+                             */
+                            contact_phone?: string;
+                            contact_first_name?: string;
+                            contact_email?: string;
                             /** Format: timestamptz */
                             logged_Date?: number | null;
                             is_Support_Requested?: boolean | null;
@@ -11825,6 +13381,11 @@ export interface operations {
                              */
                             created_at: number;
                             correlation_id?: string;
+                            /**
+                             * Format: date
+                             * @description set when the record is nullified.
+                             */
+                            deleted_at?: string | null;
                             trigger_Emotion?: {
                                 emotion_name?: string;
                                 /** Format: int64 */
@@ -11967,151 +13528,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** Format: int64 */
-                        id?: number;
-                        /** Format: int64 */
-                        users_id?: number;
-                        /** @enum {string|null} */
-                        status?: "OPEN" | "RESOLVED" | null;
-                        /** Format: int64 */
-                        trigger_Checkin_id?: number;
-                        /** Format: timestamptz */
-                        logged_Date?: number | null;
-                        is_Support_Requested?: boolean | null;
-                        is_Self_Supported?: boolean | null;
-                        is_Supported?: boolean | null;
-                        is_Checkback_Required?: boolean | null;
-                        no_help_needed?: boolean | null;
-                        checkedback?: boolean | null;
-                        /** @enum {string} */
-                        checkback_options?: "5" | "15" | "30";
-                        /** Format: timestamptz */
-                        checkback_time?: number | null;
-                        /** Format: timestamptz */
-                        next_MHFR_notification?: number | null;
-                        /** Format: int64 */
-                        reminder_count?: number;
-                        groups_notified?: number[];
-                        /** Format: int64 */
-                        contact_attempts_count?: number;
-                        /** Format: int64 */
-                        supporter_id?: number;
-                        /** Format: int64 */
-                        risk_severity?: number;
-                        /** Format: int64 */
-                        risk_frequency?: number;
-                        /** Format: int64 */
-                        risk_escalation?: number;
-                        /** Format: int64 */
-                        risk_score?: number;
-                        /** @enum {string} */
-                        support_Action?: "LIFT_Monitor" | "ACT_Professional" | "ACT_Emergency";
-                        /** Format: date */
-                        supported_Date?: string | null;
-                        /** Format: int64 */
-                        resolved_Checkin_id?: number;
-                        /** Format: timestamptz */
-                        resolved_Date?: number | null;
-                        /**
-                         * Format: timestamptz
-                         * @default now
-                         */
-                        created_at: number;
-                        correlation_id?: string;
-                        trigger_Emotion?: {
-                            emotion_name?: string;
-                            /** Format: int64 */
-                            x?: number;
-                            /** Format: int64 */
-                            y?: number;
-                            /** Format: int64 */
-                            coordinates_id?: number;
-                            /** Format: int64 */
-                            emotion_states_id?: number;
-                            /** Format: timestamptz */
-                            timestamp?: number | null;
-                            triggered_emotions_item?: {
-                                /** Format: int64 */
-                                id?: number;
-                                Display?: string;
-                                emotionColour?: string;
-                                themeColour?: string;
-                                themeFontColour?: string;
-                                Selectable_Prompts?: string;
-                                /** Format: int64 */
-                                xQuad?: number;
-                                /** Format: int64 */
-                                yQuad?: number;
-                                MHFR_action?: string;
-                                definition?: string;
-                                action?: string;
-                                /** @enum {string} */
-                                zone_name?: "Active Flow" | "Challenged & Agitated" | "Contemplative & Connected" | "Loss & Exhaustion";
-                                /** @enum {string} */
-                                zone_label?: "Low energy • Unpleasant" | "High energy • Unpleasant" | "Low energy • Pleasant" | "High energy • Pleasant";
-                                body_signals?: string;
-                                /** @description synonymous of similar emotions */
-                                emotion_cluster?: string;
-                                tone?: string;
-                            } | null;
-                        };
-                        numbers_viewed?: {
-                            /**
-                             * Format: int64
-                             * @description mfhr id
-                             */
-                            users_id?: number;
-                            /** Format: int64 */
-                            support_services_id?: number;
-                            /** Format: timestamptz */
-                            attempted_date?: number | null;
-                        }[];
-                        Contact_History?: {
-                            /**
-                             * Format: int64
-                             * @description mfhr id
-                             */
-                            users_id?: number;
-                            /** Format: timestamptz */
-                            timestamp?: number | null;
-                        }[];
-                        updated_Emotions_List?: {
-                            Display?: string;
-                            /** Format: int64 */
-                            x?: number;
-                            /** Format: int64 */
-                            y?: number;
-                            /** Format: int64 */
-                            coordinates_id?: number;
-                            /** Format: int64 */
-                            emotion_states_id?: number;
-                            /** Format: timestamptz */
-                            timestamp?: number | null;
-                            emotionColour?: string;
-                        }[];
-                        resolved_Emotion?: {
-                            Display?: string;
-                            /** Format: int64 */
-                            x?: number;
-                            /** Format: int64 */
-                            y?: number;
-                            /** Format: int64 */
-                            coordinates_id?: number;
-                            /** Format: int64 */
-                            emotion_states_id?: number;
-                            /** Format: timestamptz */
-                            timestamp?: number | null;
-                            emotionColour?: string;
-                        };
-                        requesting_user_details?: {
-                            fullName?: string;
-                            /** Format: email */
-                            email?: string | null;
-                            phoneNumber?: string;
-                            profilePic_url?: string;
-                        } | null;
-                    }[];
+                    "application/json": Record<string, never>;
                 };
             };
             /** @description Input Error. Check the request payload for issues. */
@@ -12399,14 +13816,33 @@ export interface operations {
                         email?: string | null;
                         phoneNumber?: string;
                         /**
+                         * @description EP-1130 — provenance of phoneNumber (see group_forest_map.phone_source).
+                         *     user_confirmed/signup must never be overwritten by admin_supplied/csv_import.
+                         * @enum {string}
+                         */
+                        phone_source?: "admin_supplied" | "csv_import" | "user_confirmed" | "signup";
+                        /**
                          * @default Free
                          * @enum {string}
                          */
                         access: "Free" | "Activator" | "Workplace";
+                        /** @default false */
+                        super_admin: boolean;
+                        /**
+                         * @description EP-1202 — internal ShareTree team member who staffs the MHFR call console. This is a
+                         *     ShareTree-STAFF flag, deliberately NOT the client-side responder role (Group Forest
+                         *     Map role "mhfr support", EP-1137): client MHFRs must never reach the console. Ticked
+                         *     per user like super_admin. Grants console access + cross-client visibility, since
+                         *     ShareTree operators call on behalf of every client (Scenarios 2/3).
+                         * @default false
+                         */
+                        st_mhfr: boolean;
                         /** Format: password */
                         password?: string | null;
                         fullName?: string;
                         profilePic_url?: string;
+                        /** @description Small (~256px) thumbnail of profilePic_url, for the pulse grid / lists. */
+                        profilePic_thumb_url?: string;
                         profile_hex_colour?: string;
                         /** Format: int64 */
                         recentStateCoordinates?: number;
@@ -12519,6 +13955,21 @@ export interface operations {
                         apple_user_id?: string;
                         correlation_id?: string;
                         Profile_Pic_File?: {
+                            /**
+                             * @default public
+                             * @enum {string}
+                             */
+                            access: "public" | "private";
+                            path?: string;
+                            name?: string;
+                            type?: string;
+                            /** Format: int64 */
+                            size?: number;
+                            mime?: string;
+                            meta?: Record<string, never>;
+                            url?: string | null;
+                        } | null;
+                        Profile_Pic_Thumb_File?: {
                             /**
                              * @default public
                              * @enum {string}
@@ -12603,144 +14054,6 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    firstName?: string | null;
-                    lastName?: string | null;
-                    /** Format: timestamptz */
-                    lastCheckInDate?: number | null;
-                    /** Format: email */
-                    email?: string | null;
-                    phoneNumber?: string;
-                    /**
-                     * @default Free
-                     * @enum {string}
-                     */
-                    access?: "Free" | "Activator" | "Workplace";
-                    /** Format: password */
-                    password?: string | null;
-                    fullName: string;
-                    profilePic_url?: string;
-                    profile_hex_colour?: string;
-                    /** Format: int64 */
-                    recentStateCoordinates?: number;
-                    /** Format: int64 */
-                    recentStateEmotion_data?: number;
-                    /** Format: int64 */
-                    recentCheckIn_full?: number;
-                    /** Format: int64 */
-                    running_stats_id?: number;
-                    recentStateCoordinateDisplay?: string;
-                    recentEmotion_text?: string;
-                    openai_threadID?: string;
-                    /** Format: int64 */
-                    verificationCode?: number;
-                    emailVerified?: boolean;
-                    phoneVerified?: boolean;
-                    intro_slides_seen?: boolean;
-                    mic_permissions?: boolean;
-                    seen_mic_permission_popup?: boolean;
-                    seen_dependency_popup?: boolean;
-                    seen_trend_card?: boolean;
-                    seen_user_reminder_setting?: boolean;
-                    set_custom_user_reminder?: boolean;
-                    onboarding_complete?: boolean;
-                    currently_enrolled?: boolean;
-                    course_completed?: boolean;
-                    /** @default 1 */
-                    checkin_with_grid?: boolean;
-                    first_group_onboarding?: Record<string, never> | null;
-                    /**
-                     * Format: int64
-                     * @default 1
-                     */
-                    onboarding_step?: number;
-                    current_threadID?: string;
-                    pairs_id?: number[];
-                    /** Format: timestamptz */
-                    last_seen?: number | null;
-                    /** @default Australia/Melbourne */
-                    timezone?: string;
-                    /**
-                     * Format: int64
-                     * @default 5
-                     */
-                    weekly_report_day?: number;
-                    reliability_score?: number;
-                    country?: string;
-                    seen_sections?: Record<string, never>[];
-                    /** Format: int64 */
-                    group_subscriptions_id?: number;
-                    /** Format: int64 */
-                    activator_subscription?: number;
-                    /**
-                     * @default active
-                     * @enum {string}
-                     */
-                    status?: "active" | "invited" | "deactivated";
-                    microsoft_id?: string;
-                    microsoft_tenant_id?: string;
-                    microsoft_conversation_id?: string;
-                    microsoft_service_url?: string;
-                    test_version?: boolean;
-                    /** Format: password */
-                    microsoft_access_token?: string;
-                    /** Format: password */
-                    microsoft_refresh_token?: string;
-                    /** Format: timestamptz */
-                    microsoft_token_expiry?: number | null;
-                    /** @enum {string} */
-                    reminder_frequency?: "WEEKDAYS" | "WEEKLY" | "DAILY" | "NONE";
-                    /**
-                     * Format: int64
-                     * @default 11
-                     */
-                    reminder_hour?: number;
-                    /** Format: int64 */
-                    reminder_min?: number;
-                    reminder_day?: number[];
-                    source?: string;
-                    /** Format: int64 */
-                    AWS_user_id?: number;
-                    AWS_synced?: boolean;
-                    AWS_migrated?: boolean;
-                    apple?: Record<string, never> | null;
-                    apple_id?: string;
-                    app_profile_banner_url?: string;
-                    onesignal_subscription_id?: string;
-                    /**
-                     * @default slider
-                     * @enum {string}
-                     */
-                    preferred_checkin_view?: "grid" | "slider";
-                    apple_user_id?: string;
-                    correlation_id?: string;
-                    Profile_Pic_File?: {
-                        /**
-                         * @default public
-                         * @enum {string}
-                         */
-                        access?: "public" | "private";
-                        path: string;
-                        name: string;
-                        type: string;
-                        /** Format: int64 */
-                        size: number;
-                        mime: string;
-                        meta: Record<string, never>;
-                    } | null;
-                    checkin_logs?: {
-                        /** Format: int64 */
-                        weekday?: number;
-                        day_initial?: string;
-                        checkedin?: boolean;
-                    }[];
-                    magic_link2?: {
-                        token?: string;
-                        /** Format: timestamptz */
-                        expiration?: number | null;
-                        used?: boolean;
-                    };
-                };
                 "multipart/form-data": {
                     firstName?: string | null;
                     lastName?: string | null;
@@ -12750,14 +14063,30 @@ export interface operations {
                     email?: string | null;
                     phoneNumber?: string;
                     /**
-                     * @default Free
+                     * @description EP-1130 — provenance of phoneNumber (see group_forest_map.phone_source).
+                     *     user_confirmed/signup must never be overwritten by admin_supplied/csv_import.
                      * @enum {string}
                      */
+                    phone_source?: "admin_supplied" | "csv_import" | "user_confirmed" | "signup";
+                    /** @enum {string} */
                     access?: "Free" | "Activator" | "Workplace";
+                    /** @default false */
+                    super_admin?: boolean;
+                    /**
+                     * @description EP-1202 — internal ShareTree team member who staffs the MHFR call console. This is a
+                     *     ShareTree-STAFF flag, deliberately NOT the client-side responder role (Group Forest
+                     *     Map role "mhfr support", EP-1137): client MHFRs must never reach the console. Ticked
+                     *     per user like super_admin. Grants console access + cross-client visibility, since
+                     *     ShareTree operators call on behalf of every client (Scenarios 2/3).
+                     * @default false
+                     */
+                    st_mhfr?: boolean;
                     /** Format: password */
                     password?: string | null;
-                    fullName: string;
+                    fullName?: string;
                     profilePic_url?: string;
+                    /** @description Small (~256px) thumbnail of profilePic_url, for the pulse grid / lists. */
+                    profilePic_thumb_url?: string;
                     profile_hex_colour?: string;
                     /** Format: int64 */
                     recentStateCoordinates?: number;
@@ -12784,24 +14113,16 @@ export interface operations {
                     onboarding_complete?: boolean;
                     currently_enrolled?: boolean;
                     course_completed?: boolean;
-                    /** @default 1 */
                     checkin_with_grid?: boolean;
                     first_group_onboarding?: Record<string, never> | null;
-                    /**
-                     * Format: int64
-                     * @default 1
-                     */
+                    /** Format: int64 */
                     onboarding_step?: number;
                     current_threadID?: string;
                     pairs_id?: number[];
                     /** Format: timestamptz */
                     last_seen?: number | null;
-                    /** @default Australia/Melbourne */
                     timezone?: string;
-                    /**
-                     * Format: int64
-                     * @default 5
-                     */
+                    /** Format: int64 */
                     weekly_report_day?: number;
                     reliability_score?: number;
                     country?: string;
@@ -12810,10 +14131,7 @@ export interface operations {
                     group_subscriptions_id?: number;
                     /** Format: int64 */
                     activator_subscription?: number;
-                    /**
-                     * @default active
-                     * @enum {string}
-                     */
+                    /** @enum {string} */
                     status?: "active" | "invited" | "deactivated";
                     microsoft_id?: string;
                     microsoft_tenant_id?: string;
@@ -12828,10 +14146,7 @@ export interface operations {
                     microsoft_token_expiry?: number | null;
                     /** @enum {string} */
                     reminder_frequency?: "WEEKDAYS" | "WEEKLY" | "DAILY" | "NONE";
-                    /**
-                     * Format: int64
-                     * @default 11
-                     */
+                    /** Format: int64 */
                     reminder_hour?: number;
                     /** Format: int64 */
                     reminder_min?: number;
@@ -12845,14 +14160,13 @@ export interface operations {
                     apple_id?: string;
                     app_profile_banner_url?: string;
                     onesignal_subscription_id?: string;
-                    /**
-                     * @default slider
-                     * @enum {string}
-                     */
+                    /** @enum {string} */
                     preferred_checkin_view?: "grid" | "slider";
                     apple_user_id?: string;
                     correlation_id?: string;
-                    Profile_Pic_File?: {
+                    /** Format: binary */
+                    Profile_File?: string | null;
+                    Profile_Pic_Thumb_File?: {
                         /**
                          * @default public
                          * @enum {string}
@@ -12870,14 +14184,85 @@ export interface operations {
                         /** Format: int64 */
                         weekday?: number;
                         day_initial?: string;
+                        /** @default false */
                         checkedin?: boolean;
                     }[];
                     magic_link2?: {
                         token?: string;
                         /** Format: timestamptz */
                         expiration?: number | null;
+                        /** @default false */
                         used?: boolean;
                     };
+                };
+            };
+        };
+        responses: {
+            /** @description Success! */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Input Error. Check the request payload for issues. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Access denied. Additional privileges are needed access the requested resource. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found. The requested resource does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate Limited. Too many requests. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "api/user/update_app_profile_banner|POST": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    banner: string | null;
                 };
             };
         };
@@ -12904,14 +14289,33 @@ export interface operations {
                         email?: string | null;
                         phoneNumber?: string;
                         /**
+                         * @description EP-1130 — provenance of phoneNumber (see group_forest_map.phone_source).
+                         *     user_confirmed/signup must never be overwritten by admin_supplied/csv_import.
+                         * @enum {string}
+                         */
+                        phone_source?: "admin_supplied" | "csv_import" | "user_confirmed" | "signup";
+                        /**
                          * @default Free
                          * @enum {string}
                          */
                         access: "Free" | "Activator" | "Workplace";
+                        /** @default false */
+                        super_admin: boolean;
+                        /**
+                         * @description EP-1202 — internal ShareTree team member who staffs the MHFR call console. This is a
+                         *     ShareTree-STAFF flag, deliberately NOT the client-side responder role (Group Forest
+                         *     Map role "mhfr support", EP-1137): client MHFRs must never reach the console. Ticked
+                         *     per user like super_admin. Grants console access + cross-client visibility, since
+                         *     ShareTree operators call on behalf of every client (Scenarios 2/3).
+                         * @default false
+                         */
+                        st_mhfr: boolean;
                         /** Format: password */
                         password?: string | null;
                         fullName?: string;
                         profilePic_url?: string;
+                        /** @description Small (~256px) thumbnail of profilePic_url, for the pulse grid / lists. */
+                        profilePic_thumb_url?: string;
                         profile_hex_colour?: string;
                         /** Format: int64 */
                         recentStateCoordinates?: number;
@@ -13038,225 +14442,7 @@ export interface operations {
                             meta?: Record<string, never>;
                             url?: string | null;
                         } | null;
-                        checkin_logs?: {
-                            /** Format: int64 */
-                            weekday?: number;
-                            day_initial?: string;
-                            /** @default false */
-                            checkedin: boolean;
-                        }[];
-                        magic_link2?: {
-                            token?: string;
-                            /** Format: timestamptz */
-                            expiration?: number | null;
-                            /** @default false */
-                            used: boolean;
-                        };
-                    };
-                };
-            };
-            /** @description Input Error. Check the request payload for issues. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Access denied. Additional privileges are needed access the requested resource. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Not Found. The requested resource does not exist. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Rate Limited. Too many requests. */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unexpected error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    "api/user/update_app_profile_banner|POST": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "multipart/form-data": {
-                    /** Format: binary */
-                    banner: string | null;
-                };
-            };
-        };
-        responses: {
-            /** @description Success! */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** Format: int64 */
-                        id?: number;
-                        /**
-                         * Format: timestamptz
-                         * @default now
-                         */
-                        created_at: number;
-                        firstName?: string | null;
-                        lastName?: string | null;
-                        /** Format: timestamptz */
-                        lastCheckInDate?: number | null;
-                        /** Format: email */
-                        email?: string | null;
-                        phoneNumber?: string;
-                        /**
-                         * @default Free
-                         * @enum {string}
-                         */
-                        access: "Free" | "Activator" | "Workplace";
-                        /** Format: password */
-                        password?: string | null;
-                        fullName?: string;
-                        profilePic_url?: string;
-                        profile_hex_colour?: string;
-                        /** Format: int64 */
-                        recentStateCoordinates?: number;
-                        /** Format: int64 */
-                        recentStateEmotion_data?: number;
-                        /** Format: int64 */
-                        recentCheckIn_full?: number;
-                        /** Format: int64 */
-                        running_stats_id?: number;
-                        recentStateCoordinateDisplay?: string;
-                        recentEmotion_text?: string;
-                        openai_threadID?: string;
-                        /** Format: int64 */
-                        verificationCode?: number;
-                        /** @default false */
-                        emailVerified: boolean;
-                        /** @default false */
-                        phoneVerified: boolean;
-                        /** @default false */
-                        intro_slides_seen: boolean;
-                        /** @default false */
-                        mic_permissions: boolean;
-                        /** @default false */
-                        seen_mic_permission_popup: boolean;
-                        /** @default false */
-                        seen_dependency_popup: boolean;
-                        /** @default false */
-                        seen_trend_card: boolean;
-                        /** @default false */
-                        seen_user_reminder_setting: boolean;
-                        /** @default false */
-                        set_custom_user_reminder: boolean;
-                        /** @default false */
-                        onboarding_complete: boolean;
-                        /** @default false */
-                        currently_enrolled: boolean;
-                        /** @default false */
-                        course_completed: boolean;
-                        /** @default 1 */
-                        checkin_with_grid: boolean;
-                        /** @description contains all the information about the first group onboarding progress */
-                        first_group_onboarding?: Record<string, never> | null;
-                        /**
-                         * Format: int64
-                         * @default 1
-                         */
-                        onboarding_step: number;
-                        current_threadID?: string;
-                        pairs_id?: number[];
-                        /** Format: timestamptz */
-                        last_seen?: number | null;
-                        /** @default Australia/Melbourne */
-                        timezone: string;
-                        /**
-                         * Format: int64
-                         * @description Days of week from 1-7
-                         * @default 5
-                         */
-                        weekly_report_day: number;
-                        reliability_score?: number;
-                        country?: string;
-                        seen_sections?: Record<string, never>[];
-                        /** Format: int64 */
-                        group_subscriptions_id?: number;
-                        /** Format: int64 */
-                        activator_subscription?: number;
-                        /**
-                         * @default active
-                         * @enum {string}
-                         */
-                        status: "active" | "invited" | "deactivated";
-                        microsoft_id?: string;
-                        microsoft_tenant_id?: string;
-                        microsoft_conversation_id?: string;
-                        microsoft_service_url?: string;
-                        /** @default false */
-                        test_version: boolean;
-                        /** Format: password */
-                        microsoft_access_token?: string;
-                        /** Format: password */
-                        microsoft_refresh_token?: string;
-                        /** Format: timestamptz */
-                        microsoft_token_expiry?: number | null;
-                        /** @enum {string} */
-                        reminder_frequency?: "WEEKDAYS" | "WEEKLY" | "DAILY" | "NONE";
-                        /**
-                         * Format: int64
-                         * @default 11
-                         */
-                        reminder_hour: number;
-                        /** Format: int64 */
-                        reminder_min?: number;
-                        reminder_day?: number[];
-                        source?: string;
-                        /** Format: int64 */
-                        AWS_user_id?: number;
-                        /** @default false */
-                        AWS_synced: boolean;
-                        /** @default false */
-                        AWS_migrated: boolean;
-                        apple?: Record<string, never> | null;
-                        apple_id?: string;
-                        app_profile_banner_url?: string;
-                        onesignal_subscription_id?: string;
-                        /**
-                         * @default slider
-                         * @enum {string}
-                         */
-                        preferred_checkin_view: "grid" | "slider";
-                        apple_user_id?: string;
-                        correlation_id?: string;
-                        Profile_Pic_File?: {
+                        Profile_Pic_Thumb_File?: {
                             /**
                              * @default public
                              * @enum {string}
@@ -13372,14 +14558,33 @@ export interface operations {
                         email?: string | null;
                         phoneNumber?: string;
                         /**
+                         * @description EP-1130 — provenance of phoneNumber (see group_forest_map.phone_source).
+                         *     user_confirmed/signup must never be overwritten by admin_supplied/csv_import.
+                         * @enum {string}
+                         */
+                        phone_source?: "admin_supplied" | "csv_import" | "user_confirmed" | "signup";
+                        /**
                          * @default Free
                          * @enum {string}
                          */
                         access: "Free" | "Activator" | "Workplace";
+                        /** @default false */
+                        super_admin: boolean;
+                        /**
+                         * @description EP-1202 — internal ShareTree team member who staffs the MHFR call console. This is a
+                         *     ShareTree-STAFF flag, deliberately NOT the client-side responder role (Group Forest
+                         *     Map role "mhfr support", EP-1137): client MHFRs must never reach the console. Ticked
+                         *     per user like super_admin. Grants console access + cross-client visibility, since
+                         *     ShareTree operators call on behalf of every client (Scenarios 2/3).
+                         * @default false
+                         */
+                        st_mhfr: boolean;
                         /** Format: password */
                         password?: string | null;
                         fullName?: string;
                         profilePic_url?: string;
+                        /** @description Small (~256px) thumbnail of profilePic_url, for the pulse grid / lists. */
+                        profilePic_thumb_url?: string;
                         profile_hex_colour?: string;
                         /** Format: int64 */
                         recentStateCoordinates?: number;
@@ -13492,6 +14697,21 @@ export interface operations {
                         apple_user_id?: string;
                         correlation_id?: string;
                         Profile_Pic_File?: {
+                            /**
+                             * @default public
+                             * @enum {string}
+                             */
+                            access: "public" | "private";
+                            path?: string;
+                            name?: string;
+                            type?: string;
+                            /** Format: int64 */
+                            size?: number;
+                            mime?: string;
+                            meta?: Record<string, never>;
+                            url?: string | null;
+                        } | null;
+                        Profile_Pic_Thumb_File?: {
                             /**
                              * @default public
                              * @enum {string}
@@ -13691,14 +14911,33 @@ export interface operations {
                         email?: string | null;
                         phoneNumber?: string;
                         /**
+                         * @description EP-1130 — provenance of phoneNumber (see group_forest_map.phone_source).
+                         *     user_confirmed/signup must never be overwritten by admin_supplied/csv_import.
+                         * @enum {string}
+                         */
+                        phone_source?: "admin_supplied" | "csv_import" | "user_confirmed" | "signup";
+                        /**
                          * @default Free
                          * @enum {string}
                          */
                         access: "Free" | "Activator" | "Workplace";
+                        /** @default false */
+                        super_admin: boolean;
+                        /**
+                         * @description EP-1202 — internal ShareTree team member who staffs the MHFR call console. This is a
+                         *     ShareTree-STAFF flag, deliberately NOT the client-side responder role (Group Forest
+                         *     Map role "mhfr support", EP-1137): client MHFRs must never reach the console. Ticked
+                         *     per user like super_admin. Grants console access + cross-client visibility, since
+                         *     ShareTree operators call on behalf of every client (Scenarios 2/3).
+                         * @default false
+                         */
+                        st_mhfr: boolean;
                         /** Format: password */
                         password?: string | null;
                         fullName?: string;
                         profilePic_url?: string;
+                        /** @description Small (~256px) thumbnail of profilePic_url, for the pulse grid / lists. */
+                        profilePic_thumb_url?: string;
                         profile_hex_colour?: string;
                         /** Format: int64 */
                         recentStateCoordinates?: number;
@@ -13811,6 +15050,21 @@ export interface operations {
                         apple_user_id?: string;
                         correlation_id?: string;
                         Profile_Pic_File?: {
+                            /**
+                             * @default public
+                             * @enum {string}
+                             */
+                            access: "public" | "private";
+                            path?: string;
+                            name?: string;
+                            type?: string;
+                            /** Format: int64 */
+                            size?: number;
+                            mime?: string;
+                            meta?: Record<string, never>;
+                            url?: string | null;
+                        } | null;
+                        Profile_Pic_Thumb_File?: {
                             /**
                              * @default public
                              * @enum {string}
@@ -13942,14 +15196,33 @@ export interface operations {
                         email?: string | null;
                         phoneNumber?: string;
                         /**
+                         * @description EP-1130 — provenance of phoneNumber (see group_forest_map.phone_source).
+                         *     user_confirmed/signup must never be overwritten by admin_supplied/csv_import.
+                         * @enum {string}
+                         */
+                        phone_source?: "admin_supplied" | "csv_import" | "user_confirmed" | "signup";
+                        /**
                          * @default Free
                          * @enum {string}
                          */
                         access: "Free" | "Activator" | "Workplace";
+                        /** @default false */
+                        super_admin: boolean;
+                        /**
+                         * @description EP-1202 — internal ShareTree team member who staffs the MHFR call console. This is a
+                         *     ShareTree-STAFF flag, deliberately NOT the client-side responder role (Group Forest
+                         *     Map role "mhfr support", EP-1137): client MHFRs must never reach the console. Ticked
+                         *     per user like super_admin. Grants console access + cross-client visibility, since
+                         *     ShareTree operators call on behalf of every client (Scenarios 2/3).
+                         * @default false
+                         */
+                        st_mhfr: boolean;
                         /** Format: password */
                         password?: string | null;
                         fullName?: string;
                         profilePic_url?: string;
+                        /** @description Small (~256px) thumbnail of profilePic_url, for the pulse grid / lists. */
+                        profilePic_thumb_url?: string;
                         profile_hex_colour?: string;
                         /** Format: int64 */
                         recentStateCoordinates?: number;
@@ -14062,6 +15335,21 @@ export interface operations {
                         apple_user_id?: string;
                         correlation_id?: string;
                         Profile_Pic_File?: {
+                            /**
+                             * @default public
+                             * @enum {string}
+                             */
+                            access: "public" | "private";
+                            path?: string;
+                            name?: string;
+                            type?: string;
+                            /** Format: int64 */
+                            size?: number;
+                            mime?: string;
+                            meta?: Record<string, never>;
+                            url?: string | null;
+                        } | null;
+                        Profile_Pic_Thumb_File?: {
                             /**
                              * @default public
                              * @enum {string}

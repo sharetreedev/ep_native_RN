@@ -106,9 +106,10 @@ export const auth = {
   // EP-1261: the channel is the only parameter now. The legacy `type`
   // (email|phone) described the same dimension and is no longer sent — the
   // backend still accepts it for callers we haven't drained yet (older bundles,
-  // WeWeb), but nothing in this app relies on it. The spec predates
-  // `delivery_method`, so the response type is widened by hand (same pattern as
-  // microsoftCallback below).
+  // WeWeb), but nothing in this app relies on it. The spec declares
+  // `delivery_method` as an INPUT, but Xano still doesn't describe the response
+  // body for these endpoints, so the response stays widened by hand (same
+  // pattern as microsoftCallback below).
   generateCode: (deliveryMethod: DeliveryMethod) =>
     request<Body<'api/auth/2fa/generateCode|POST'> & { delivery_method?: DeliveryMethod }>(
       'POST', '/auth/2fa/generateCode', { delivery_method: deliveryMethod },

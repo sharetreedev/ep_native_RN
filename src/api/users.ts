@@ -64,7 +64,11 @@ export const user = {
     profilePicFile?: { uri: string; name?: string; type?: string };
   }) => {
     const { profilePicFile, ...jsonFields } = fields;
-    type UpdateProfileBody = Body<'api/user/update/profile|PATCH'>;
+    // The regenerated spec (9 Sep) declares this response as `{}` — Xano has
+    // never described the body, though the endpoint really does return the
+    // Users row. Intersect rather than cast through `unknown`, same pattern as
+    // auth.microsoftCallback, so the shape stays documented at the type level.
+    type UpdateProfileBody = Body<'api/user/update/profile|PATCH'> & Partial<XanoUser>;
     let result: UpdateProfileBody | undefined;
     if (Object.keys(jsonFields).length > 0) {
       result = await request<UpdateProfileBody>(
