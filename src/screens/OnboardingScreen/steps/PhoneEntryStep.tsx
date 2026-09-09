@@ -4,9 +4,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../../../components/Button';
 import PhoneInput from '../../../components/PhoneInput';
 import { styles } from '../styles';
+import type { PhoneDeliveryMethod } from '../../../api/auth';
 
 interface PhoneEntryStepProps {
-  onSubmit: (phone: string, countryCode: string, countryIso: string) => void;
+  onSubmit: (
+    phone: string,
+    countryCode: string,
+    countryIso: string,
+    deliveryMethod: PhoneDeliveryMethod,
+  ) => void;
   isSubmitting: boolean;
 }
 
@@ -15,13 +21,19 @@ export default function PhoneEntryStep({ onSubmit, isSubmitting }: PhoneEntrySte
   const [countryCode, setCountryCode] = useState('+61');
   const [countryIso, setCountryIso] = useState('AU');
 
-  const handleSubmit = useCallback(() => {
-    if (!phone.trim()) {
-      Alert.alert('Missing Phone', 'Please enter your phone number.');
-      return;
-    }
-    onSubmit(phone, countryCode, countryIso);
-  }, [phone, countryCode, countryIso, onSubmit]);
+  // EP-1261 — the channel is chosen HERE, not after a failed SMS. Users whose
+  // SMS never arrives shouldn't have to trigger a useless (billable) text
+  // before they can reach the channel that works for them.
+  const handleSubmit = useCallback(
+    (deliveryMethod: PhoneDeliveryMethod) => {
+      if (!phone.trim()) {
+        Alert.alert('Missing Phone', 'Please enter your phone number.');
+        return;
+      }
+      onSubmit(phone, countryCode, countryIso, deliveryMethod);
+    },
+    [phone, countryCode, countryIso, onSubmit],
+  );
 
   const renderHeader = () => (
     <View style={styles.headerRow}>
@@ -51,9 +63,15 @@ export default function PhoneEntryStep({ onSubmit, isSubmitting }: PhoneEntrySte
           </View>
           <Button
             title="Send Code"
-            onPress={handleSubmit}
+            onPress={() => handleSubmit('sms')}
             loading={isSubmitting}
             style={styles.primaryButton}
+          />
+          <Button
+            title="Send Code on WhatsApp"
+            variant="secondary"
+            onPress={() => handleSubmit('whatsapp')}
+            disabled={isSubmitting}
           />
         </ScrollView>
       </SafeAreaView>

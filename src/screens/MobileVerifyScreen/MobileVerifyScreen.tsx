@@ -17,22 +17,23 @@ type RouteParams = RouteProp<RootStackParamList, 'MobileVerify'>;
 const RESEND_COOLDOWN = 30;
 
 export default function MobileVerifyScreen() {
-  const { userId, phone, countryIso } = useRoute<RouteParams>().params;
+  const { userId, phone, countryIso, deliveryMethod = 'sms' } = useRoute<RouteParams>().params;
   const { loginWithMobile } = useAuth();
   const [isVerifying, setVerifying] = useState(false);
   const [isSending, setSending] = useState(false);
 
-  // Which channel the code in the user's hand arrived on. MobileSignInScreen
-  // always sends by SMS first, so that's the starting state.
-  const [channel, setChannel] = useState<PhoneDeliveryMethod>('sms');
+  // Which channel the code in the user's hand arrived on — whichever was chosen
+  // on the sign-in screen (EP-1261).
+  const [channel, setChannel] = useState<PhoneDeliveryMethod>(deliveryMethod);
 
   // One cooldown per channel (EP-1261). A single shared cooldown would disable
   // the WhatsApp option for 30s on arrival, which defeats the point — the users
   // who need it are exactly those whose SMS never lands.
-  const [cooldowns, setCooldowns] = useState<Record<PhoneDeliveryMethod, number>>({
-    sms: RESEND_COOLDOWN,
-    whatsapp: 0,
-  });
+  const [cooldowns, setCooldowns] = useState<Record<PhoneDeliveryMethod, number>>(
+    deliveryMethod === 'whatsapp'
+      ? { sms: 0, whatsapp: RESEND_COOLDOWN }
+      : { sms: RESEND_COOLDOWN, whatsapp: 0 },
+  );
 
   useEffect(() => {
     if (cooldowns.sms <= 0 && cooldowns.whatsapp <= 0) return;

@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../types/navigation';
 import { auth as xanoAuth } from '../../api';
+import type { PhoneDeliveryMethod } from '../../api/auth';
 import { colors, fonts, fontSizes, borderRadius, spacing } from '../../theme';
 import Button from '../../components/Button';
 import PhoneInput from '../../components/PhoneInput';
@@ -19,7 +20,10 @@ export default function MobileSignInScreen() {
   const [countryIso, setCountryIso] = useState('AU');
   const [isLoading, setLoading] = useState(false);
 
-  async function handleContinue() {
+  // EP-1261 — the channel is chosen here rather than only after an SMS fails to
+  // arrive, matching the WeWeb flow. Someone in a country where A2P SMS never
+  // lands would otherwise have to send a useless, billable text first.
+  async function sendCode(deliveryMethod: PhoneDeliveryMethod) {
     if (!phone.trim()) {
       Alert.alert('Missing Phone', 'Please enter your phone number.');
       return;
@@ -28,8 +32,34 @@ export default function MobileSignInScreen() {
     setLoading(true);
     try {
       const fullPhone = `${countryCode}${phone.replace(/^0+/, '')}`;
-      const result = await xanoAuth.signInWithMobile(fullPhone, countryIso);
-      navigation.navigate('MobileVerify', { userId: String(result.user_id), phone, countryIso });
+      const result = await xanoAuth.signInWithMobile(fullPhone, countryIso, deliveryMethod);
+
+      // The endpoint answers HTTP 200 even when the send fails, carrying the
+      // provider status in the body (201 == sent). Without this check an
+      // unknown number or a failed send still navigated to the code screen.
+      if (result.status !== undefined && Number(result.status) !== 201) {
+        if (deliveryMethod === 'whatsapp') {
+          // Never disclose whether the number is registered on WhatsApp.
+          Alert.alert(
+            'Couldn’t send on WhatsApp',
+            'We couldn’t deliver your code on WhatsApp. Send it by text message instead?',
+            [
+              { text: 'Not now', style: 'cancel' },
+              { text: 'Send by text', onPress: () => { void sendCode('sms'); } },
+            ],
+          );
+        } else {
+          Alert.alert('Error', result.message ?? 'Failed to send verification code. Please try again.');
+        }
+        return;
+      }
+
+      navigation.navigate('MobileVerify', {
+        userId: String(result.user_id),
+        phone,
+        countryIso,
+        deliveryMethod: result.delivery_method ?? deliveryMethod,
+      });
     } catch (e: unknown) {
       Alert.alert('Error', errorMessage(e) ?? 'Failed to send verification code. Please try again.');
     } finally {
@@ -66,9 +96,17 @@ export default function MobileSignInScreen() {
 
             <Button
               title="Continue"
-              onPress={handleContinue}
+              onPress={() => { void sendCode('sms'); }}
               loading={isLoading}
               style={styles.continueButton}
+            />
+
+            <Button
+              title="Continue with WhatsApp"
+              variant="secondary"
+              onPress={() => { void sendCode('whatsapp'); }}
+              disabled={isLoading}
+              style={styles.whatsappButton}
             />
 
             <Button
@@ -120,6 +158,9 @@ const styles = StyleSheet.create({
   },
   continueButton: {
     marginTop: spacing.xl,
+    marginBottom: spacing.base,
+  },
+  whatsappButton: {
     marginBottom: spacing.base,
   },
 });

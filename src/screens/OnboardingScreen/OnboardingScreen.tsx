@@ -17,6 +17,7 @@ import { MappedEmotion } from '../../hooks/useEmotionStates';
 import EmailVerificationStep from './steps/EmailVerificationStep';
 import PhoneEntryStep from './steps/PhoneEntryStep';
 import PhoneVerificationStep from './steps/PhoneVerificationStep';
+import type { PhoneDeliveryMethod } from '../../api/auth';
 import MergeAccountsStep from './steps/MergeAccountsStep';
 import IntroSlidesStep from './steps/IntroSlidesStep';
 import FirstCheckInStep from './steps/FirstCheckInStep';
@@ -80,7 +81,16 @@ export default function OnboardingScreen() {
   }, [refreshUser]);
 
   // ── Phone Entry ─────────────────────────────────────────────────────
-  const handlePhoneSubmit = useCallback(async (phone: string, countryCode: string, countryIso: string) => {
+  // EP-1261 — channel chosen at phone entry, carried into the verify step so its
+  // copy and cooldowns match what was actually sent.
+  const [phoneChannel, setPhoneChannel] = useState<PhoneDeliveryMethod>('sms');
+
+  const handlePhoneSubmit = useCallback(async (
+    phone: string,
+    countryCode: string,
+    countryIso: string,
+    deliveryMethod: PhoneDeliveryMethod,
+  ) => {
     setIsSubmitting(true);
     try {
       const fullPhone = `${countryCode}${phone.replace(/\s/g, '')}`;
@@ -96,7 +106,8 @@ export default function OnboardingScreen() {
         rawIsExisting === 1;
       const existingId = Number(result.existing_user_id);
       setMergeExistingUserId(isExisting && existingId > 0 ? existingId : null);
-      await xanoAuth.generateCode('sms');
+      await xanoAuth.generateCode(deliveryMethod);
+      setPhoneChannel(deliveryMethod);
       setStep('phone_verification');
     } catch {
       Alert.alert('Error', 'Failed to submit phone number. Please try again.');
@@ -283,6 +294,7 @@ export default function OnboardingScreen() {
         <PhoneVerificationStep
           onComplete={handlePhoneVerified}
           isSubmitting={isSubmitting}
+          initialChannel={phoneChannel}
         />
       );
     }

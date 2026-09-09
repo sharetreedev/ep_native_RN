@@ -4,7 +4,14 @@ import { XanoNextLesson, XanoEnrollment, XanoSupportRequest, XanoGroupRunningSta
 export type RootStackParamList = {
     Auth: undefined;
     MobileSignIn: undefined;
-    MobileVerify: { userId: string; phone: string; countryIso: string };
+    // deliveryMethod (EP-1261) = the channel the FIRST code was sent on, so the
+    // verify screen's copy and per-channel cooldowns start out truthful.
+    MobileVerify: {
+        userId: string;
+        phone: string;
+        countryIso: string;
+        deliveryMethod?: 'sms' | 'whatsapp';
+    };
     // Migration sign-in flow (pre-auth):
     AccountNotFound: { email: string };
     MigrationVerify: { email: string; userId: string };

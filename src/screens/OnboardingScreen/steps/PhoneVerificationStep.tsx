@@ -14,6 +14,8 @@ import { styles } from '../styles';
 interface PhoneVerificationStepProps {
   onComplete: () => void;
   isSubmitting: boolean;
+  /** Channel the first code was sent on (EP-1261). */
+  initialChannel?: PhoneDeliveryMethod;
 }
 
 const RESEND_COOLDOWN = 30;
@@ -21,18 +23,20 @@ const RESEND_COOLDOWN = 30;
 export default function PhoneVerificationStep({
   onComplete,
   isSubmitting,
+  initialChannel = 'sms',
 }: PhoneVerificationStepProps) {
   const [isSending, setSending] = useState(false);
 
-  // Channel the current code was sent on. Onboarding always starts with SMS.
-  const [channel, setChannel] = useState<PhoneDeliveryMethod>('sms');
+  // Channel the current code was sent on — whichever was chosen at phone entry.
+  const [channel, setChannel] = useState<PhoneDeliveryMethod>(initialChannel);
 
   // Per-channel cooldowns (EP-1261) — a shared one would lock the WhatsApp
   // option for 30s exactly when someone needs it because SMS isn't arriving.
-  const [cooldowns, setCooldowns] = useState<Record<PhoneDeliveryMethod, number>>({
-    sms: RESEND_COOLDOWN,
-    whatsapp: 0,
-  });
+  const [cooldowns, setCooldowns] = useState<Record<PhoneDeliveryMethod, number>>(
+    initialChannel === 'whatsapp'
+      ? { sms: 0, whatsapp: RESEND_COOLDOWN }
+      : { sms: RESEND_COOLDOWN, whatsapp: 0 },
+  );
 
   useEffect(() => {
     if (cooldowns.sms <= 0 && cooldowns.whatsapp <= 0) return;
