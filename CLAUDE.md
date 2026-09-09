@@ -37,7 +37,15 @@ skill** (this repo, `.claude/skills/ota-publish/`). The core rules:
    - Channels: `ota:production` | `ota:preview` | `ota:development`
    - The wrapper (`scripts/ota.sh`) runs four pre-flight checks: origin/main freshness (hard-fail if local HEAD is behind — recovery `git pull --ff-only origin main`), dirty-tree warning (`--allow-dirty` to skip), EAS-env verification of `EXPO_PUBLIC_XANO_DATA_SOURCE`, and arg forwarding.
    - `src/api/client.ts` hard-throws at module-load if a non-`__DEV__` build ships with anything other than `live` — a misconfigured OTA crashes on launch rather than silently hitting the wrong backend.
-   - Preferred flow with multiple devs: commit locally (with `EP-XXXX` in the message), `git pull --ff-only origin main` if behind, then publish.
+   - Preferred flow with multiple devs: commit (with `EP-XXXX` in the message),
+     `git pull --ff-only origin main` if behind, **`git push origin main`**, then publish.
+   - **Push before publishing — do not OTA from a local-only commit.** EAS Update is
+     last-write-wins per channel, so a release whose commit never reached `origin/main`
+     will be silently rolled back the moment another dev publishes from main. `ota.sh`
+     cross-checks the live release's `EP-####` tokens against `origin/main` history and
+     hard-fails on this (recovery: push the commits; `--skip-history-check` only if you
+     are certain). Documented 9 Sep 2026 after an EP-1261 OTA was published from an
+     unpushed commit — the guard caught it on the next publish.
 2. **Update the Linear issues** covered by the release (comments + states, per the
    workflow above — the issues already exist; don't create them retroactively).
    Update `DEPLOYMENT.md` (update-group ID, what shipped).
