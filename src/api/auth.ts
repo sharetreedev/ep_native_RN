@@ -5,6 +5,17 @@ import type { Body } from './schema';
 export type MigratedUserResponse = 'login' | 'phone' | 'email';
 
 /**
+ * Delivery channel for a 2FA code (EP-1261).
+ *
+ * Mirrors the Xano `delivery_method` enum shared by `/auth/2fa/generateCode`
+ * and `/auth/2fa/signinwithmobile`. Omitting it keeps the pre-EP-1261
+ * behaviour (SMS for the phone path), so it is optional at every call site.
+ * `signinwithmobile` is phone-only and rejects `email`.
+ */
+export type DeliveryMethod = 'email' | 'sms' | 'whatsapp';
+export type PhoneDeliveryMethod = Exclude<DeliveryMethod, 'email'>;
+
+/**
  * Normalise the response from `/auth/2fa/verifyCode` to a plain boolean.
  *
  * Per the swagger (docs/xano-api.json), Xano returns
@@ -92,9 +103,15 @@ export const auth = {
       'PUT', '/auth/merge_accounts', { existing_user_id: existingUserId },
     ),
 
-  generateCode: (type: 'email' | 'phone') =>
-    request<Body<'api/auth/2fa/generateCode|POST'>>(
-      'POST', '/auth/2fa/generateCode', { type },
+  // EP-1261: the channel is the only parameter now. The legacy `type`
+  // (email|phone) described the same dimension and is no longer sent — the
+  // backend still accepts it for callers we haven't drained yet (older bundles,
+  // WeWeb), but nothing in this app relies on it. The spec predates
+  // `delivery_method`, so the response type is widened by hand (same pattern as
+  // microsoftCallback below).
+  generateCode: (deliveryMethod: DeliveryMethod) =>
+    request<Body<'api/auth/2fa/generateCode|POST'> & { delivery_method?: DeliveryMethod }>(
+      'POST', '/auth/2fa/generateCode', { delivery_method: deliveryMethod },
     ),
 
   // Send the code as a string — `Number("0123")` strips the leading zero
@@ -109,9 +126,20 @@ export const auth = {
       'POST', '/auth/2fa/verifyCode', { verificationCode },
     ),
 
-  signInWithMobile: (phone: string, country_iso: string) =>
-    request<Body<'api/auth/2fa/signinwithmobile|POST'>>(
-      'POST', '/auth/2fa/signinwithmobile', { phone, country_iso },
+  signInWithMobile: (
+    phone: string,
+    country_iso: string,
+    deliveryMethod?: PhoneDeliveryMethod,
+  ) =>
+    request<
+      Body<'api/auth/2fa/signinwithmobile|POST'> & {
+        status?: number;
+        message?: string;
+        delivery_method?: PhoneDeliveryMethod;
+      }
+    >(
+      'POST', '/auth/2fa/signinwithmobile',
+      { phone, country_iso, ...(deliveryMethod ? { delivery_method: deliveryMethod } : {}) },
     ),
 
   // String, not number — see verifyCode above for the leading-zero rationale.

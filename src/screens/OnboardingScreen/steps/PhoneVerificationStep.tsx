@@ -7,6 +7,7 @@ import Button from '../../../components/Button';
 import OTPInput from '../../../components/OTPInput';
 import { auth as xanoAuth } from '../../../api';
 import { isVerifiedResponse } from '../../../api/auth';
+import type { PhoneDeliveryMethod } from '../../../api/auth';
 import { logger } from '../../../lib/logger';
 import { styles } from '../styles';
 
@@ -15,19 +16,34 @@ interface PhoneVerificationStepProps {
   isSubmitting: boolean;
 }
 
+const RESEND_COOLDOWN = 30;
+
 export default function PhoneVerificationStep({
   onComplete,
   isSubmitting,
 }: PhoneVerificationStepProps) {
-  const [cooldown, setCooldown] = useState(30);
+  const [isSending, setSending] = useState(false);
+
+  // Channel the current code was sent on. Onboarding always starts with SMS.
+  const [channel, setChannel] = useState<PhoneDeliveryMethod>('sms');
+
+  // Per-channel cooldowns (EP-1261) — a shared one would lock the WhatsApp
+  // option for 30s exactly when someone needs it because SMS isn't arriving.
+  const [cooldowns, setCooldowns] = useState<Record<PhoneDeliveryMethod, number>>({
+    sms: RESEND_COOLDOWN,
+    whatsapp: 0,
+  });
 
   useEffect(() => {
-    if (cooldown <= 0) return;
+    if (cooldowns.sms <= 0 && cooldowns.whatsapp <= 0) return;
     const timer = setInterval(() => {
-      setCooldown((prev) => (prev <= 1 ? 0 : prev - 1));
+      setCooldowns((prev) => ({
+        sms: prev.sms <= 1 ? 0 : prev.sms - 1,
+        whatsapp: prev.whatsapp <= 1 ? 0 : prev.whatsapp - 1,
+      }));
     }, 1000);
     return () => clearInterval(timer);
-  }, [cooldown]);
+  }, [cooldowns.sms, cooldowns.whatsapp]);
 
   const handleCodeComplete = useCallback(
     async (code: string) => {
@@ -47,16 +63,55 @@ export default function PhoneVerificationStep({
     [onComplete],
   );
 
-  const handleResend = useCallback(async () => {
-    if (cooldown > 0) return;
+  /**
+   * Request a new code over `method`. Returns false on failure so callers can
+   * choose the next move. The endpoint answers 200 with the provider status in
+   * the body (201 == sent), so a thrown error isn't the only failure mode.
+   */
+  const sendCode = useCallback(async (method: PhoneDeliveryMethod): Promise<boolean> => {
+    setSending(true);
     try {
-      await xanoAuth.generateCode('phone');
-      setCooldown(30);
-      Alert.alert('Code Sent', 'A new code has been sent to your phone.');
-    } catch {
+      const result = await xanoAuth.generateCode(method);
+      const status = (result as { status?: number | string }).status;
+      if (status !== undefined && Number(status) !== 201) return false;
+      setChannel(result.delivery_method === 'whatsapp' ? 'whatsapp' : method);
+      setCooldowns((prev) => ({ ...prev, [method]: RESEND_COOLDOWN }));
+      Alert.alert(
+        'Code Sent',
+        method === 'whatsapp'
+          ? 'We’ve sent your code to you on WhatsApp.'
+          : 'A new code has been sent to your phone.',
+      );
+      return true;
+    } catch (e) {
+      logger.error('[PhoneVerification] sendCode failed', e);
+      return false;
+    } finally {
+      setSending(false);
+    }
+  }, []);
+
+  const handleResend = useCallback(async () => {
+    if (cooldowns.sms > 0 || isSending) return;
+    if (!(await sendCode('sms'))) {
       Alert.alert('Error', 'Failed to resend code.');
     }
-  }, [cooldown]);
+  }, [cooldowns.sms, isSending, sendCode]);
+
+  const handleWhatsApp = useCallback(async () => {
+    if (cooldowns.whatsapp > 0 || isSending) return;
+    if (await sendCode('whatsapp')) return;
+
+    // Deliberately does not reveal whether the number is on WhatsApp.
+    Alert.alert(
+      'Couldn’t send on WhatsApp',
+      'We couldn’t deliver your code on WhatsApp. Send it by text message instead?',
+      [
+        { text: 'Not now', style: 'cancel' },
+        { text: 'Send by text', onPress: () => { void handleResend(); } },
+      ],
+    );
+  }, [cooldowns.whatsapp, isSending, sendCode, handleResend]);
 
   const renderHeader = () => (
     <View style={styles.headerRow}>
@@ -71,17 +126,30 @@ export default function PhoneVerificationStep({
         {renderHeader()}
         <Text style={styles.heading}>Verify your phone</Text>
         <Text style={styles.body}>
-          Enter the 4-digit code sent to your phone.
+          {channel === 'whatsapp'
+            ? 'Enter the 4-digit code we sent you on WhatsApp.'
+            : 'Enter the 4-digit code sent to your phone.'}
         </Text>
         <View style={styles.otpWrapper}>
           <OTPInput length={4} onComplete={handleCodeComplete} />
         </View>
-        {isSubmitting && <LoadingAnimation size={60} style={styles.spinner} />}
+        {(isSubmitting || isSending) && <LoadingAnimation size={60} style={styles.spinner} />}
         <Button
-          title={cooldown > 0 ? `Resend Code (${cooldown}s)` : 'Resend Code'}
+          title={cooldowns.sms > 0 ? `Resend Code (${cooldowns.sms}s)` : 'Resend Code'}
           variant="secondary"
           onPress={handleResend}
-          disabled={cooldown > 0}
+          disabled={cooldowns.sms > 0 || isSending}
+          style={styles.resendButton}
+        />
+        <Button
+          title={
+            cooldowns.whatsapp > 0
+              ? `Send on WhatsApp (${cooldowns.whatsapp}s)`
+              : 'Send my code on WhatsApp instead'
+          }
+          variant="secondary"
+          onPress={handleWhatsApp}
+          disabled={cooldowns.whatsapp > 0 || isSending}
           style={styles.resendButton}
         />
       </ScrollView>

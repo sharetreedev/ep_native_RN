@@ -96,7 +96,7 @@ export default function OnboardingScreen() {
         rawIsExisting === 1;
       const existingId = Number(result.existing_user_id);
       setMergeExistingUserId(isExisting && existingId > 0 ? existingId : null);
-      await xanoAuth.generateCode('phone');
+      await xanoAuth.generateCode('sms');
       setStep('phone_verification');
     } catch {
       Alert.alert('Error', 'Failed to submit phone number. Please try again.');
